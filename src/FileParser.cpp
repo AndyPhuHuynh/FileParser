@@ -1,7 +1,10 @@
-#include <Bmp.h>
 #include <filesystem>
 #include <iostream>
-int main(const int argc, char* argv[]) {
+
+#include <Bmp.h>
+#include "Jpg.h"
+
+static int bmpMain(const int argc, char* argv[]) {
     if (argc != 2) {
         std::cerr << "Usage: ./FileParser <filename>" << '\n';
     }
@@ -14,11 +17,22 @@ int main(const int argc, char* argv[]) {
         std::cerr << "Error: The file path is invalid or does not point to a regular file: " << filePath << '\n';
         return 1;
     }
-
-    std::cout << "File Path: " << filePath << '\n';
     
     Bmp bmp(filePath);
     bmp.render();
     
     return 0;
+}
+
+
+int main(const int argc, char* argv[]) {
+    std::string filename = "catgimp";
+    std::ostringstream path;
+    path << filename << ".jpg";
+    
+    std::ostringstream out;
+    out << filename << ".bmp";
+    
+    Jpg jpg(path.str());
+    jpg.writeBmp(&jpg.frameHeader, out.str(), jpg.mcus);
 }

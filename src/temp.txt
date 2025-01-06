@@ -1,0 +1,112 @@
+﻿int Jpg::render() const {
+    std::cout << "Rendering..." << '\n';
+    if (!glfwInit()) {
+        return -1;
+    }
+
+    // Create a window
+    GLFWwindow *window = glfwCreateWindow(static_cast<int>(frameHeader.width), static_cast<int>(frameHeader.height), "Hello World!",nullptr, nullptr);
+    if (!window) {
+        glfwTerminate();
+        return -1;
+    }
+
+    // Make window current context
+    glfwMakeContextCurrent(window);
+
+    // Initialize glew
+    if (glewInit() != GLEW_OK) {
+        std::cout << "Failed to initialize GLEW" << '\n';
+        return - 1;
+    }
+
+    std::cout << "OpenGL version: " << glGetString(GL_VERSION) << '\n';
+
+    std::string vertexShader = R"(
+        #version 330 core
+
+        layout(location = 0) in vec2 position;
+        layout(location = 1) in vec4 colorToDraw;
+
+        out vec4 colorToSend;
+
+        void main() {
+            gl_Position = vec4(position, 0.0, 1.0);
+            colorToSend = colorToDraw;
+        }
+    )";
+
+    std::string fragShader = R"(
+        #version 330 core
+
+        in vec4 colorToSend;
+
+        layout(location = 0) out vec4 color;
+
+        void main() {
+            color = colorToSend;
+        }
+    )";
+
+    const unsigned int shaderProgram = CreateShader(vertexShader, fragShader);
+    glUseProgram(shaderProgram);
+    glViewport(0, 0, static_cast<int>(frameHeader.width), static_cast<int>(frameHeader.height));
+
+    std::vector<BmpPoint> points;
+    for (int y = 0; y < frameHeader.height; y++) {
+        const int mcuRow = y / 8;
+        const int pixelRow = y % 8;
+        for (int x = 0; x < frameHeader.width; x++) {
+            const int mcuCol = x / 8;
+            const int pixelCol = x % 8;
+            const int mcuIndex = y * frameHeader.width + x;
+            const int pixelIndex = pixelRow * 8 + pixelCol;
+
+            float yNorm = NormalizeToNdc(y, frameHeader.height);
+            float xNorm = NormalizeToNdc(x, frameHeader.width);
+
+            // if (y == 0) {
+            //     std::cout << xNorm << '\n';
+            // }
+
+            // if (x == 0) {
+            //     std::cout << yNorm << "\n";
+            // }
+            
+
+            float r = std::clamp(static_cast<float>(mcus.at(mcuIndex).Y[pixelIndex]), 0.0f, 255.0f) / 255.0f;
+            float g = std::clamp(static_cast<float>(mcus.at(mcuIndex).Cb[pixelIndex]), 0.0f, 255.0f) / 255.0f;
+            float b = std::clamp(static_cast<float>(mcus.at(mcuIndex).Cr[pixelIndex]), 0.0f, 255.0f) / 255.0f;
+            Color c(r, g, b, 1.0f);
+
+            if (x == 0) {
+                c.print();
+            }
+            
+            points.emplace_back(xNorm, yNorm, c);
+        }
+    }
+    
+    int pointsSize = static_cast<int>(sizeof(BmpPoint) * points.size());
+    unsigned int buffer;
+    glGenBuffers(1, &buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    glBufferData(GL_ARRAY_BUFFER, pointsSize, points.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(BmpPoint), nullptr);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(BmpPoint), reinterpret_cast<void*>(2 * sizeof(float)));
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    
+    while (!glfwWindowShouldClose(window)) {
+        glClear(GL_COLOR_BUFFER_BIT);
+        
+        // Rendering code goes here
+        glDrawArrays(GL_POINTS, 0, static_cast<int>(points.size()));
+        
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
+
+    glDeleteProgram(shaderProgram);
+    glfwTerminate();
+}

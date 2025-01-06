@@ -8,25 +8,6 @@ float NormalizeToNdc(const float value, const int span) {
     return (value / static_cast<float>(span)) * 2 - 1;
 }
 
-int GetBit(const unsigned char byte, const int pos) {
-    if (pos < 0 || pos >= 8) {
-        std::cout << "Error in GetBit: pos is out of bounds: " << pos << "\n";
-        return -1;
-    }
-    return (byte & (1 << (7 - pos))) >> (7 - pos);
-}
-
-int GetNibble(const unsigned char byte, const int pos) {
-    if (pos < 0 || pos > 1) {
-        std::cout << "Error in GetNibble: pos is out of bounds: " << pos << "\n";
-        return -1;
-    }
-    if (pos == 1) {
-        return byte & 15;
-    }
-    return (byte >> 4) & 15;
-}
-
 unsigned int CompileShader(const unsigned int shaderType, const std::string& source) {
     unsigned int id = glCreateShader(shaderType);
     const char* src = source.c_str();

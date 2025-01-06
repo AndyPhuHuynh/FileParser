@@ -1,10 +1,12 @@
-﻿#include "Bmp.h"
-#include "ShaderUtil.h"
-
-#include <fstream>
+﻿#include <fstream>
 #include <iostream>
+
 #include <Gl/glew.h>
 #include <GLFW/glfw3.h>
+
+#include "BitManipulationUtil.h"
+#include "Bmp.h"
+#include "ShaderUtil.h"
 
 BmpPoint::BmpPoint() {
     x = 0;
@@ -126,9 +128,9 @@ void Bmp::ParseRowByteOrLessNoCompression(std::vector<BmpPoint>& points, float n
             int x = static_cast<int>(byteInRow) * pixelsPerByte + i;
             float normalizedX = NormalizeToNdc(static_cast<float>(x), static_cast<int>(info.width));
 
-            int index;
+            unsigned char index;
             if (rasterEncoding == BmpRasterEncoding::Monochrome) {
-                index = GetBit(byte, i);
+                index = GetBitFromLeft(byte, i);
             } else if (rasterEncoding == BmpRasterEncoding::FourBitNoCompression) {
                 index = GetNibble(byte, i);
             } else {
@@ -268,6 +270,5 @@ Bmp::Bmp(const std::string& path) {
         rasterEncoding == BmpRasterEncoding::EightBitNoCompression) {
         initColorTable();
     }
-    std::cout << "File size: " << header.fileSize << "\n";
     rowSize = static_cast<uint32_t>(floor(((info.bitCount * info.width + 31) / 32))) * 4;
 }
