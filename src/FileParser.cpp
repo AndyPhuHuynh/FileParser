@@ -26,13 +26,15 @@ static int bmpMain(const int argc, char* argv[]) {
 
 
 int main(const int argc, char* argv[]) {
-    std::string filename = "catgimp";
-    std::ostringstream path;
-    path << filename << ".jpg";
-    
-    std::ostringstream out;
-    out << filename << ".bmp";
-    
-    Jpg jpg(path.str());
-    jpg.writeBmp(&jpg.frameHeader, out.str(), jpg.mcus);
+    // std::string filename = "gorilla";
+    // std::ostringstream path;
+    // path << filename << ".jpg";
+    //
+    // std::ostringstream out;
+    // out << filename << ".bmp";
+    //
+    // Jpg jpg(path.str());
+    // jpg.writeBmp(&jpg.frameHeader, out.str(), jpg.mcus);
+    Bmp bmp("gorilla.bmp");
+    bmp.render();
 }

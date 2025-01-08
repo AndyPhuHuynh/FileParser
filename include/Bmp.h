@@ -41,6 +41,7 @@ struct BmpInfo {
     std::uint32_t colorsUsed;
     std::uint32_t importantColors;
 
+    BmpInfo() = default;
     static BmpInfo getInfoFromFile(std::ifstream& file);
     BmpRasterEncoding getRasterEncoding() const;
     void print() const;

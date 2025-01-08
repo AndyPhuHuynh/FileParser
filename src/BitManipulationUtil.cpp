@@ -42,20 +42,20 @@ BitReader::BitReader(const std::vector<uint8_t>& bytes) {
     this->bytes = bytes;
     bitPosition = 0;
     byteIndex = 0;
-    std::cout << "Bit reader initialized with " << bytes.size() << " bytes" << '\n';
 }
 
-bool flag = false;
 uint8_t BitReader::getBit() {
     if (bitPosition >= 8) {
         bitPosition = 0;
         byteIndex++;
     }
     if (static_cast<size_t>(byteIndex) >= bytes.size()) {
+        static bool flag = false;
         if (!flag) {
-            std::cout << "No more bytes to read in bit reader\n";
+            std::cout << "Error - No more bytes to read in bit reader\n";
+            flag = true;
+            return 0;
         }
-        flag = true;
     }
     uint8_t bit = GetBitFromLeft(bytes[byteIndex], bitPosition++);
     return bit;

@@ -125,6 +125,13 @@ const float s7 = std::cos(7.0 / 16.0 * std::numbers::pi) / 2.0;
 
 class Jpg;
 
+enum Subsampling {
+    None,
+    HorizontalHalved,
+    VerticalHalved,
+    Quartered
+};
+
 class FrameHeaderComponentSpecification {
 public:
     uint8_t identifier;
@@ -146,6 +153,14 @@ public:
     uint16_t width;
     uint8_t numOfChannels;
     std::map<uint8_t, FrameHeaderComponentSpecification> componentSpecifications;
+    Subsampling subsampling = None;
+    int luminanceComponentsPerMcu = 1;
+    int maxHorizontalSample = 1;
+    int maxVerticalSample = 1;
+    int mcuPixelWidth;
+    int mcuPixelHeight;
+    int mcuImageWidth;
+    int mcuImageHeight;
 
     FrameHeader() = default;
     FrameHeader(uint8_t encodingProcess, std::ifstream& file, const std::streampos& dataStartIndex);
@@ -238,31 +253,40 @@ public:
     void print() const;
 };
 
-class DataUnit {
+class ColorBlock {
+public:
+    static constexpr int colorBlockLength = 64;
+    std::array<uint8_t, colorBlockLength> R {0};
+    std::array<uint8_t, colorBlockLength> G {0};
+    std::array<uint8_t, colorBlockLength> B {0};
+    void print() const;
+};
+
+class Mcu {
 public:
     static constexpr int dataUnitLength = 64;
-    bool rgbMode = false;
     bool postDctMode = true; // True = After FDCT, IDCT needs to be performed
+    bool isQuantized = true;
     // Component 1
-    union {
-        std::array<int, dataUnitLength> Y = {0};
-        std::array<int, dataUnitLength> R;
-    };
+    std::vector<std::array<int, dataUnitLength>> Y;
     // Component 2
-    union {
-        std::array<int, dataUnitLength> Cb = {0};
-        std::array<int, dataUnitLength> G;
-    };
+    std::array<int, dataUnitLength> Cb = {0};
     // Component 3
-    union {
-        std::array<int, dataUnitLength> Cr = {0};
-        std::array<int, dataUnitLength> B;
-    };
+    std::array<int, dataUnitLength> Cr = {0};
+    int horizontalSampleSize = 1;
+    int verticalSampleSize = 1;
+    std::vector<ColorBlock> colorBlocks;
 
+    Mcu();
+    Mcu(const int luminanceComponents, const int horizontalSampleSize, const int verticalSampleSize);
     void print() const;
     std::array<int, dataUnitLength>* getComponent(int id);
-    void convertToRGB();
+    static int getColorIndex(const int blockIndex, const int pixelIndex, const int horizontalFactor, const int verticalFactor);
+    void generateColorBlocks();
+    std::tuple<uint8_t, uint8_t, uint8_t> getColor(int index);
+    static void performInverseDCT(std::array<int, dataUnitLength>& array);
     void performInverseDCT();
+    static void dequantize(std::array<int, dataUnitLength>& array, const QuantizationTable& quantizationTable);
     void dequantize(const std::vector<QuantizationTable>& quantizationTables);
 };
 
@@ -271,7 +295,8 @@ public:
     static int decodeSSSS(BitReader& bitReader, const int SSSS);
     static int decodeDcCoefficient(BitReader& bitReader, HuffmanTable& huffmanTable);
     static std::pair<int, int> decodeAcCoefficient(BitReader& bitReader, HuffmanTable& huffmanTable);
-    static DataUnit decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]);
+    static std::array<int, 64> decodeComponent(Jpg* jpg, BitReader& bitReader, ScanHeaderComponentSpecification component, int (&prevDc)[3]);
+    static Mcu decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]);
 };
 
 /* TODO: Arithmetic Coding */
@@ -286,7 +311,7 @@ public:
     std::array<HuffmanTable, 4> dcHuffmanTables;
     std::array<HuffmanTable, 4> acHuffmanTables;
     uint16_t restartInterval = 0;
-    std::vector<DataUnit> mcus;
+    std::vector<Mcu> mcus;
     
     explicit Jpg(const std::string& path);
     uint16_t readLengthBytes();
@@ -300,7 +325,7 @@ public:
     void readStartOfScan();
     void readFile();
     // int render() const;
-    void writeBmp(FrameHeader* image, const std::string& filename, std::vector<DataUnit>& mcu);
+    void writeBmp(FrameHeader* image, const std::string& filename, std::vector<Mcu>& mcus);
     void printInfo() const;
 };
 

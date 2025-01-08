@@ -71,6 +71,50 @@ FrameHeader::FrameHeader(const uint8_t encodingProcess, std::ifstream& file, con
     if (sampleSum > 10) {
         std::cout << "Error: Sample sum is greater than 10\n";
     }
+
+    for (auto& component : componentSpecifications | std::views::values) {
+        if (component.identifier != 1) {
+            if (component.horizontalSamplingFactor != 1) {
+                std::cout << "Error: Horizontal sampling factor of " << static_cast<int>(component.identifier) <<
+                    " is not supported for chroma component" << "\n";
+                std::terminate();
+            }
+            if (component.verticalSamplingFactor != 1) {
+                std::cout << "Error: Vertical sampling factor of " << static_cast<int>(component.identifier) <<
+                    " is not supported for chroma component" << "\n";
+                std::terminate();
+            }
+        }
+        if (component.identifier == 1) {
+            maxHorizontalSample = component.horizontalSamplingFactor;
+            maxVerticalSample = component.verticalSamplingFactor;
+            if (component.horizontalSamplingFactor == 1 && component.verticalSamplingFactor == 1) {
+                subsampling = None;
+            } else if (component.horizontalSamplingFactor == 1 && component.verticalSamplingFactor == 2) {
+                subsampling = VerticalHalved;
+            } else if (component.horizontalSamplingFactor == 2 && component.verticalSamplingFactor == 1) {
+                subsampling = HorizontalHalved;
+            } else if (component.horizontalSamplingFactor == 2 && component.verticalSamplingFactor == 2) {
+                subsampling = Quartered;
+            } else {
+                std::cout << "Error: Subsampling not supported\n";
+                std::terminate();
+            }
+        }
+    }
+    
+    if (subsampling == HorizontalHalved || subsampling == VerticalHalved) {
+        luminanceComponentsPerMcu = 2;
+    } else if (subsampling == Quartered) {
+        luminanceComponentsPerMcu = 4;
+    } else {
+        luminanceComponentsPerMcu = 1;
+    }
+
+    mcuPixelWidth = maxHorizontalSample * 8;
+    mcuPixelHeight = maxVerticalSample * 8;
+    mcuImageWidth = (width + mcuPixelWidth - 1) / mcuPixelWidth;
+    mcuImageHeight = (height + mcuPixelHeight - 1) / mcuPixelHeight;
 }
 
 QuantizationTable::QuantizationTable(std::ifstream& file, const std::streampos& dataStartIndex, const bool is8Bit)
@@ -168,7 +212,8 @@ void HuffmanTree::printTree(const HuffmanNode& node, const std::string& currentC
 uint8_t HuffmanTree::decodeNextValue(BitReader& bitReader) {
     HuffmanNode *current = root.get();
     if (root == nullptr) {
-        std::cout << "Error - Invalid root for huffman tree" << "\n";
+        std::cout << "Error: Invalid root for huffman tree" << "\n";
+        return 0;
     }
     std::string code;
     while (!current->isLeaf()) {
@@ -181,7 +226,8 @@ uint8_t HuffmanTree::decodeNextValue(BitReader& bitReader) {
             code += "1";
         }
         if (current == nullptr) {
-            std::cout << "Error - Code not contained in huffman tree:" << code << "\n";
+            std::cout << "Error: Code not contained in huffman tree:" << code << "\n";
+            return 0;
         }
     }
     return current->getValue();
@@ -243,47 +289,58 @@ std::pair<int, int> EntropyDecoder::decodeAcCoefficient(BitReader& bitReader, Hu
     return {r, s};
 }
 
-DataUnit EntropyDecoder::decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]) {
-    DataUnit mcu;
+std::array<int, 64> EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitReader, ScanHeaderComponentSpecification component, int (&prevDc)[3]) {
+    std::array<int, 64> result{0};
+    // DC Coefficient
+    HuffmanTable &dcTable = jpg->dcHuffmanTables[component.dcTableSelector];
+    int dcCoefficient = decodeDcCoefficient(bitReader, dcTable) + prevDc[component.componentId - 1];
+    result[0] = dcCoefficient;
+    prevDc[component.componentId - 1] = dcCoefficient;
+
+    // AC Coefficients
+    int index = 1;
+    while (index < Mcu::dataUnitLength) {
+        HuffmanTable &acTable = jpg->acHuffmanTables[component.acTableSelector];
+        auto [r, s] = decodeAcCoefficient(bitReader, acTable);
+        if (r == 0x00 && s == 0x00) {
+            break;
+        }
+        if (r == 0xFF && s == 0x00) {
+            index += 16;
+            continue;
+        }
+        index += r;
+        if (index >= Mcu::dataUnitLength) {
+            break;
+        }
+        int coefficient = decodeSSSS(bitReader, s);
+        result[zigZagMap[index]] = coefficient;
+        index++;
+    }
+    return result;
+}
+
+Mcu EntropyDecoder::decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]) {
+    Mcu mcu(jpg->frameHeader.luminanceComponentsPerMcu, jpg->frameHeader.maxHorizontalSample, jpg->frameHeader.maxVerticalSample);
     std::vector<QuantizationTable> qTables;
     for (auto& component : jpg->scanHeader.componentSpecifications) {
         qTables.push_back(jpg->quantizationTables[jpg->frameHeader.componentSpecifications[component.componentId].quantizationTableSelector]);
-        std::array<int, 64> *compTable = mcu.getComponent(component.componentId);
-        
-        // DC Coefficient
-        HuffmanTable &dcTable = jpg->dcHuffmanTables[component.dcTableSelector];
-        int dcCoefficient = decodeDcCoefficient(bitReader, dcTable) + prevDc[component.componentId - 1];
-        (*compTable)[0] = dcCoefficient;
-        prevDc[component.componentId - 1] = dcCoefficient;
-
-        // AC Coefficients
-        int index = 1;
-        while (index < DataUnit::dataUnitLength) {
-            HuffmanTable &acTable = jpg->acHuffmanTables[component.acTableSelector];
-            auto [r, s] = decodeAcCoefficient(bitReader, acTable);
-            if (r == 0x00 && s == 0x00) {
-                break;
+        if (component.componentId == 1) {
+            for (int i = 0; i < jpg->frameHeader.luminanceComponentsPerMcu; i++) {
+                mcu.Y[i] = decodeComponent(jpg, bitReader, component, prevDc);
             }
-            if (r == 0xFF && s == 0x00) {
-                index += 16;
-                continue;
-            }
-            index += r;
-            if (index >= DataUnit::dataUnitLength) {
-                break;
-            }
-            int coefficient = decodeSSSS(bitReader, s);
-            (*compTable)[zigZagMap[index]] = coefficient;
-            index++;
+        } else if (component.componentId == 2) {
+            mcu.Cb = decodeComponent(jpg, bitReader, component, prevDc);
+        } else if (component.componentId == 3) {
+            mcu.Cr = decodeComponent(jpg, bitReader, component, prevDc);
         }
     }
 
     mcu.dequantize(qTables);
     mcu.performInverseDCT();
-    mcu.convertToRGB();
+    mcu.generateColorBlocks();
     return mcu;
 }
-
 
 void ScanHeaderComponentSpecification::print() const {
     std::cout << std::setw(25) << "Component Id: " << static_cast<int>(componentId) << "\n";
@@ -324,16 +381,50 @@ ScanHeader::ScanHeader(std::ifstream& file, const std::streampos& dataStartIndex
     successiveApproximationHigh = GetNibble(successiveApproximationLow, 1);
 }
 
-void DataUnit::print() const {
+void ColorBlock::print() const {
     std::cout << std::dec;
-    std::cout << "Luminance (Y)        | Blue Chrominance (Cb)        | Red Chrominance (Cr)" << std::endl;
+    std::cout << "Red (R)        | Green (G)        | Blue (B)" << '\n';
     std::cout << "----------------------------------------------------------------------------------\n";
 
     for (int y = 0; y < 8; y++) {
         for (int x = 0; x < 8; x++) {
-            // Print Luminance
+            // Print Red
             int luminanceIndex = y * 8 + x;
-            std::cout << std::setw(5) << Y[luminanceIndex] << " ";
+            std::cout << std::setw(5) << static_cast<int>(R[luminanceIndex]) << " ";
+        }
+        std::cout << "| ";
+
+
+        for (int x = 0; x < 8; x++) {
+            // Print Green
+            int blueIndex = y * 8 + x;
+            std::cout << std::setw(5) << static_cast<int>(G[blueIndex]) << " ";
+        }
+        std::cout << "| ";
+
+        for (int x = 0; x < 8; x++) {
+            // Print Blue
+            int redIndex = y * 8 + x;
+            std::cout << std::setw(5) << static_cast<int>(B[redIndex]) << " ";
+        }
+        std::cout << '\n';
+    }
+}
+
+
+void Mcu::print() const {
+    std::cout << std::dec;
+    std::cout << "Luminance (Y)        | Blue Chrominance (Cb)        | Red Chrominance (Cr)" << '\n';
+    std::cout << "----------------------------------------------------------------------------------\n";
+
+    for (int y = 0; y < 8; y++) {
+        for (const auto& i : Y) {
+            for (int x = 0; x < 8; x++) {
+                // Print Luminance
+                int luminanceIndex = y * 8 + x;
+                std::cout << std::setw(5) << i[luminanceIndex] << " ";
+            }
+            std::cout << "| ";
         }
         std::cout << "| ";
 
@@ -353,200 +444,242 @@ void DataUnit::print() const {
     }
 }
 
-std::array<int, DataUnit::dataUnitLength> *DataUnit::getComponent(const int id) {
-    if (id < 1 || id > 3) {
-        std::cout << "Error - Component id must be in the range 1-3 inclusive\n";
-        return nullptr;
-    }
-    if (id == 1) {
-        return &Y;
-    } else if (id == 2) {
-        return &Cb;
-    } else {
-        return &Cr;
+int Mcu::getColorIndex(const int blockIndex, const int pixelIndex, const int horizontalFactor, const int verticalFactor) {
+    int blockRow = blockIndex / horizontalFactor;
+    int blockCol = blockIndex % horizontalFactor;
+    
+    int pixelRow = pixelIndex / 8;
+    int pixelCol = pixelIndex % 8;
+    
+    int chromaRow = (blockRow * 8 + pixelRow) / verticalFactor;
+    int chromaCol = (blockCol * 8 + pixelCol) / horizontalFactor;
+    
+    return chromaRow * 8 + chromaCol;
+}
+
+void Mcu::generateColorBlocks() {
+    for (int i = 0; i < static_cast<int>(Y.size()); i++) {
+        auto& [R, G, B] = colorBlocks[i];
+        for (int j = 0; j < dataUnitLength; j++) {
+            int colorIndex = getColorIndex(i, j, horizontalSampleSize, verticalSampleSize);
+            
+            double y = Y[i][j] + 128;
+            double cb = Cb[colorIndex];
+            double cr = Cr[colorIndex];
+            
+            int r = static_cast<int>(y +              1.402 * cr);
+            int g = static_cast<int>(y - 0.344 * cb - 0.714 * cr);
+            int b = static_cast<int>(y + 1.772 * cb             );
+        
+            R[j] = static_cast<uint8_t>(std::clamp(r, 0, 255)); 
+            G[j] = static_cast<uint8_t>(std::clamp(g, 0, 255)); 
+            B[j] = static_cast<uint8_t>(std::clamp(b, 0, 255)); 
+        }
     }
 }
 
+std::tuple<uint8_t, uint8_t, uint8_t> Mcu::getColor(int index) {
+    int blockRow = index / (horizontalSampleSize * 8) / 8;
+    int blockCol = index % (horizontalSampleSize * 8) / 8;
 
-void DataUnit::convertToRGB() {
-    if (rgbMode) {
-        std::cout << "Warning - Data unit is already in rgb mode, cannot convert to rgb again\n";
-        return;
-    }
-    for (int i = 0; i < dataUnitLength; i++) {
-        double y = Y[i] + 128;
-        double cb = Cb[i];
-        double cr = Cr[i];
-            
-        int r = static_cast<int>(y +              1.402 * cr);
-        int g = static_cast<int>(y - 0.344 * cb - 0.714 * cr);
-        int b = static_cast<int>(y + 1.772 * cb             );
-        
-        Y[i] = std::clamp(r, 0, 255);  // Red
-        Cb[i] = std::clamp(g, 0, 255); // Green
-        Cr[i] = std::clamp(b, 0, 255); // Blue
-    }
-    rgbMode = true;
+    int pixelRow = index / (horizontalSampleSize * 8) % 8;
+    int pixelColumn = index % 8;
+    
+    int blockIndex = blockRow * horizontalSampleSize + blockCol;
+    int pixelIndex = pixelRow * 8 + pixelColumn;
+    
+    return {colorBlocks[blockIndex].R[pixelIndex],
+        colorBlocks[blockIndex].G[pixelIndex],
+        colorBlocks[blockIndex].B[pixelIndex]};
 }
 
 // Uses AAN DCT
-void DataUnit::performInverseDCT() {
+void Mcu::performInverseDCT(std::array<int, dataUnitLength>& array) {
+    float results[64];
+    // Calculates the rows
+    for (int i = 0; i < 8; i++) {
+        const float g0 = static_cast<float>(array[0 * 8 + i]) * s0;
+         const float g1 = static_cast<float>(array[4 * 8 + i]) * s4;
+         const float g2 = static_cast<float>(array[2 * 8 + i]) * s2;
+         const float g3 = static_cast<float>(array[6 * 8 + i]) * s6;
+         const float g4 = static_cast<float>(array[5 * 8 + i]) * s5;
+         const float g5 = static_cast<float>(array[1 * 8 + i]) * s1;
+         const float g6 = static_cast<float>(array[7 * 8 + i]) * s7;
+         const float g7 = static_cast<float>(array[3 * 8 + i]) * s3;
+
+         const float f0 = g0;
+         const float f1 = g1;
+         const float f2 = g2;
+         const float f3 = g3;
+         const float f4 = g4 - g7;
+         const float f5 = g5 + g6;
+         const float f6 = g5 - g6;
+         const float f7 = g4 + g7;
+
+         const float e0 = f0;
+         const float e1 = f1;
+         const float e2 = f2 - f3;
+         const float e3 = f2 + f3;
+         const float e4 = f4;
+         const float e5 = f5 - f7;
+         const float e6 = f6;
+         const float e7 = f5 + f7;
+         const float e8 = f4 + f6;
+
+         const float d0 = e0;
+         const float d1 = e1;
+         const float d2 = e2 * m1;
+         const float d3 = e3;
+         const float d4 = e4 * m2;
+         const float d5 = e5 * m3;
+         const float d6 = e6 * m4;
+         const float d7 = e7;
+         const float d8 = e8 * m5;
+
+         const float c0 = d0 + d1;
+         const float c1 = d0 - d1;
+         const float c2 = d2 - d3;
+         const float c3 = d3;
+         const float c4 = d4 + d8;
+         const float c5 = d5 + d7;
+         const float c6 = d6 - d8;
+         const float c7 = d7;
+         const float c8 = c5 - c6;
+
+         const float b0 = c0 + c3;
+         const float b1 = c1 + c2;
+         const float b2 = c1 - c2;
+         const float b3 = c0 - c3;
+         const float b4 = c4 - c8;
+         const float b5 = c8;
+         const float b6 = c6 - c7;
+         const float b7 = c7;
+
+         results[0 * 8 + i] = b0 + b7;
+         results[1 * 8 + i] = b1 + b6;
+         results[2 * 8 + i] = b2 + b5;
+         results[3 * 8 + i] = b3 + b4;
+         results[4 * 8 + i] = b3 - b4;
+         results[5 * 8 + i] = b2 - b5;
+         results[6 * 8 + i] = b1 - b6;
+         results[7 * 8 + i] = b0 - b7;
+     }
+    // Calculates the columns
+    for (int i = 0; i < 8; i++) {
+        const float g0 = results[i * 8 + 0] * s0;
+        const float g1 = results[i * 8 + 4] * s4;
+        const float g2 = results[i * 8 + 2] * s2;
+        const float g3 = results[i * 8 + 6] * s6;
+        const float g4 = results[i * 8 + 5] * s5;
+        const float g5 = results[i * 8 + 1] * s1;
+        const float g6 = results[i * 8 + 7] * s7;
+        const float g7 = results[i * 8 + 3] * s3;
+
+        const float f0 = g0;
+        const float f1 = g1;
+        const float f2 = g2;
+        const float f3 = g3;
+        const float f4 = g4 - g7;
+        const float f5 = g5 + g6;
+        const float f6 = g5 - g6;
+        const float f7 = g4 + g7;
+
+        const float e0 = f0;
+        const float e1 = f1;
+        const float e2 = f2 - f3;
+        const float e3 = f2 + f3;
+        const float e4 = f4;
+        const float e5 = f5 - f7;
+        const float e6 = f6;
+        const float e7 = f5 + f7;
+        const float e8 = f4 + f6;
+
+        const float d0 = e0;
+        const float d1 = e1;
+        const float d2 = e2 * m1;
+        const float d3 = e3;
+        const float d4 = e4 * m2;
+        const float d5 = e5 * m3;
+        const float d6 = e6 * m4;
+        const float d7 = e7;
+        const float d8 = e8 * m5;
+
+        const float c0 = d0 + d1;
+        const float c1 = d0 - d1;
+        const float c2 = d2 - d3;
+        const float c3 = d3;
+        const float c4 = d4 + d8;
+        const float c5 = d5 + d7;
+        const float c6 = d6 - d8;
+        const float c7 = d7;
+        const float c8 = c5 - c6;
+
+        const float b0 = c0 + c3;
+        const float b1 = c1 + c2;
+        const float b2 = c1 - c2;
+        const float b3 = c0 - c3;
+        const float b4 = c4 - c8;
+        const float b5 = c8;
+        const float b6 = c6 - c7;
+        const float b7 = c7;
+
+        array[i * 8 + 0] = static_cast<int>(b0 + b7);
+        array[i * 8 + 1] = static_cast<int>(b1 + b6);
+        array[i * 8 + 2] = static_cast<int>(b2 + b5);
+        array[i * 8 + 3] = static_cast<int>(b3 + b4);
+        array[i * 8 + 4] = static_cast<int>(b3 - b4);
+        array[i * 8 + 5] = static_cast<int>(b2 - b5);
+        array[i * 8 + 6] = static_cast<int>(b1 - b6);
+        array[i * 8 + 7] = static_cast<int>(b0 - b7);
+    }
+}
+
+void Mcu::performInverseDCT() {
     if (postDctMode == false) {
-        std::cout << "Warning - Has not been transformed via DCT, cannot perform inverse DCT";
+        std::cout << "Warning: Has not been transformed via DCT, cannot perform inverse DCT";
         return;
     }
-    for (int id = 1; id <= 3; id++) {
-        std::array<int, 64>* table = getComponent(id);
-        // Calculate the rows
-        float results[64];
-        for (int i = 0; i < 8; i++) {
-            const float g0 = static_cast<float>((*table)[0 * 8 + i]) * s0;
-            const float g1 = static_cast<float>((*table)[4 * 8 + i]) * s4;
-            const float g2 = static_cast<float>((*table)[2 * 8 + i]) * s2;
-            const float g3 = static_cast<float>((*table)[6 * 8 + i]) * s6;
-            const float g4 = static_cast<float>((*table)[5 * 8 + i]) * s5;
-            const float g5 = static_cast<float>((*table)[1 * 8 + i]) * s1;
-            const float g6 = static_cast<float>((*table)[7 * 8 + i]) * s7;
-            const float g7 = static_cast<float>((*table)[3 * 8 + i]) * s3;
-
-            const float f0 = g0;
-            const float f1 = g1;
-            const float f2 = g2;
-            const float f3 = g3;
-            const float f4 = g4 - g7;
-            const float f5 = g5 + g6;
-            const float f6 = g5 - g6;
-            const float f7 = g4 + g7;
-
-            const float e0 = f0;
-            const float e1 = f1;
-            const float e2 = f2 - f3;
-            const float e3 = f2 + f3;
-            const float e4 = f4;
-            const float e5 = f5 - f7;
-            const float e6 = f6;
-            const float e7 = f5 + f7;
-            const float e8 = f4 + f6;
-
-            const float d0 = e0;
-            const float d1 = e1;
-            const float d2 = e2 * m1;
-            const float d3 = e3;
-            const float d4 = e4 * m2;
-            const float d5 = e5 * m3;
-            const float d6 = e6 * m4;
-            const float d7 = e7;
-            const float d8 = e8 * m5;
-
-            const float c0 = d0 + d1;
-            const float c1 = d0 - d1;
-            const float c2 = d2 - d3;
-            const float c3 = d3;
-            const float c4 = d4 + d8;
-            const float c5 = d5 + d7;
-            const float c6 = d6 - d8;
-            const float c7 = d7;
-            const float c8 = c5 - c6;
-
-            const float b0 = c0 + c3;
-            const float b1 = c1 + c2;
-            const float b2 = c1 - c2;
-            const float b3 = c0 - c3;
-            const float b4 = c4 - c8;
-            const float b5 = c8;
-            const float b6 = c6 - c7;
-            const float b7 = c7;
-
-            results[0 * 8 + i] = b0 + b7;
-            results[1 * 8 + i] = b1 + b6;
-            results[2 * 8 + i] = b2 + b5;
-            results[3 * 8 + i] = b3 + b4;
-            results[4 * 8 + i] = b3 - b4;
-            results[5 * 8 + i] = b2 - b5;
-            results[6 * 8 + i] = b1 - b6;
-            results[7 * 8 + i] = b0 - b7;
-        }
-        // Calculates the columns
-        for (int i = 0; i < 8; i++) {
-            const float g0 = results[i * 8 + 0] * s0;
-            const float g1 = results[i * 8 + 4] * s4;
-            const float g2 = results[i * 8 + 2] * s2;
-            const float g3 = results[i * 8 + 6] * s6;
-            const float g4 = results[i * 8 + 5] * s5;
-            const float g5 = results[i * 8 + 1] * s1;
-            const float g6 = results[i * 8 + 7] * s7;
-            const float g7 = results[i * 8 + 3] * s3;
-
-            const float f0 = g0;
-            const float f1 = g1;
-            const float f2 = g2;
-            const float f3 = g3;
-            const float f4 = g4 - g7;
-            const float f5 = g5 + g6;
-            const float f6 = g5 - g6;
-            const float f7 = g4 + g7;
-
-            const float e0 = f0;
-            const float e1 = f1;
-            const float e2 = f2 - f3;
-            const float e3 = f2 + f3;
-            const float e4 = f4;
-            const float e5 = f5 - f7;
-            const float e6 = f6;
-            const float e7 = f5 + f7;
-            const float e8 = f4 + f6;
-
-            const float d0 = e0;
-            const float d1 = e1;
-            const float d2 = e2 * m1;
-            const float d3 = e3;
-            const float d4 = e4 * m2;
-            const float d5 = e5 * m3;
-            const float d6 = e6 * m4;
-            const float d7 = e7;
-            const float d8 = e8 * m5;
-
-            const float c0 = d0 + d1;
-            const float c1 = d0 - d1;
-            const float c2 = d2 - d3;
-            const float c3 = d3;
-            const float c4 = d4 + d8;
-            const float c5 = d5 + d7;
-            const float c6 = d6 - d8;
-            const float c7 = d7;
-            const float c8 = c5 - c6;
-
-            const float b0 = c0 + c3;
-            const float b1 = c1 + c2;
-            const float b2 = c1 - c2;
-            const float b3 = c0 - c3;
-            const float b4 = c4 - c8;
-            const float b5 = c8;
-            const float b6 = c6 - c7;
-            const float b7 = c7;
-
-            (*table)[i * 8 + 0] = static_cast<int>(b0 + b7);
-            (*table)[i * 8 + 1] = static_cast<int>(b1 + b6);
-            (*table)[i * 8 + 2] = static_cast<int>(b2 + b5);
-            (*table)[i * 8 + 3] = static_cast<int>(b3 + b4);
-            (*table)[i * 8 + 4] = static_cast<int>(b3 - b4);
-            (*table)[i * 8 + 5] = static_cast<int>(b2 - b5);
-            (*table)[i * 8 + 6] = static_cast<int>(b1 - b6);
-            (*table)[i * 8 + 7] = static_cast<int>(b0 - b7);
-        }
+    for (auto& y : Y) {
+        performInverseDCT(y);
     }
+    performInverseDCT(Cb);
+    performInverseDCT(Cr);
     postDctMode = false;
 }
 
-void DataUnit::dequantize(const std::vector<QuantizationTable>& quantizationTables) {
-    for (int i = 0; i < quantizationTables.size(); i++) {
-        std::array<int, 64>* table = getComponent(i + 1);
-        QuantizationTable qt = quantizationTables[i]; 
-        for (int i = 0; i < 64; i++) {
-            (*table)[i] *= qt.is8Bit ? qt.table8[i] : qt.table16[i];
-        }
+void Mcu::dequantize(std::array<int, dataUnitLength>& array, const QuantizationTable& quantizationTable) {
+    for (int i = 0; i < dataUnitLength; i++) {
+        array[i] *= quantizationTable.is8Bit ? quantizationTable.table8[i] : quantizationTable.table16[i];
     }
 }
+
+void Mcu::dequantize(const std::vector<QuantizationTable>& quantizationTables) {
+    if (!isQuantized) {
+        std::cout << "Warning: Data unit has already been dequantized, cannot dequantize again";
+        return;
+    }
+    for (auto& y : Y) {
+        dequantize(y, quantizationTables[0]);
+    }
+    if (quantizationTables.size() > 1) {
+        dequantize(Cb, quantizationTables[1]);
+        dequantize(Cr, quantizationTables[2]);
+    }
+    isQuantized = false;
+}
+
+Mcu::Mcu() {
+    Y = std::vector(1, std::array<int, 64>({0}));
+    colorBlocks = std::vector(1, ColorBlock());
+}
+
+Mcu::Mcu(const int luminanceComponents, const int horizontalSamplingSize, const int verticalSamplingSize) {
+    Y = std::vector(luminanceComponents, std::array<int, 64>({0}));
+    colorBlocks = std::vector(luminanceComponents, ColorBlock());
+    this->horizontalSampleSize = horizontalSamplingSize;
+    this->verticalSampleSize = verticalSamplingSize;
+}
+
 
 uint16_t Jpg::readLengthBytes() {
     uint16_t length;
@@ -628,19 +761,6 @@ void Jpg::readScanHeader() {
 void Jpg::readStartOfScan() {
     readScanHeader();
     // Read entropy compressed bit stream
-    if (frameHeader.componentSpecifications[1].horizontalSamplingFactor == frameHeader.componentSpecifications[2].horizontalSamplingFactor &&
-        frameHeader.componentSpecifications[2].horizontalSamplingFactor == frameHeader.componentSpecifications[3].horizontalSamplingFactor) {
-        std::cout << "Same horizontal scale\n";
-    } else {
-        std::cout << "Not same horizontal scale, not supported yet!\n";
-    }
-
-    if (frameHeader.componentSpecifications[1].verticalSamplingFactor == frameHeader.componentSpecifications[2].verticalSamplingFactor &&
-        frameHeader.componentSpecifications[2].verticalSamplingFactor == frameHeader.componentSpecifications[3].verticalSamplingFactor) {
-        std::cout << "Same vertical scale\n";
-    } else {
-        std::cout << "Not same vertical scale, not supported yet!\n";
-    }
 
     std::vector<uint8_t> bytes;
     uint8_t byte;
@@ -658,7 +778,7 @@ void Jpg::readStartOfScan() {
                 file.seekg(-2, std::ios::cur);
                 break; 
             } else {
-                std::cout << "Error - Unknown marker encountered in SOS data: " << std::hex << static_cast<int>(byte) << std::dec << "\n";
+                std::cout << "Error: Unknown marker encountered in SOS data: " << std::hex << static_cast<int>(byte) << std::dec << "\n";
             }
         } else {
             bytes.push_back(previousByte);
@@ -667,8 +787,8 @@ void Jpg::readStartOfScan() {
     BitReader bitReader(bytes);
     int prevDc[3] = {};
     
-    int mcuHeight = (frameHeader.height + 7) / 8;
-    int mcuWidth = (frameHeader.width + 7) / 8;
+    int mcuHeight = (frameHeader.height + (frameHeader.maxVerticalSample * 8 - 1)) / (frameHeader.maxVerticalSample * 8);
+    int mcuWidth = (frameHeader.width + (frameHeader.maxHorizontalSample * 8) - 1) / (frameHeader.maxHorizontalSample * 8);
     for (int i = 0; i < mcuHeight * mcuWidth; i++) {
         if (restartInterval != 0 && i % restartInterval == 0) {
             bitReader.alignToByte();
@@ -735,7 +855,7 @@ void Jpg::printInfo() const {
     }
 }
 
-Jpg::Jpg(const std::string& path) : quantizationTables() {
+Jpg::Jpg(const std::string& path) {
     file = std::ifstream(path, std::ifstream::binary);
     readFile();
 }
@@ -756,7 +876,7 @@ void putShort(byte*& bufferPos, const uint v) {
     *bufferPos++ = v >> 8;
 }
 
-void Jpg::writeBmp(FrameHeader* image, const std::string& filename, std::vector<DataUnit>& mcu) {
+void Jpg::writeBmp(FrameHeader* image, const std::string& filename, std::vector<Mcu>& mcus) {
     // open file
     std::cout << "Writing " << filename << "...\n";
     std::ofstream outFile(filename, std::ios::out | std::ios::binary);
@@ -764,7 +884,7 @@ void Jpg::writeBmp(FrameHeader* image, const std::string& filename, std::vector<
         std::cout << "Error - Error opening output file\n";
         return;
     }
-
+    
     const uint paddingSize = image->width % 4;
     const uint size = 14 + 12 + image->height * image->width * 3 + paddingSize * image->height;
 
@@ -786,20 +906,20 @@ void Jpg::writeBmp(FrameHeader* image, const std::string& filename, std::vector<
     putShort(bufferPos, image->height);
     putShort(bufferPos, 1);
     putShort(bufferPos, 24);
-
-    int mcuWidth = (image->width + 7) / 8;
+    
     for (uint y = image->height - 1; y < image->height; --y) {
-        const uint blockRow = y / 8;
-        const uint pixelRow = y % 8;
+        const uint blockRow = y / image->mcuPixelHeight;
+        const uint pixelRow = y % image->mcuPixelHeight;
         for (uint x = 0; x < image->width; ++x) {
-            const uint blockColumn = x / 8;
-            const uint pixelColumn = x % 8;
-            const uint blockIndex = blockRow * mcuWidth + blockColumn;
-            const uint pixelIndex = pixelRow * 8 + pixelColumn;
-            
-            *bufferPos++ = mcu[blockIndex].Cr[pixelIndex];
-            *bufferPos++ = mcu[blockIndex].Cb[pixelIndex];
-            *bufferPos++ = mcu[blockIndex].Y[pixelIndex];
+            const uint blockColumn = x / image->mcuPixelWidth;
+            const uint pixelColumn = x % image->mcuPixelWidth;
+            const uint blockIndex = blockRow * image->mcuImageWidth + blockColumn;
+            const uint pixelIndex = pixelRow * image->mcuPixelWidth + pixelColumn;
+            auto [R, G, B] = mcus[blockIndex].getColor(pixelIndex);
+
+            *bufferPos++ = B;
+            *bufferPos++ = G;
+            *bufferPos++ = R;
         }
         for (uint i = 0; i < paddingSize; ++i) {
             *bufferPos++ = 0;

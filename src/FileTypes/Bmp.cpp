@@ -25,9 +25,23 @@ BmpHeader BmpHeader::getHeaderFromFile(std::ifstream& file) {
 }
 
 BmpInfo BmpInfo::getInfoFromFile(std::ifstream& file) {
-    BmpInfo info;
+    BmpInfo info = BmpInfo();
     file.seekg(fileInfoHeaderPos, std::ios::beg);
     file.read(reinterpret_cast<char*>(&info.size), 4);
+    if (info.size == 12) {
+        std::cout << "File uses BITMAPCOREHEADER\n";
+        file.read(reinterpret_cast<char*>(&info.width), 2);
+        file.read(reinterpret_cast<char*>(&info.height), 2);
+        file.read(reinterpret_cast<char*>(&info.planes), 2);
+        file.read(reinterpret_cast<char*>(&info.bitCount), 2);
+        return info;
+    }
+    if (info.size == 40) {
+        std::cout << "File uses BITMAPINFOHEADER\n";
+    } else {
+        std::cout << "Info header size of " << info.size << " bytes is not fully supported\n";
+        std::cout << "Attempting to read file with BITMAPINFOHEADER format\n";
+    }
     file.read(reinterpret_cast<char*>(&info.width), 4);
     file.read(reinterpret_cast<char*>(&info.height), 4);
     file.read(reinterpret_cast<char*>(&info.planes), 2);
@@ -59,6 +73,7 @@ void BmpInfo::print() const {
     std::cout << "Planes: " << planes << '\n';
     std::cout << "Bits per pixel: " << bitCount << '\n';
     std::cout << "Compression: " << compression << '\n';
+    if (size == 12) return;
     std::cout << "Image size: " << imageSize << '\n';
     std::cout << "xPixelsPerMeter: " << xPixelsPerMeter << '\n';
     std::cout << "yPixelsPerMeter: " << yPixelsPerMeter << '\n';
@@ -146,7 +161,6 @@ void Bmp::ParseRowByteOrLessNoCompression(std::vector<BmpPoint>& points, float n
 }
 
 void Bmp::ParseRow24BitNoCompression(std::vector<BmpPoint>& points, float normalizedY) {
-    int pixelsInRowRead = 0;
     for (uint32_t x = 0; x < rowSize / 3; x++) {
         unsigned char byte;
         float normalizedX = NormalizeToNdc(static_cast<float>(x), static_cast<int>(info.width));
@@ -161,8 +175,9 @@ void Bmp::ParseRow24BitNoCompression(std::vector<BmpPoint>& points, float normal
         color.normalizeColor();
         
         points.emplace_back(normalizedX, normalizedY, color);
-        pixelsInRowRead++;
     }
+    uint32_t padding = rowSize % 3;
+    file.seekg(padding, std::ios::cur);
 }
 
 int Bmp::render() {
