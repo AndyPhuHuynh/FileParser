@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <iostream>
 #include <numbers>
+#include <ctime>
 #include <ranges>
 #include <vector>
 #include <Gl/glew.h>
@@ -263,6 +264,25 @@ HuffmanTable::HuffmanTable(std::ifstream& file, const std::streampos& dataStartI
         code = code << 1;
     }
     tree = HuffmanTree(encodings);
+    generateLookupTable();
+}
+
+void HuffmanTable::generateLookupTable() {
+    table = std::make_unique<std::array<HuffmanTableEntry, 65536>>();
+    for (auto& encoding : encodings) {
+        uint16_t leftShifted = static_cast<uint16_t>(encoding.encoding << (maxEncodingLength - encoding.bitLength));
+        for (uint16_t i = 0; i < static_cast<uint16_t>((1 << (16 - encoding.bitLength))); i++) {
+            uint16_t index = i | leftShifted;
+            (*table)[index] = HuffmanTableEntry(encoding.bitLength, encoding.value);
+        }
+    }
+}
+
+uint8_t HuffmanTable::decodeNextValue(BitReader& bitReader) const {
+    uint16_t word = bitReader.getWordConstant();
+    auto decoding = (*table)[word];
+    bitReader.skipBits(decoding.bitLength);
+    return decoding.value;
 }
 
 int EntropyDecoder::decodeSSSS(BitReader& bitReader, const int SSSS) {
@@ -278,12 +298,14 @@ int EntropyDecoder::decodeSSSS(BitReader& bitReader, const int SSSS) {
 }
 
 int EntropyDecoder::decodeDcCoefficient(BitReader& bitReader, HuffmanTable& huffmanTable) {
-    int sCategory = huffmanTable.tree.decodeNextValue(bitReader);
+    // int sCategory = huffmanTable.tree.decodeNextValue(bitReader);
+    int sCategory = huffmanTable.decodeNextValue(bitReader);
     return sCategory == 0 ? 0 : decodeSSSS(bitReader, sCategory);
 }
 
 std::pair<int, int> EntropyDecoder::decodeAcCoefficient(BitReader& bitReader, HuffmanTable& huffmanTable) {
-    uint8_t rs = huffmanTable.tree.decodeNextValue(bitReader);
+    // uint8_t rs = huffmanTable.tree.decodeNextValue(bitReader);
+    uint8_t rs = huffmanTable.decodeNextValue(bitReader);
     uint8_t r = GetNibble(rs, 0);
     uint8_t s = GetNibble(rs, 1);
     return {r, s};
@@ -761,7 +783,7 @@ void Jpg::readScanHeader() {
 void Jpg::readStartOfScan() {
     readScanHeader();
     // Read entropy compressed bit stream
-
+    clock_t begin = clock();
     std::vector<uint8_t> bytes;
     uint8_t byte;
     while (file.read(reinterpret_cast<char*>(&byte), 1)) {
@@ -784,6 +806,7 @@ void Jpg::readStartOfScan() {
             bytes.push_back(previousByte);
         }
     }
+    clock_t afterRead = clock();
     BitReader bitReader(bytes);
     int prevDc[3] = {};
     
@@ -798,6 +821,9 @@ void Jpg::readStartOfScan() {
         }
         mcus.push_back(EntropyDecoder::decodeMcu(this, bitReader, prevDc));
     }
+    clock_t afterDecode = clock();
+    std::cout << "Time to read bytes: " << static_cast<double>(afterRead - begin) / CLOCKS_PER_SEC << " seconds\n";
+    std::cout << "Time to decode: " << static_cast<double>(afterDecode - begin) / CLOCKS_PER_SEC << " seconds\n";
 }
 
 void Jpg::readFile() {
@@ -877,6 +903,7 @@ void putShort(byte*& bufferPos, const uint v) {
 }
 
 void Jpg::writeBmp(FrameHeader* image, const std::string& filename, std::vector<Mcu>& mcus) {
+    clock_t begin = clock();
     // open file
     std::cout << "Writing " << filename << "...\n";
     std::ofstream outFile(filename, std::ios::out | std::ios::binary);
@@ -929,5 +956,6 @@ void Jpg::writeBmp(FrameHeader* image, const std::string& filename, std::vector<
     outFile.write((char*)buffer, size);
     outFile.close();
     delete[] buffer;
+    clock_t end = clock();
+    std::cout << "Time to write: " << static_cast<double>(end - begin) / CLOCKS_PER_SEC << " seconds\n";
 }
-

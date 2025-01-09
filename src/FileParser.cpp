@@ -24,17 +24,21 @@ static int bmpMain(const int argc, char* argv[]) {
     return 0;
 }
 
-
 int main(const int argc, char* argv[]) {
-    // std::string filename = "gorilla";
-    // std::ostringstream path;
-    // path << filename << ".jpg";
-    //
-    // std::ostringstream out;
-    // out << filename << ".bmp";
-    //
-    // Jpg jpg(path.str());
-    // jpg.writeBmp(&jpg.frameHeader, out.str(), jpg.mcus);
-    Bmp bmp("gorilla.bmp");
-    bmp.render();
+    clock_t begin = clock();
+    std::string filename = "turtle";
+    std::cout << "Processing file: " << filename << '\n';
+    std::ostringstream path;
+    path << filename << ".jpg";
+    
+    std::ostringstream out;
+    out << filename << ".bmp";
+    
+    Jpg jpg(path.str());
+    jpg.writeBmp(&jpg.frameHeader, out.str(), jpg.mcus);
+    // Bmp bmp("sample.bmp");
+    // bmp.render();
+    clock_t end = clock();
+    double time_spent = static_cast<double>(end - begin) / CLOCKS_PER_SEC;
+    std::cout << "Total time: " << time_spent << '\n';
 }

@@ -19,4 +19,6 @@ public:
     uint8_t getBit();
     uint8_t getLastByteRead() const;
     void alignToByte();
+    uint16_t getWordConstant() const;
+    void skipBits(int numBits);
 };

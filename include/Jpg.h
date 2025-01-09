@@ -218,14 +218,25 @@ public:
     uint8_t decodeNextValue(BitReader& bitReader);
 };
 
+struct HuffmanTableEntry {
+    uint8_t bitLength;
+    uint8_t value;
+
+    HuffmanTableEntry() = default;
+    HuffmanTableEntry(const uint8_t bitLength, const uint8_t value) : bitLength(bitLength), value(value) {}
+};
+
 class HuffmanTable {
 public:
     static constexpr int maxEncodingLength = 16;
     std::vector<HuffmanEncoding> encodings;
     HuffmanTree tree;
+    std::unique_ptr<std::array<HuffmanTableEntry, 65536>> table;
     
     HuffmanTable() = default;
     HuffmanTable(std::ifstream& file, const std::streampos& dataStartIndex);
+    void generateLookupTable();
+    uint8_t decodeNextValue(BitReader& bitReader) const;
 };
 
 class ScanHeaderComponentSpecification {
