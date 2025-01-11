@@ -61,6 +61,38 @@ uint8_t BitReader::getBit() {
     return bit;
 }
 
+uint32_t BitReader::getNBits(const int numBits) {
+    if (numBits == 0) return 0;
+    if (numBits < 1 || numBits > 32) {
+        std::ostringstream message;
+        message << "Error in getNBits: Cannot get" << numBits << " bits";
+        throw std::invalid_argument(message.str());
+    }
+    
+    int bitsLeftToRead = numBits;
+    int result = 0;
+
+    if (bitPosition > 0) {
+        int bitsToReadFromCurrentByte = std::min(bitsLeftToRead, 8 - bitPosition);
+        result |= (bytes[byteIndex] >> (8 - bitPosition - bitsToReadFromCurrentByte)) & ((1 << bitsToReadFromCurrentByte) - 1);
+        bitsLeftToRead -= bitsToReadFromCurrentByte;
+        skipBits(bitsToReadFromCurrentByte);
+    }
+    
+    while (bitsLeftToRead >= 8) {
+        result <<= 8;
+        result |= byteIndex < static_cast<int>(bytes.size()) ?  bytes[byteIndex++] & 0xFF : 0;
+        bitsLeftToRead -= 8;
+    }
+    
+    if (bitsLeftToRead > 0) {
+        result <<= bitsLeftToRead;
+        result |= byteIndex < static_cast<int>(bytes.size()) ? bytes[byteIndex] >> (8 - bitsLeftToRead) : 0;
+        skipBits(bitsLeftToRead);
+    }
+    return result;
+}
+
 uint8_t BitReader::getLastByteRead() const {
     return bytes[byteIndex];
 }
@@ -71,27 +103,26 @@ void BitReader::alignToByte() {
     byteIndex++;
 }
 
+uint8_t BitReader::getByteConstant() const {
+    int bitsLeftInCurrentByte = 8 - bitPosition;
+
+    uint8_t bitsInCurrent = static_cast<uint8_t>(bytes[byteIndex] << (8 + bitPosition));
+    uint8_t nextByte = byteIndex + 1 < static_cast<int>(bytes.size()) ? (bytes[byteIndex + 1] >> bitsLeftInCurrentByte) : 0;
+    return bitsInCurrent | nextByte;
+}
+
 uint16_t BitReader::getWordConstant() const {
-    uint16_t word = 0;
     int bitsLeftInCurrentByte = 8 - bitPosition;
 
     uint16_t bitsInCurrent = static_cast<uint16_t>(bytes[byteIndex] << (8 + bitPosition));
     uint16_t nextByte = byteIndex + 1 < static_cast<int>(bytes.size()) ? static_cast<uint16_t>(bytes[byteIndex + 1] << bitPosition) : 0;
     uint16_t lastBits = byteIndex + 2 < static_cast<int>(bytes.size()) ? bytes[byteIndex + 2] >> bitsLeftInCurrentByte : 0;
 
-    word |= bitsInCurrent;
-    word |= nextByte;
-    if (bitPosition != 0) {
-        word |= lastBits;
-    }
-    return word;
+    return bitsInCurrent | nextByte | lastBits;
 }
 
-void BitReader::skipBits(int numBits) {
+void BitReader::skipBits(const int numBits) {
     bitPosition += numBits;
     byteIndex += bitPosition / 8;
     bitPosition %= 8;
 }
-
-
-

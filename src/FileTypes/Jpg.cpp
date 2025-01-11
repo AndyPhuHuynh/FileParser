@@ -268,50 +268,62 @@ HuffmanTable::HuffmanTable(std::ifstream& file, const std::streampos& dataStartI
 }
 
 void HuffmanTable::generateLookupTable() {
-    table = std::make_unique<std::array<HuffmanTableEntry, 65536>>();
+    table = std::make_unique<std::array<HuffmanTableEntry, 256>>();
     for (auto& encoding : encodings) {
-        uint16_t leftShifted = static_cast<uint16_t>(encoding.encoding << (maxEncodingLength - encoding.bitLength));
-        for (uint16_t i = 0; i < static_cast<uint16_t>((1 << (16 - encoding.bitLength))); i++) {
-            uint16_t index = i | leftShifted;
-            (*table)[index] = HuffmanTableEntry(encoding.bitLength, encoding.value);
+        if (encoding.bitLength <= 8) {
+            uint8_t leftShifted = static_cast<uint8_t>(encoding.encoding << (8 - encoding.bitLength));
+            for (uint8_t i = 0; i < static_cast<uint8_t>(1 << (8 - encoding.bitLength)); i++) {
+                uint8_t index = i | leftShifted;
+                (*table)[index] = HuffmanTableEntry(encoding.bitLength, encoding.value, nullptr);
+            }
+        } else {
+            uint8_t partOne = static_cast<uint8_t>(encoding.encoding >> (encoding.bitLength - 8) & 0xFF);
+            uint8_t partTwo = static_cast<uint8_t>(encoding.encoding << (maxEncodingLength - encoding.bitLength) & 0xFF);
+            if ((*table)[partOne].table == nullptr) {
+                (*table)[partOne].table = std::make_unique<std::array<HuffmanTableEntry, 256>>();
+            }
+            auto partTwoTable = (*table)[partOne].table.get();
+            for (uint8_t i = 0; i < static_cast<uint8_t>(1 << (16 - encoding.bitLength)); i++) {
+                uint8_t index = i | partTwo;
+                (*partTwoTable)[index] = HuffmanTableEntry(encoding.bitLength, encoding.value, nullptr);
+            }
         }
     }
 }
 
 uint8_t HuffmanTable::decodeNextValue(BitReader& bitReader) const {
     uint16_t word = bitReader.getWordConstant();
-    auto decoding = (*table)[word];
-    bitReader.skipBits(decoding.bitLength);
-    return decoding.value;
+    auto& decoding = (*table)[static_cast<uint8_t>(word >> 8 & 0xFF)];
+    if (decoding.table == nullptr) {
+        bitReader.skipBits(decoding.bitLength);
+        return decoding.value;
+    }
+    auto& decoding2 = (*decoding.table)[static_cast<uint8_t>(word & 0xFF)];
+    bitReader.skipBits(decoding2.bitLength);
+    return decoding2.value;
 }
 
 int EntropyDecoder::decodeSSSS(BitReader& bitReader, const int SSSS) {
-    int coefficient = 0;
-    for (int i = 0; i < SSSS; i++) {
-        coefficient <<= 1;
-        coefficient |= bitReader.getBit();
-    }
+    int coefficient = static_cast<int>(bitReader.getNBits(SSSS));
     if (coefficient < 1 << (SSSS - 1)) {
         coefficient -= (1 << SSSS) - 1;
     }
     return coefficient;
 }
 
-int EntropyDecoder::decodeDcCoefficient(BitReader& bitReader, HuffmanTable& huffmanTable) {
-    // int sCategory = huffmanTable.tree.decodeNextValue(bitReader);
+int EntropyDecoder::decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) {
     int sCategory = huffmanTable.decodeNextValue(bitReader);
     return sCategory == 0 ? 0 : decodeSSSS(bitReader, sCategory);
 }
 
-std::pair<int, int> EntropyDecoder::decodeAcCoefficient(BitReader& bitReader, HuffmanTable& huffmanTable) {
-    // uint8_t rs = huffmanTable.tree.decodeNextValue(bitReader);
+std::pair<int, int> EntropyDecoder::decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) {
     uint8_t rs = huffmanTable.decodeNextValue(bitReader);
     uint8_t r = GetNibble(rs, 0);
     uint8_t s = GetNibble(rs, 1);
     return {r, s};
 }
 
-std::array<int, 64> EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitReader, ScanHeaderComponentSpecification component, int (&prevDc)[3]) {
+std::array<int, 64> EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification component, int (&prevDc)[3]) {
     std::array<int, 64> result{0};
     // DC Coefficient
     HuffmanTable &dcTable = jpg->dcHuffmanTables[component.dcTableSelector];
@@ -324,10 +336,10 @@ std::array<int, 64> EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitRead
     while (index < Mcu::dataUnitLength) {
         HuffmanTable &acTable = jpg->acHuffmanTables[component.acTableSelector];
         auto [r, s] = decodeAcCoefficient(bitReader, acTable);
-        if (r == 0x00 && s == 0x00) {
+        if (r == 0x0 && s == 0x0) {
             break;
         }
-        if (r == 0xFF && s == 0x00) {
+        if (r == 0xF && s == 0x0) {
             index += 16;
             continue;
         }
@@ -695,13 +707,12 @@ Mcu::Mcu() {
     colorBlocks = std::vector(1, ColorBlock());
 }
 
-Mcu::Mcu(const int luminanceComponents, const int horizontalSamplingSize, const int verticalSamplingSize) {
+Mcu::Mcu(const int luminanceComponents, const int horizontalSampleSize, const int verticalSampleSize) {
     Y = std::vector(luminanceComponents, std::array<int, 64>({0}));
     colorBlocks = std::vector(luminanceComponents, ColorBlock());
-    this->horizontalSampleSize = horizontalSamplingSize;
-    this->verticalSampleSize = verticalSamplingSize;
+    this->horizontalSampleSize = horizontalSampleSize;
+    this->verticalSampleSize = verticalSampleSize;
 }
-
 
 uint16_t Jpg::readLengthBytes() {
     uint16_t length;
@@ -732,7 +743,7 @@ void Jpg::readQuantizationTables() {
 
         QuantizationTable quantizationTable(file, dataStartIndex, is8Bit);
         quantizationTables[tableId] = quantizationTable;
-        length -= (file.tellg() - dataStartIndex);
+        length -= (static_cast<uint16_t>(file.tellg()) - static_cast<uint16_t>(dataStartIndex));
     }
 }
 
@@ -753,7 +764,7 @@ void Jpg::readHuffmanTables() {
             acHuffmanTables[tableId] = HuffmanTable(file, dataStartIndex);
         }
         
-        length -= (file.tellg() - dataStartIndex);
+        length -= (static_cast<uint16_t>(file.tellg()) - static_cast<uint16_t>(dataStartIndex));
     }
 }
 
@@ -811,7 +822,7 @@ void Jpg::readStartOfScan() {
     int prevDc[3] = {};
     
     int mcuHeight = (frameHeader.height + (frameHeader.maxVerticalSample * 8 - 1)) / (frameHeader.maxVerticalSample * 8);
-    int mcuWidth = (frameHeader.width + (frameHeader.maxHorizontalSample * 8) - 1) / (frameHeader.maxHorizontalSample * 8);
+    int mcuWidth = (frameHeader.width + (frameHeader.maxHorizontalSample * 8 - 1)) / (frameHeader.maxHorizontalSample * 8);
     for (int i = 0; i < mcuHeight * mcuWidth; i++) {
         if (restartInterval != 0 && i % restartInterval == 0) {
             bitReader.alignToByte();
@@ -823,7 +834,7 @@ void Jpg::readStartOfScan() {
     }
     clock_t afterDecode = clock();
     std::cout << "Time to read bytes: " << static_cast<double>(afterRead - begin) / CLOCKS_PER_SEC << " seconds\n";
-    std::cout << "Time to decode: " << static_cast<double>(afterDecode - begin) / CLOCKS_PER_SEC << " seconds\n";
+    std::cout << "Time to decode: " << static_cast<double>(afterDecode - afterRead) / CLOCKS_PER_SEC << " seconds\n";
 }
 
 void Jpg::readFile() {
@@ -861,17 +872,17 @@ void Jpg::printInfo() const {
     frameHeader.print();
     scanHeader.print();
     
-    for (int i = 0; i < quantizationTables.size(); i++) {
+    for (size_t i = 0; i < quantizationTables.size(); i++) {
         std::cout << "Table #" << i << "\n";
         quantizationTables[i].printTable();
     }
     
-    for (int i = 0; i < dcHuffmanTables.size(); i++) {
+    for (size_t i = 0; i < dcHuffmanTables.size(); i++) {
         std::cout << "DC Table #" << i << "\n";
         dcHuffmanTables[i].tree.printTree();
     }
     
-    for (int i = 0; i < acHuffmanTables.size(); i++) {
+    for (size_t i = 0; i < acHuffmanTables.size(); i++) {
         std::cout << "AC Table #" << i << "\n";
         acHuffmanTables[i].tree.printTree();
     }

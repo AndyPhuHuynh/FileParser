@@ -107,21 +107,21 @@ const unsigned char zigZagMap[] = {
 };
 
 // IDCT scaling factors
-const float m0 = 2.0 * std::cos(1.0 / 16.0 * 2.0 * std::numbers::pi);
-const float m1 = 2.0 * std::cos(2.0 / 16.0 * 2.0 * std::numbers::pi);
-const float m3 = 2.0 * std::cos(2.0 / 16.0 * 2.0 * std::numbers::pi);
-const float m5 = 2.0 * std::cos(3.0 / 16.0 * 2.0 * std::numbers::pi);
+const float m0 = static_cast<float>(2.0 * std::cos(1.0 / 16.0 * 2.0 * std::numbers::pi));
+const float m1 = static_cast<float>(2.0 * std::cos(2.0 / 16.0 * 2.0 * std::numbers::pi));
+const float m3 = static_cast<float>(2.0 * std::cos(2.0 / 16.0 * 2.0 * std::numbers::pi));
+const float m5 = static_cast<float>(2.0 * std::cos(3.0 / 16.0 * 2.0 * std::numbers::pi));
 const float m2 = m0 - m5;
 const float m4 = m0 + m5;
 
-const float s0 = std::cos(0.0 / 16.0 * std::numbers::pi) / std::sqrt(8);
-const float s1 = std::cos(1.0 / 16.0 * std::numbers::pi) / 2.0;
-const float s2 = std::cos(2.0 / 16.0 * std::numbers::pi) / 2.0;
-const float s3 = std::cos(3.0 / 16.0 * std::numbers::pi) / 2.0;
-const float s4 = std::cos(4.0 / 16.0 * std::numbers::pi) / 2.0;
-const float s5 = std::cos(5.0 / 16.0 * std::numbers::pi) / 2.0;
-const float s6 = std::cos(6.0 / 16.0 * std::numbers::pi) / 2.0;
-const float s7 = std::cos(7.0 / 16.0 * std::numbers::pi) / 2.0;
+const float s0 = static_cast<float>(std::cos(0.0 / 16.0 * std::numbers::pi) / std::sqrt(8));
+const float s1 = static_cast<float>(std::cos(1.0 / 16.0 * std::numbers::pi) / 2.0);
+const float s2 = static_cast<float>(std::cos(2.0 / 16.0 * std::numbers::pi) / 2.0);
+const float s3 = static_cast<float>(std::cos(3.0 / 16.0 * std::numbers::pi) / 2.0);
+const float s4 = static_cast<float>(std::cos(4.0 / 16.0 * std::numbers::pi) / 2.0);
+const float s5 = static_cast<float>(std::cos(5.0 / 16.0 * std::numbers::pi) / 2.0);
+const float s6 = static_cast<float>(std::cos(6.0 / 16.0 * std::numbers::pi) / 2.0);
+const float s7 = static_cast<float>(std::cos(7.0 / 16.0 * std::numbers::pi) / 2.0);
 
 class Jpg;
 
@@ -170,8 +170,8 @@ public:
 class QuantizationTable {
 public:
     static constexpr int tableLength = 64;
-    std::array<uint8_t, tableLength> table8;
-    std::array<uint16_t, tableLength> table16;
+    std::array<uint8_t, tableLength> table8{0};
+    std::array<uint16_t, tableLength> table16{0};
     bool is8Bit;
 
     QuantizationTable() = default;
@@ -221,9 +221,12 @@ public:
 struct HuffmanTableEntry {
     uint8_t bitLength;
     uint8_t value;
+    std::unique_ptr<std::array<HuffmanTableEntry, 256>> table;
 
-    HuffmanTableEntry() = default;
+    HuffmanTableEntry() : bitLength(0), value(0), table(nullptr) {};
     HuffmanTableEntry(const uint8_t bitLength, const uint8_t value) : bitLength(bitLength), value(value) {}
+    HuffmanTableEntry(const uint8_t bitLength, const uint8_t value, std::unique_ptr<std::array<HuffmanTableEntry, 256>> table)
+    : bitLength(bitLength), value(value), table(std::move(table)) {}
 };
 
 class HuffmanTable {
@@ -231,7 +234,8 @@ public:
     static constexpr int maxEncodingLength = 16;
     std::vector<HuffmanEncoding> encodings;
     HuffmanTree tree;
-    std::unique_ptr<std::array<HuffmanTableEntry, 65536>> table;
+    // std::unique_ptr<std::array<HuffmanTableEntry, 65536>> table;
+    std::unique_ptr<std::array<HuffmanTableEntry, 256>> table;
     
     HuffmanTable() = default;
     HuffmanTable(std::ifstream& file, const std::streampos& dataStartIndex);
@@ -304,8 +308,8 @@ public:
 class EntropyDecoder {
 public:
     static int decodeSSSS(BitReader& bitReader, const int SSSS);
-    static int decodeDcCoefficient(BitReader& bitReader, HuffmanTable& huffmanTable);
-    static std::pair<int, int> decodeAcCoefficient(BitReader& bitReader, HuffmanTable& huffmanTable);
+    static int decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
+    static std::pair<int, int> decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
     static std::array<int, 64> decodeComponent(Jpg* jpg, BitReader& bitReader, ScanHeaderComponentSpecification component, int (&prevDc)[3]);
     static Mcu decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]);
 };
