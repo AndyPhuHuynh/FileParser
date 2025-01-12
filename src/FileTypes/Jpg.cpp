@@ -7,7 +7,6 @@
 #include <ctime>
 #include <ranges>
 #include <vector>
-#include <Gl/glew.h>
 #include <GLFW/glfw3.h>
 
 #include "BitManipulationUtil.h"
@@ -118,130 +117,25 @@ FrameHeader::FrameHeader(const uint8_t encodingProcess, std::ifstream& file, con
     mcuImageHeight = (height + mcuPixelHeight - 1) / mcuPixelHeight;
 }
 
-QuantizationTable::QuantizationTable(std::ifstream& file, const std::streampos& dataStartIndex, const bool is8Bit)
-    : is8Bit(is8Bit) {
+QuantizationTable::QuantizationTable(std::ifstream& file, const std::streampos& dataStartIndex, const bool is8Bit) {
     file.seekg(dataStartIndex, std::ios::beg);
     for (unsigned char i : zigZagMap) {
         if (is8Bit) {
-            file.read(reinterpret_cast<char*>(&table8[i]), 1);
+            file.read(reinterpret_cast<char*>(&table[i]), 1);
         } else {
-            file.read(reinterpret_cast<char*>(&table16[i]), 2);
+            file.read(reinterpret_cast<char*>(&table[i]), 2);
+            table[i] = SwapBytes(table[i]);
         }
     }
+    isSet = true;
 }
 
-void QuantizationTable::printTable() const {
+void QuantizationTable::print() const {
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++) {
-            if (is8Bit) {
-                std::cout << std::setw(3) << static_cast<int>(table8[i * 8 + j]) << " ";
-            } else {
-                std::cout << std::setw(6) << static_cast<int>(table16[i * 8 + j]) << " ";
-            }
+            std::cout << std::setw(6) << static_cast<int>(table[i * 8 + j]) << " ";
         }
         std::cout << "\n";
-    }
-}
-
-bool HuffmanNode::isLeaf() const {
-    return left == nullptr && right == nullptr;
-}
-
-uint8_t HuffmanNode::getValue() const {
-    return value;
-}
-
-void HuffmanNode::setValue(const uint8_t newValue) {
-    this->value = newValue;
-    this->isNodeSet = true;
-}
-
-bool HuffmanNode::isSet() const {
-    return isNodeSet;
-}
-
-void HuffmanTree::addEncoding(const HuffmanEncoding& encoding) {
-    HuffmanNode *currentNode = root.get();
-    for (int i = encoding.bitLength - 1; i >= 0; i--) {
-        if (currentNode->isSet()) {
-            std::cout << "Error: Attempting to add a code which contains another code as a prefix\n";
-        }
-        uint8_t bit = GetBitFromRight(encoding.encoding, i);
-        if (bit == 0) {
-            if (!currentNode->left) {
-                currentNode->left = std::make_unique<HuffmanNode>();
-            }
-            currentNode = currentNode->left.get();
-        } else if (bit == 1) {
-            if (!currentNode->right) {
-                currentNode->right = std::make_unique<HuffmanNode>();
-            }
-            currentNode = currentNode->right.get();
-        }
-    }
-
-    if (currentNode->isSet()) {
-        std::cout << "Error: Attempting to add encoding that already exists\n";
-    }
-
-    if (!currentNode->isLeaf()) {
-        std::cout << "Error: Attempting to add encoding to internal node\n";
-    }
-    currentNode->setValue(encoding.value);
-}
-
-void HuffmanTree::printTree() const {
-    printTree(*root, "");
-}
-
-void HuffmanTree::printTree(const HuffmanNode& node, const std::string& currentCode) {
-    if (node.left != nullptr) {
-        printTree(*node.left, currentCode + "0");   
-    }
-    if (node.right != nullptr) {
-        printTree(*node.right, currentCode + "1");
-    }
-
-    if (node.isSet()) {
-        std::cout << std::left << std::setw(10) << "Encoding: "
-              << std::setw(17) << currentCode
-              << std::setw(7) << "Value: "
-              << std::hex << std::setw(10) << static_cast<int>(node.getValue()) << std::dec << "\n";
-    }
-}
-
-uint8_t HuffmanTree::decodeNextValue(BitReader& bitReader) {
-    HuffmanNode *current = root.get();
-    if (root == nullptr) {
-        std::cout << "Error: Invalid root for huffman tree" << "\n";
-        return 0;
-    }
-    std::string code;
-    while (!current->isLeaf()) {
-        uint8_t bit = bitReader.getBit();
-        if (bit == 0) {
-            current = current->left.get();
-            code += "0";
-        } else {
-            current = current->right.get();
-            code += "1";
-        }
-        if (current == nullptr) {
-            std::cout << "Error: Code not contained in huffman tree:" << code << "\n";
-            return 0;
-        }
-    }
-    return current->getValue();
-}
-
-HuffmanTree::HuffmanTree() {
-    root = std::make_unique<HuffmanNode>();
-}
-
-HuffmanTree::HuffmanTree(const std::vector<HuffmanEncoding>& encodings) {
-    root = std::make_unique<HuffmanNode>();
-    for (auto& encoding : encodings) {
-        addEncoding(encoding);
     }
 }
 
@@ -263,7 +157,6 @@ HuffmanTable::HuffmanTable(std::ifstream& file, const std::streampos& dataStartI
         }
         code = code << 1;
     }
-    tree = HuffmanTree(encodings);
     generateLookupTable();
 }
 
@@ -303,6 +196,19 @@ uint8_t HuffmanTable::decodeNextValue(BitReader& bitReader) const {
     return decoding2.value;
 }
 
+void HuffmanTable::print() const {
+    std::cout << std::setw(17) << "Encoding" << std::setw(11) << "Value\n";
+    for (auto& encoding : encodings) {
+        std::string code;
+        for (int i = encoding.bitLength - 1; i >= 0; i--) {
+            int bit = encoding.encoding >> i & 1;
+            code += bit == 0 ? "0" : "1";
+        }
+        std::cout << std::setw(17) << code << std::setw(10) << std::hex << static_cast<int>(encoding.value) << std::dec <<  "\n";
+    }
+}
+
+
 int EntropyDecoder::decodeSSSS(BitReader& bitReader, const int SSSS) {
     int coefficient = static_cast<int>(bitReader.getNBits(SSSS));
     if (coefficient < 1 << (SSSS - 1)) {
@@ -323,12 +229,13 @@ std::pair<int, int> EntropyDecoder::decodeAcCoefficient(BitReader& bitReader, co
     return {r, s};
 }
 
-std::array<int, 64> EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification component, int (&prevDc)[3]) {
-    std::array<int, 64> result{0};
+std::array<int, 64>* EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification component, int (&prevDc)[3]) {
+    std::array<int, 64>* result = new std::array<int, 64>();
+    result->fill(0);
     // DC Coefficient
     HuffmanTable &dcTable = jpg->dcHuffmanTables[component.dcTableSelector];
     int dcCoefficient = decodeDcCoefficient(bitReader, dcTable) + prevDc[component.componentId - 1];
-    result[0] = dcCoefficient;
+    (*result)[0] = dcCoefficient;
     prevDc[component.componentId - 1] = dcCoefficient;
 
     // AC Coefficients
@@ -348,31 +255,25 @@ std::array<int, 64> EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitRead
             break;
         }
         int coefficient = decodeSSSS(bitReader, s);
-        result[zigZagMap[index]] = coefficient;
+        (*result)[zigZagMap[index]] = coefficient;
         index++;
     }
     return result;
 }
 
-Mcu EntropyDecoder::decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]) {
-    Mcu mcu(jpg->frameHeader.luminanceComponentsPerMcu, jpg->frameHeader.maxHorizontalSample, jpg->frameHeader.maxVerticalSample);
-    std::vector<QuantizationTable> qTables;
+Mcu* EntropyDecoder::decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]) {
+    Mcu* mcu = new Mcu(jpg->frameHeader.luminanceComponentsPerMcu, jpg->frameHeader.maxHorizontalSample, jpg->frameHeader.maxVerticalSample);
     for (auto& component : jpg->scanHeader.componentSpecifications) {
-        qTables.push_back(jpg->quantizationTables[jpg->frameHeader.componentSpecifications[component.componentId].quantizationTableSelector]);
         if (component.componentId == 1) {
             for (int i = 0; i < jpg->frameHeader.luminanceComponentsPerMcu; i++) {
-                mcu.Y[i] = decodeComponent(jpg, bitReader, component, prevDc);
+                mcu->Y.push_back(std::unique_ptr<std::array<int, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc)));
             }
         } else if (component.componentId == 2) {
-            mcu.Cb = decodeComponent(jpg, bitReader, component, prevDc);
+            mcu->Cb = std::unique_ptr<std::array<int, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc));
         } else if (component.componentId == 3) {
-            mcu.Cr = decodeComponent(jpg, bitReader, component, prevDc);
+            mcu->Cr = std::unique_ptr<std::array<int, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc));
         }
     }
-
-    mcu.dequantize(qTables);
-    mcu.performInverseDCT();
-    mcu.generateColorBlocks();
     return mcu;
 }
 
@@ -456,7 +357,7 @@ void Mcu::print() const {
             for (int x = 0; x < 8; x++) {
                 // Print Luminance
                 int luminanceIndex = y * 8 + x;
-                std::cout << std::setw(5) << i[luminanceIndex] << " ";
+                std::cout << std::setw(5) << (*i)[luminanceIndex] << " ";
             }
             std::cout << "| ";
         }
@@ -465,14 +366,14 @@ void Mcu::print() const {
         for (int x = 0; x < 8; x++) {
             // Print Blue Chrominance
             int blueIndex = y * 8 + x;
-            std::cout << std::setw(5) << Cb[blueIndex] << " ";
+            std::cout << std::setw(5) << (*Cb)[blueIndex] << " ";
         }
         std::cout << "| ";
 
         for (int x = 0; x < 8; x++) {
             // Print Red Chrominance
             int redIndex = y * 8 + x;
-            std::cout << std::setw(5) << Cr[redIndex] << " ";
+            std::cout << std::setw(5) << (*Cr)[redIndex] << " ";
         }
         std::cout << '\n';
     }
@@ -497,9 +398,9 @@ void Mcu::generateColorBlocks() {
         for (int j = 0; j < dataUnitLength; j++) {
             int colorIndex = getColorIndex(i, j, horizontalSampleSize, verticalSampleSize);
             
-            double y = Y[i][j] + 128;
-            double cb = Cb[colorIndex];
-            double cr = Cr[colorIndex];
+            double y = (*Y[i])[j] + 128;
+            double cb = (*Cb)[colorIndex];
+            double cr = (*Cr)[colorIndex];
             
             int r = static_cast<int>(y +              1.402 * cr);
             int g = static_cast<int>(y - 0.344 * cb - 0.714 * cr);
@@ -674,41 +575,41 @@ void Mcu::performInverseDCT() {
         return;
     }
     for (auto& y : Y) {
-        performInverseDCT(y);
+        performInverseDCT(*y);
     }
-    performInverseDCT(Cb);
-    performInverseDCT(Cr);
+    performInverseDCT(*Cb);
+    performInverseDCT(*Cr);
     postDctMode = false;
 }
 
 void Mcu::dequantize(std::array<int, dataUnitLength>& array, const QuantizationTable& quantizationTable) {
     for (int i = 0; i < dataUnitLength; i++) {
-        array[i] *= quantizationTable.is8Bit ? quantizationTable.table8[i] : quantizationTable.table16[i];
+        array[i] *= quantizationTable.table[i];
     }
 }
 
-void Mcu::dequantize(const std::vector<QuantizationTable>& quantizationTables) {
+void Mcu::dequantize(Jpg* jpg) {
     if (!isQuantized) {
         std::cout << "Warning: Data unit has already been dequantized, cannot dequantize again";
         return;
     }
     for (auto& y : Y) {
-        dequantize(y, quantizationTables[0]);
+        dequantize(*y, jpg->quantizationTables[jpg->frameHeader.componentSpecifications[1].quantizationTableSelector]);
     }
-    if (quantizationTables.size() > 1) {
-        dequantize(Cb, quantizationTables[1]);
-        dequantize(Cr, quantizationTables[2]);
+    if (jpg->frameHeader.componentSpecifications.size() > 1) {
+        dequantize(*Cb, jpg->quantizationTables[jpg->frameHeader.componentSpecifications[2].quantizationTableSelector]);
+        dequantize(*Cr, jpg->quantizationTables[jpg->frameHeader.componentSpecifications[3].quantizationTableSelector]);
     }
     isQuantized = false;
 }
 
 Mcu::Mcu() {
-    Y = std::vector(1, std::array<int, 64>({0}));
+    Y.reserve(1);
     colorBlocks = std::vector(1, ColorBlock());
 }
 
 Mcu::Mcu(const int luminanceComponents, const int horizontalSampleSize, const int verticalSampleSize) {
-    Y = std::vector(luminanceComponents, std::array<int, 64>({0}));
+    Y.reserve(luminanceComponents);
     colorBlocks = std::vector(luminanceComponents, ColorBlock());
     this->horizontalSampleSize = horizontalSampleSize;
     this->verticalSampleSize = verticalSampleSize;
@@ -786,6 +687,76 @@ void Jpg::readComments() {
     file.read(comment.data(), length);
 }
 
+void Jpg::processQuantizationQueue() {
+    while (true) {
+        std::unique_lock quantizationLock(quantizationQueue.mutex);
+        quantizationQueue.condition.wait(quantizationLock, [&] {
+            return !quantizationQueue.queue.empty() || quantizationQueue.allProductsAdded;
+        });
+        if (!quantizationQueue.queue.empty()) {
+            auto mcu = quantizationQueue.queue.front();
+            quantizationQueue.queue.pop();
+            quantizationLock.unlock();
+            mcu->dequantize(this);
+            {
+                std::unique_lock lock(idctQuantizationQueue.mutex);
+                idctQuantizationQueue.queue.push(mcu);
+                idctQuantizationQueue.condition.notify_one();
+            }
+        }
+        if (quantizationQueue.allProductsAdded && quantizationQueue.queue.empty()) {
+            std::unique_lock lock(idctQuantizationQueue.mutex);
+            idctQuantizationQueue.allProductsAdded = true;
+            idctQuantizationQueue.condition.notify_all();
+            break;
+        }
+    }
+}
+
+void Jpg::processIdctQuantizationQueue() {
+    while (true) {
+        std::unique_lock idctLock(idctQuantizationQueue.mutex);
+        idctQuantizationQueue.condition.wait(idctLock, [&] {
+            return !idctQuantizationQueue.queue.empty() || idctQuantizationQueue.allProductsAdded;
+        });
+        if (!idctQuantizationQueue.queue.empty()) {
+            auto mcu = idctQuantizationQueue.queue.front();
+            idctQuantizationQueue.queue.pop();
+            idctLock.unlock();
+            mcu->performInverseDCT();
+            {
+                std::unique_lock lock(colorConversionQueue.mutex);
+                colorConversionQueue.queue.push(mcu);
+                colorConversionQueue.condition.notify_one();
+            }
+        }
+        if (idctQuantizationQueue.allProductsAdded && idctQuantizationQueue.queue.empty()) {
+            std::unique_lock lock(colorConversionQueue.mutex);
+            colorConversionQueue.allProductsAdded = true;
+            colorConversionQueue.condition.notify_all();
+            break;
+        }
+    }
+}
+
+void Jpg::processColorConversionQueue() {
+    while (true) {
+        std::unique_lock colorLock(colorConversionQueue.mutex);
+        colorConversionQueue.condition.wait(colorLock, [&] {
+            return !colorConversionQueue.queue.empty() || colorConversionQueue.allProductsAdded;
+        });
+        if (!colorConversionQueue.queue.empty()) {
+            auto mcu = colorConversionQueue.queue.front();
+            colorConversionQueue.queue.pop();
+            colorLock.unlock();
+            mcu->generateColorBlocks();
+        }
+        if (colorConversionQueue.allProductsAdded && colorConversionQueue.queue.empty()) {
+            break;
+        }
+    }
+}
+
 void Jpg::readScanHeader() {
     file.seekg(2, std::ios::cur); // Skip past the length bytes
     scanHeader = ScanHeader(file, file.tellg());
@@ -820,18 +791,32 @@ void Jpg::readStartOfScan() {
     clock_t afterRead = clock();
     BitReader bitReader(bytes);
     int prevDc[3] = {};
+
+    std::thread quantizationThread = std::thread([&] {processQuantizationQueue();});
+    std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
+    std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
     
-    int mcuHeight = (frameHeader.height + (frameHeader.maxVerticalSample * 8 - 1)) / (frameHeader.maxVerticalSample * 8);
-    int mcuWidth = (frameHeader.width + (frameHeader.maxHorizontalSample * 8 - 1)) / (frameHeader.maxHorizontalSample * 8);
-    for (int i = 0; i < mcuHeight * mcuWidth; i++) {
+    for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
         if (restartInterval != 0 && i % restartInterval == 0) {
             bitReader.alignToByte();
             prevDc[0] = 0;
             prevDc[1] = 0;
             prevDc[2] = 0;
         }
-        mcus.push_back(EntropyDecoder::decodeMcu(this, bitReader, prevDc));
+        auto mcu = std::shared_ptr<Mcu>(EntropyDecoder::decodeMcu(this, bitReader, prevDc));
+        mcus.push_back(mcu);
+        std::unique_lock lock(quantizationQueue.mutex);
+        quantizationQueue.queue.push(mcu);
+        quantizationQueue.condition.notify_one();
     }
+
+    std::unique_lock lock(quantizationQueue.mutex);
+    quantizationQueue.allProductsAdded = true;
+    lock.unlock();
+    quantizationThread.join();
+    idctThread.join();
+    colorConversionThread.join();
+    
     clock_t afterDecode = clock();
     std::cout << "Time to read bytes: " << static_cast<double>(afterRead - begin) / CLOCKS_PER_SEC << " seconds\n";
     std::cout << "Time to decode: " << static_cast<double>(afterDecode - afterRead) / CLOCKS_PER_SEC << " seconds\n";
@@ -873,18 +858,24 @@ void Jpg::printInfo() const {
     scanHeader.print();
     
     for (size_t i = 0; i < quantizationTables.size(); i++) {
-        std::cout << "Table #" << i << "\n";
-        quantizationTables[i].printTable();
+        if (quantizationTables[i].isSet) {
+            std::cout << "Quantization Table #" << i << "\n";
+            quantizationTables[i].print();
+        }
     }
     
     for (size_t i = 0; i < dcHuffmanTables.size(); i++) {
-        std::cout << "DC Table #" << i << "\n";
-        dcHuffmanTables[i].tree.printTree();
+        if (!dcHuffmanTables[i].encodings.empty()) {
+            std::cout << "DC Huffman Table #" << i << "\n";
+            dcHuffmanTables[i].print();
+        }
     }
     
     for (size_t i = 0; i < acHuffmanTables.size(); i++) {
-        std::cout << "AC Table #" << i << "\n";
-        acHuffmanTables[i].tree.printTree();
+        if (!acHuffmanTables[i].encodings.empty()) {
+            std::cout << "AC Huffman Table #" << i << "\n";
+            acHuffmanTables[i].print();
+        }
     }
 
     if (!comment.empty()) {
@@ -913,7 +904,7 @@ void putShort(byte*& bufferPos, const uint v) {
     *bufferPos++ = v >> 8;
 }
 
-void Jpg::writeBmp(FrameHeader* image, const std::string& filename, std::vector<Mcu>& mcus) {
+void Jpg::writeBmp(const std::string& filename) const {
     clock_t begin = clock();
     // open file
     std::cout << "Writing " << filename << "...\n";
@@ -923,8 +914,8 @@ void Jpg::writeBmp(FrameHeader* image, const std::string& filename, std::vector<
         return;
     }
     
-    const uint paddingSize = image->width % 4;
-    const uint size = 14 + 12 + image->height * image->width * 3 + paddingSize * image->height;
+    const uint paddingSize = frameHeader.width % 4;
+    const uint size = 14 + 12 + frameHeader.height * frameHeader.width * 3 + paddingSize * frameHeader.height;
 
     byte* buffer = new (std::nothrow) byte[size];
     if (buffer == nullptr) {
@@ -940,20 +931,20 @@ void Jpg::writeBmp(FrameHeader* image, const std::string& filename, std::vector<
     putInt(bufferPos, 0);
     putInt(bufferPos, 0x1A);
     putInt(bufferPos, 12);
-    putShort(bufferPos, image->width);
-    putShort(bufferPos, image->height);
+    putShort(bufferPos, frameHeader.width);
+    putShort(bufferPos, frameHeader.height);
     putShort(bufferPos, 1);
     putShort(bufferPos, 24);
     
-    for (uint y = image->height - 1; y < image->height; --y) {
-        const uint blockRow = y / image->mcuPixelHeight;
-        const uint pixelRow = y % image->mcuPixelHeight;
-        for (uint x = 0; x < image->width; ++x) {
-            const uint blockColumn = x / image->mcuPixelWidth;
-            const uint pixelColumn = x % image->mcuPixelWidth;
-            const uint blockIndex = blockRow * image->mcuImageWidth + blockColumn;
-            const uint pixelIndex = pixelRow * image->mcuPixelWidth + pixelColumn;
-            auto [R, G, B] = mcus[blockIndex].getColor(pixelIndex);
+    for (uint y = frameHeader.height - 1; y < frameHeader.height; --y) {
+        const uint blockRow = y / frameHeader.mcuPixelHeight;
+        const uint pixelRow = y % frameHeader.mcuPixelHeight;
+        for (uint x = 0; x < frameHeader.width; ++x) {
+            const uint blockColumn = x / frameHeader.mcuPixelWidth;
+            const uint pixelColumn = x % frameHeader.mcuPixelWidth;
+            const uint blockIndex = blockRow * frameHeader.mcuImageWidth + blockColumn;
+            const uint pixelIndex = pixelRow * frameHeader.mcuPixelWidth + pixelColumn;
+            auto [R, G, B] = mcus[blockIndex]->getColor(pixelIndex);
 
             *bufferPos++ = B;
             *bufferPos++ = G;

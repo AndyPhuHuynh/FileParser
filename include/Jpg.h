@@ -6,6 +6,9 @@
 #include <numbers>
 #include <unordered_map>
 #include <vector>
+#include <queue>
+#include <thread>
+#include <mutex>
 
 #include "BitManipulationUtil.h"
 
@@ -170,13 +173,12 @@ public:
 class QuantizationTable {
 public:
     static constexpr int tableLength = 64;
-    std::array<uint8_t, tableLength> table8{0};
-    std::array<uint16_t, tableLength> table16{0};
-    bool is8Bit;
+    std::array<uint16_t, tableLength> table{0};
+    bool isSet = false;
 
     QuantizationTable() = default;
     QuantizationTable(std::ifstream& file, const std::streampos& dataStartIndex, bool is8Bit);
-    void printTable() const;
+    void print() const;
 };
 
 class HuffmanEncoding {
@@ -186,36 +188,6 @@ public:
     uint8_t value;
     HuffmanEncoding(const uint16_t encoding, const uint8_t bitLength, const uint8_t value)
         : encoding(encoding), bitLength(bitLength), value(value) {}
-};
-
-class HuffmanNode {
-public:
-    std::unique_ptr<HuffmanNode> left;
-    std::unique_ptr<HuffmanNode> right;
-private:
-    bool isNodeSet;
-    uint8_t value;
-
-public:
-    HuffmanNode() : isNodeSet(false), value(0), left(nullptr), right(nullptr) {}
-    explicit HuffmanNode(const uint8_t value)
-    : value(value), left(nullptr), right(nullptr) {}
-    bool isLeaf() const;
-    uint8_t getValue() const;
-    void setValue(const uint8_t value);
-    bool isSet() const;
-};
-
-class HuffmanTree {
-public:
-    std::unique_ptr<HuffmanNode> root;
-
-    HuffmanTree();
-    explicit HuffmanTree(const std::vector<HuffmanEncoding>& encodings);
-    void addEncoding(const HuffmanEncoding& encoding);
-    void printTree() const;
-    static void printTree(const HuffmanNode&, const std::string& currentCode);
-    uint8_t decodeNextValue(BitReader& bitReader);
 };
 
 struct HuffmanTableEntry {
@@ -233,14 +205,13 @@ class HuffmanTable {
 public:
     static constexpr int maxEncodingLength = 16;
     std::vector<HuffmanEncoding> encodings;
-    HuffmanTree tree;
-    // std::unique_ptr<std::array<HuffmanTableEntry, 65536>> table;
     std::unique_ptr<std::array<HuffmanTableEntry, 256>> table;
     
     HuffmanTable() = default;
     HuffmanTable(std::ifstream& file, const std::streampos& dataStartIndex);
     void generateLookupTable();
     uint8_t decodeNextValue(BitReader& bitReader) const;
+    void print() const;
 };
 
 class ScanHeaderComponentSpecification {
@@ -283,11 +254,11 @@ public:
     bool postDctMode = true; // True = After FDCT, IDCT needs to be performed
     bool isQuantized = true;
     // Component 1
-    std::vector<std::array<int, dataUnitLength>> Y;
+    std::vector<std::unique_ptr<std::array<int, dataUnitLength>>> Y;
     // Component 2
-    std::array<int, dataUnitLength> Cb = {0};
+    std::unique_ptr<std::array<int, dataUnitLength>> Cb = nullptr;
     // Component 3
-    std::array<int, dataUnitLength> Cr = {0};
+    std::unique_ptr<std::array<int, dataUnitLength>> Cr = nullptr;
     int horizontalSampleSize = 1;
     int verticalSampleSize = 1;
     std::vector<ColorBlock> colorBlocks;
@@ -302,7 +273,7 @@ public:
     static void performInverseDCT(std::array<int, dataUnitLength>& array);
     void performInverseDCT();
     static void dequantize(std::array<int, dataUnitLength>& array, const QuantizationTable& quantizationTable);
-    void dequantize(const std::vector<QuantizationTable>& quantizationTables);
+    void dequantize(Jpg* jpg);
 };
 
 class EntropyDecoder {
@@ -310,8 +281,15 @@ public:
     static int decodeSSSS(BitReader& bitReader, const int SSSS);
     static int decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
     static std::pair<int, int> decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
-    static std::array<int, 64> decodeComponent(Jpg* jpg, BitReader& bitReader, ScanHeaderComponentSpecification component, int (&prevDc)[3]);
-    static Mcu decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]);
+    static std::array<int, 64>* decodeComponent(Jpg* jpg, BitReader& bitReader, ScanHeaderComponentSpecification component, int (&prevDc)[3]);
+    static Mcu* decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]);
+};
+
+struct ConsumerQueue {
+    std::mutex mutex;
+    std::condition_variable condition;
+    std::queue<std::shared_ptr<Mcu>> queue;
+    bool allProductsAdded = false;
 };
 
 /* TODO: Arithmetic Coding */
@@ -326,9 +304,15 @@ public:
     std::array<HuffmanTable, 4> dcHuffmanTables;
     std::array<HuffmanTable, 4> acHuffmanTables;
     uint16_t restartInterval = 0;
-    std::vector<Mcu> mcus;
+    std::vector<std::shared_ptr<Mcu>> mcus;
+private:   
+    ConsumerQueue quantizationQueue;
+    ConsumerQueue idctQuantizationQueue;
+    ConsumerQueue colorConversionQueue;
     
+public:
     explicit Jpg(const std::string& path);
+private:
     uint16_t readLengthBytes();
     void readFrameHeader(uint8_t frameMarker);
     void readQuantizationTables();
@@ -336,11 +320,14 @@ public:
     void readDefineNumberOfLines();
     void readDefineRestartIntervals();
     void readComments();
+    void processQuantizationQueue();
+    void processIdctQuantizationQueue();
+    void processColorConversionQueue();
     void readScanHeader();
     void readStartOfScan();
     void readFile();
-    // int render() const;
-    void writeBmp(FrameHeader* image, const std::string& filename, std::vector<Mcu>& mcus);
+public:
+    void writeBmp(const std::string& filename) const;
     void printInfo() const;
 };
 

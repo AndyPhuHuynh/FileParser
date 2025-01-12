@@ -35,7 +35,8 @@ int main(const int argc, char* argv[]) {
     out << filename << ".bmp";
     
     Jpg jpg(path.str());
-    jpg.writeBmp(&jpg.frameHeader, out.str(), jpg.mcus);
+    jpg.writeBmp(out.str());
+    // jpg.printInfo();
     // Bmp bmp("sample.bmp");
     // bmp.render();
     clock_t end = clock();
