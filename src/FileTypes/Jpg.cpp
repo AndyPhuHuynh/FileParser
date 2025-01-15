@@ -1,6 +1,7 @@
 ﻿#include "Jpg.h"
 
 #include <algorithm>
+#include <future>
 #include <iomanip>
 #include <iostream>
 #include <numbers>
@@ -12,6 +13,7 @@
 #include "BitManipulationUtil.h"
 #include "Bmp.h"
 #include "ShaderUtil.h"
+#include <simde/x86/avx512.h>
 
 void FrameHeaderComponentSpecification::print() const {
     std::cout << std::setw(25) << "Identifier: " << static_cast<int>(identifier) << "\n";
@@ -121,12 +123,24 @@ QuantizationTable::QuantizationTable(std::ifstream& file, const std::streampos& 
     file.seekg(dataStartIndex, std::ios::beg);
     for (unsigned char i : zigZagMap) {
         if (is8Bit) {
-            file.read(reinterpret_cast<char*>(&table[i]), 1);
+            uint8_t byte;
+            file.read(reinterpret_cast<char*>(&byte), 1);
+            table[i] = static_cast<float>(byte);
         } else {
-            file.read(reinterpret_cast<char*>(&table[i]), 2);
-            table[i] = SwapBytes(table[i]);
+            uint16_t word;
+            file.read(reinterpret_cast<char*>(&word), 2);
+            word = static_cast<uint16_t>((word >> 8) | (word << 8));
+            table[i] = static_cast<float>(word);
         }
     }
+    // for (unsigned char i : zigZagMap) {
+    //     if (is8Bit) {
+    //         file.read(reinterpret_cast<char*>(&table[i]), 1);
+    //     } else {
+    //         file.read(reinterpret_cast<char*>(&table[i]), 2);
+    //         table[i] = (table[i] >> 8 & 0x00FF0000) | (table[i] << 8);
+    //     }
+    // }
     isSet = true;
 }
 
@@ -229,13 +243,13 @@ std::pair<int, int> EntropyDecoder::decodeAcCoefficient(BitReader& bitReader, co
     return {r, s};
 }
 
-std::array<int, 64>* EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification component, int (&prevDc)[3]) {
-    std::array<int, 64>* result = new std::array<int, 64>();
+std::array<float, 64>* EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification& component, int (&prevDc)[3]) {
+    std::array<float, 64>* result = new std::array<float, 64>();
     result->fill(0);
     // DC Coefficient
     HuffmanTable &dcTable = jpg->dcHuffmanTables[component.dcTableSelector];
     int dcCoefficient = decodeDcCoefficient(bitReader, dcTable) + prevDc[component.componentId - 1];
-    (*result)[0] = dcCoefficient;
+    (*result)[0] = static_cast<float>(dcCoefficient);
     prevDc[component.componentId - 1] = dcCoefficient;
 
     // AC Coefficients
@@ -255,7 +269,7 @@ std::array<int, 64>* EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitRea
             break;
         }
         int coefficient = decodeSSSS(bitReader, s);
-        (*result)[zigZagMap[index]] = coefficient;
+        (*result)[zigZagMap[index]] = static_cast<float>(coefficient);
         index++;
     }
     return result;
@@ -266,12 +280,12 @@ Mcu* EntropyDecoder::decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3])
     for (auto& component : jpg->scanHeader.componentSpecifications) {
         if (component.componentId == 1) {
             for (int i = 0; i < jpg->frameHeader.luminanceComponentsPerMcu; i++) {
-                mcu->Y.push_back(std::unique_ptr<std::array<int, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc)));
+                mcu->Y.push_back(std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc)));
             }
         } else if (component.componentId == 2) {
-            mcu->Cb = std::unique_ptr<std::array<int, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc));
+            mcu->Cb = std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc));
         } else if (component.componentId == 3) {
-            mcu->Cr = std::unique_ptr<std::array<int, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc));
+            mcu->Cr = std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc));
         }
     }
     return mcu;
@@ -346,7 +360,6 @@ void ColorBlock::print() const {
     }
 }
 
-
 void Mcu::print() const {
     std::cout << std::dec;
     std::cout << "Luminance (Y)        | Blue Chrominance (Cb)        | Red Chrominance (Cr)" << '\n';
@@ -393,22 +406,37 @@ int Mcu::getColorIndex(const int blockIndex, const int pixelIndex, const int hor
 }
 
 void Mcu::generateColorBlocks() {
+    simde__m256 one_two_eight = simde_mm256_set1_ps(128);
+    simde__m256 red_cr_scaler = simde_mm256_set1_ps(1.402f);
+    simde__m256 green_cb_scaler = simde_mm256_set1_ps(-0.344f);
+    simde__m256 green_cr_scaler = simde_mm256_set1_ps(-0.714f);
+    simde__m256 blue_cb_scaler = simde_mm256_set1_ps(1.772f);
+    
     for (int i = 0; i < static_cast<int>(Y.size()); i++) {
         auto& [R, G, B] = colorBlocks[i];
-        for (int j = 0; j < dataUnitLength; j++) {
+        constexpr int simdIncrement = 8;
+        for (int j = 0; j < dataUnitLength; j += simdIncrement) {
             int colorIndex = getColorIndex(i, j, horizontalSampleSize, verticalSampleSize);
+
+            simde__m256 y  = simde_mm256_loadu_ps(&(*Y[i])[j]);
+            simde__m256 cb = simde_mm256_loadu_ps(&(*Cb)[colorIndex]);
+            simde__m256 cr = simde_mm256_loadu_ps(&(*Cr)[colorIndex]);
             
-            double y = (*Y[i])[j] + 128;
-            double cb = (*Cb)[colorIndex];
-            double cr = (*Cr)[colorIndex];
+            y = simde_mm256_add_ps(y, one_two_eight);
             
-            int r = static_cast<int>(y +              1.402 * cr);
-            int g = static_cast<int>(y - 0.344 * cb - 0.714 * cr);
-            int b = static_cast<int>(y + 1.772 * cb             );
-        
-            R[j] = static_cast<uint8_t>(std::clamp(r, 0, 255)); 
-            G[j] = static_cast<uint8_t>(std::clamp(g, 0, 255)); 
-            B[j] = static_cast<uint8_t>(std::clamp(b, 0, 255)); 
+            simde__m256 r = simde_mm256_add_ps(y, simde_mm256_mul_ps(red_cr_scaler, cr));
+            simde__m256 g = simde_mm256_add_ps(y, simde_mm256_add_ps(
+                                simde_mm256_mul_ps(green_cb_scaler, cb),
+                                simde_mm256_mul_ps(green_cr_scaler, cr)));
+            simde__m256 b = simde_mm256_add_ps(y, simde_mm256_mul_ps(blue_cb_scaler, cb));
+            
+            simde__m256 r_clamped = simde_mm256_max_ps(simde_mm256_min_ps(r, simde_mm256_set1_ps(255.0f)), simde_mm256_set1_ps(0.0f));
+            simde__m256 g_clamped = simde_mm256_max_ps(simde_mm256_min_ps(g, simde_mm256_set1_ps(255.0f)), simde_mm256_set1_ps(0.0f));
+            simde__m256 b_clamped = simde_mm256_max_ps(simde_mm256_min_ps(b, simde_mm256_set1_ps(255.0f)), simde_mm256_set1_ps(0.0f));
+            
+            simde_mm256_storeu_ps(&R[j], r_clamped);
+            simde_mm256_storeu_ps(&G[j], g_clamped);
+            simde_mm256_storeu_ps(&B[j], b_clamped);
         }
     }
 }
@@ -429,18 +457,18 @@ std::tuple<uint8_t, uint8_t, uint8_t> Mcu::getColor(int index) {
 }
 
 // Uses AAN DCT
-void Mcu::performInverseDCT(std::array<int, dataUnitLength>& array) {
+void Mcu::performInverseDCT(std::array<float, dataUnitLength>& array) {
     float results[64];
     // Calculates the rows
     for (int i = 0; i < 8; i++) {
-        const float g0 = static_cast<float>(array[0 * 8 + i]) * s0;
-         const float g1 = static_cast<float>(array[4 * 8 + i]) * s4;
-         const float g2 = static_cast<float>(array[2 * 8 + i]) * s2;
-         const float g3 = static_cast<float>(array[6 * 8 + i]) * s6;
-         const float g4 = static_cast<float>(array[5 * 8 + i]) * s5;
-         const float g5 = static_cast<float>(array[1 * 8 + i]) * s1;
-         const float g6 = static_cast<float>(array[7 * 8 + i]) * s7;
-         const float g7 = static_cast<float>(array[3 * 8 + i]) * s3;
+         const float g0 = array[0 * 8 + i] * s0;
+         const float g1 = array[4 * 8 + i] * s4;
+         const float g2 = array[2 * 8 + i] * s2;
+         const float g3 = array[6 * 8 + i] * s6;
+         const float g4 = array[5 * 8 + i] * s5;
+         const float g5 = array[1 * 8 + i] * s1;
+         const float g6 = array[7 * 8 + i] * s7;
+         const float g7 = array[3 * 8 + i] * s3;
 
          const float f0 = g0;
          const float f1 = g1;
@@ -558,14 +586,14 @@ void Mcu::performInverseDCT(std::array<int, dataUnitLength>& array) {
         const float b6 = c6 - c7;
         const float b7 = c7;
 
-        array[i * 8 + 0] = static_cast<int>(b0 + b7);
-        array[i * 8 + 1] = static_cast<int>(b1 + b6);
-        array[i * 8 + 2] = static_cast<int>(b2 + b5);
-        array[i * 8 + 3] = static_cast<int>(b3 + b4);
-        array[i * 8 + 4] = static_cast<int>(b3 - b4);
-        array[i * 8 + 5] = static_cast<int>(b2 - b5);
-        array[i * 8 + 6] = static_cast<int>(b1 - b6);
-        array[i * 8 + 7] = static_cast<int>(b0 - b7);
+        array[i * 8 + 0] = b0 + b7;
+        array[i * 8 + 1] = b1 + b6;
+        array[i * 8 + 2] = b2 + b5;
+        array[i * 8 + 3] = b3 + b4;
+        array[i * 8 + 4] = b3 - b4;
+        array[i * 8 + 5] = b2 - b5;
+        array[i * 8 + 6] = b1 - b6;
+        array[i * 8 + 7] = b0 - b7;
     }
 }
 
@@ -582,9 +610,12 @@ void Mcu::performInverseDCT() {
     postDctMode = false;
 }
 
-void Mcu::dequantize(std::array<int, dataUnitLength>& array, const QuantizationTable& quantizationTable) {
-    for (int i = 0; i < dataUnitLength; i++) {
-        array[i] *= quantizationTable.table[i];
+void Mcu::dequantize(std::array<float, dataUnitLength>& array, const QuantizationTable& quantizationTable) {
+    for (size_t i = 0; i < dataUnitLength; i += 16) {
+        simde__m512 arrayVec = simde_mm512_loadu_ps(&array[i]);
+        simde__m512 quantTableVec = simde_mm512_loadu_ps(&quantizationTable.table[i]);
+        simde__m512 resultVec = simde_mm512_mul_ps(arrayVec, quantTableVec);
+        simde_mm512_storeu_ps(&array[i], resultVec);
     }
 }
 
@@ -687,7 +718,9 @@ void Jpg::readComments() {
     file.read(comment.data(), length);
 }
 
+
 void Jpg::processQuantizationQueue() {
+    static double totalTime = 0.0f;
     while (true) {
         std::unique_lock quantizationLock(quantizationQueue.mutex);
         quantizationQueue.condition.wait(quantizationLock, [&] {
@@ -697,7 +730,10 @@ void Jpg::processQuantizationQueue() {
             auto mcu = quantizationQueue.queue.front();
             quantizationQueue.queue.pop();
             quantizationLock.unlock();
+            clock_t begin = clock();
             mcu->dequantize(this);
+            clock_t end = clock();
+            totalTime += (end - begin);
             {
                 std::unique_lock lock(idctQuantizationQueue.mutex);
                 idctQuantizationQueue.queue.push(mcu);
@@ -705,6 +741,7 @@ void Jpg::processQuantizationQueue() {
             }
         }
         if (quantizationQueue.allProductsAdded && quantizationQueue.queue.empty()) {
+            std::cout << "Total time on quantization: " << (totalTime) / CLOCKS_PER_SEC << " seconds\n";
             std::unique_lock lock(idctQuantizationQueue.mutex);
             idctQuantizationQueue.allProductsAdded = true;
             idctQuantizationQueue.condition.notify_all();
@@ -714,6 +751,7 @@ void Jpg::processQuantizationQueue() {
 }
 
 void Jpg::processIdctQuantizationQueue() {
+    static double totalTime = 0.0f;
     while (true) {
         std::unique_lock idctLock(idctQuantizationQueue.mutex);
         idctQuantizationQueue.condition.wait(idctLock, [&] {
@@ -723,7 +761,10 @@ void Jpg::processIdctQuantizationQueue() {
             auto mcu = idctQuantizationQueue.queue.front();
             idctQuantizationQueue.queue.pop();
             idctLock.unlock();
+            clock_t begin = clock();
             mcu->performInverseDCT();
+            clock_t end = clock();
+            totalTime += (end - begin);
             {
                 std::unique_lock lock(colorConversionQueue.mutex);
                 colorConversionQueue.queue.push(mcu);
@@ -731,6 +772,7 @@ void Jpg::processIdctQuantizationQueue() {
             }
         }
         if (idctQuantizationQueue.allProductsAdded && idctQuantizationQueue.queue.empty()) {
+            std::cout << "Total time on idct: " << (totalTime) / CLOCKS_PER_SEC << " seconds\n";
             std::unique_lock lock(colorConversionQueue.mutex);
             colorConversionQueue.allProductsAdded = true;
             colorConversionQueue.condition.notify_all();
@@ -740,6 +782,7 @@ void Jpg::processIdctQuantizationQueue() {
 }
 
 void Jpg::processColorConversionQueue() {
+    static double totalTime = 0.0f;
     while (true) {
         std::unique_lock colorLock(colorConversionQueue.mutex);
         colorConversionQueue.condition.wait(colorLock, [&] {
@@ -749,12 +792,16 @@ void Jpg::processColorConversionQueue() {
             auto mcu = colorConversionQueue.queue.front();
             colorConversionQueue.queue.pop();
             colorLock.unlock();
+            clock_t begin = clock();
             mcu->generateColorBlocks();
+            clock_t end = clock();
+            totalTime += (end - begin);
         }
         if (colorConversionQueue.allProductsAdded && colorConversionQueue.queue.empty()) {
             break;
         }
     }
+    std::cout << "Total time on color: " << (totalTime) / CLOCKS_PER_SEC << " seconds\n";
 }
 
 void Jpg::readScanHeader() {
@@ -809,17 +856,15 @@ void Jpg::readStartOfScan() {
         quantizationQueue.queue.push(mcu);
         quantizationQueue.condition.notify_one();
     }
-
+    clock_t afterDecode = clock();
     std::unique_lock lock(quantizationQueue.mutex);
     quantizationQueue.allProductsAdded = true;
     lock.unlock();
     quantizationThread.join();
     idctThread.join();
     colorConversionThread.join();
-    
-    clock_t afterDecode = clock();
     std::cout << "Time to read bytes: " << static_cast<double>(afterRead - begin) / CLOCKS_PER_SEC << " seconds\n";
-    std::cout << "Time to decode: " << static_cast<double>(afterDecode - afterRead) / CLOCKS_PER_SEC << " seconds\n";
+    std::cout << "Time to huffman decode: " << static_cast<double>(afterDecode - afterRead) / CLOCKS_PER_SEC << " seconds\n";
 }
 
 void Jpg::readFile() {
@@ -853,7 +898,9 @@ void Jpg::readFile() {
 }
 
 void Jpg::printInfo() const {
-    std::cout << "Restart Interval: " << restartInterval << '\n';
+    if (restartInterval != 0) {
+        std::cout << "Restart Interval: " << restartInterval << '\n';
+    }
     frameHeader.print();
     scanHeader.print();
     

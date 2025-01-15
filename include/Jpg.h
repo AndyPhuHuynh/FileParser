@@ -173,7 +173,7 @@ public:
 class QuantizationTable {
 public:
     static constexpr int tableLength = 64;
-    std::array<uint16_t, tableLength> table{0};
+    std::array<float, tableLength> table{0};
     bool isSet = false;
 
     QuantizationTable() = default;
@@ -242,9 +242,9 @@ public:
 class ColorBlock {
 public:
     static constexpr int colorBlockLength = 64;
-    std::array<uint8_t, colorBlockLength> R {0};
-    std::array<uint8_t, colorBlockLength> G {0};
-    std::array<uint8_t, colorBlockLength> B {0};
+    std::array<float, colorBlockLength> R {0};
+    std::array<float, colorBlockLength> G {0};
+    std::array<float, colorBlockLength> B {0};
     void print() const;
 };
 
@@ -254,11 +254,11 @@ public:
     bool postDctMode = true; // True = After FDCT, IDCT needs to be performed
     bool isQuantized = true;
     // Component 1
-    std::vector<std::unique_ptr<std::array<int, dataUnitLength>>> Y;
+    std::vector<std::unique_ptr<std::array<float, dataUnitLength>>> Y;
     // Component 2
-    std::unique_ptr<std::array<int, dataUnitLength>> Cb = nullptr;
+    std::unique_ptr<std::array<float, dataUnitLength>> Cb = nullptr;
     // Component 3
-    std::unique_ptr<std::array<int, dataUnitLength>> Cr = nullptr;
+    std::unique_ptr<std::array<float, dataUnitLength>> Cr = nullptr;
     int horizontalSampleSize = 1;
     int verticalSampleSize = 1;
     std::vector<ColorBlock> colorBlocks;
@@ -270,9 +270,9 @@ public:
     static int getColorIndex(const int blockIndex, const int pixelIndex, const int horizontalFactor, const int verticalFactor);
     void generateColorBlocks();
     std::tuple<uint8_t, uint8_t, uint8_t> getColor(int index);
-    static void performInverseDCT(std::array<int, dataUnitLength>& array);
+    static void performInverseDCT(std::array<float, 64>& array);
     void performInverseDCT();
-    static void dequantize(std::array<int, dataUnitLength>& array, const QuantizationTable& quantizationTable);
+    static void dequantize(std::array<float, 64>& array, const QuantizationTable& quantizationTable);
     void dequantize(Jpg* jpg);
 };
 
@@ -281,7 +281,7 @@ public:
     static int decodeSSSS(BitReader& bitReader, const int SSSS);
     static int decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
     static std::pair<int, int> decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
-    static std::array<int, 64>* decodeComponent(Jpg* jpg, BitReader& bitReader, ScanHeaderComponentSpecification component, int (&prevDc)[3]);
+    static std::array<float, 64>* decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification& component, int (&prevDc)[3]);
     static Mcu* decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]);
 };
 
