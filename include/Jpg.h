@@ -254,11 +254,11 @@ public:
     bool postDctMode = true; // True = After FDCT, IDCT needs to be performed
     bool isQuantized = true;
     // Component 1
-    std::vector<std::unique_ptr<std::array<float, dataUnitLength>>> Y;
+    std::vector<std::shared_ptr<std::array<float, dataUnitLength>>> Y;
     // Component 2
-    std::unique_ptr<std::array<float, dataUnitLength>> Cb = nullptr;
+    std::shared_ptr<std::array<float, dataUnitLength>> Cb;
     // Component 3
-    std::unique_ptr<std::array<float, dataUnitLength>> Cr = nullptr;
+    std::shared_ptr<std::array<float, dataUnitLength>> Cr;
     int horizontalSampleSize = 1;
     int verticalSampleSize = 1;
     std::vector<ColorBlock> colorBlocks;
@@ -283,6 +283,11 @@ public:
     static std::pair<int, int> decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
     static std::array<float, 64>* decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification& component, int (&prevDc)[3]);
     static Mcu* decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]);
+
+    static void skipZeros(BitReader& bitReader, std::array<float, 64>*& component, int numToSkip, int& index, int approximationLow, int spectralEnd);
+    static int decodeProgressiveDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
+    static void decodeProgressiveComponent(Jpg* jpg, BitReader& bitReader, std::array<float, 64>* component, int spectralStart, int spectralEnd, int approximationHigh,
+                                           int approximationLow, const ScanHeaderComponentSpecification& componentInfo, int (&prevDc)[3], int& numBlocksToSkip);
 };
 
 struct ConsumerQueue {
@@ -325,6 +330,7 @@ private:
     void processColorConversionQueue();
     void readScanHeader();
     void readStartOfScan();
+    void readProgressiveStartOfScan();
     void readFile();
 public:
     void writeBmp(const std::string& filename) const;

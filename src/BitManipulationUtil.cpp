@@ -38,6 +38,10 @@ uint16_t SwapBytes(const uint16_t value) {
     return static_cast<uint16_t>(value << 8) | static_cast<uint16_t>(value >> 8);
 }
 
+bool AreFloatsEqual(const float a, const float b, const float epsilon) {
+    return std::abs(a - b) < epsilon;
+}
+
 BitReader::BitReader(const std::vector<uint8_t>& bytes) {
     this->bytes = bytes;
     bitPosition = 0;
@@ -45,23 +49,21 @@ BitReader::BitReader(const std::vector<uint8_t>& bytes) {
 }
 
 uint8_t BitReader::getBit() {
-    if (static_cast<size_t>(byteIndex) >= bytes.size()) {
-        static bool flag = false;
-        if (!flag) {
-            std::cout << "Error - No more bytes to read in bit reader\n";
-            flag = true;
-            return 0;
-        }
-    }
     uint8_t bit = GetBitFromLeft(bytes[byteIndex], bitPosition++);
     if (bitPosition >= 8) {
         bitPosition = 0;
         byteIndex++;
     }
+    if (print) {
+        std::cout << "Read one bit " << static_cast<int>(bit) << "\n";
+    }
     return bit;
 }
 
 uint32_t BitReader::getNBits(const int numBits) {
+    if (print) {
+        std::cout << "Read " << numBits << " bits\n";
+    }
     if (numBits == 0) return 0;
     if (numBits < 1 || numBits > 32) {
         std::ostringstream message;
@@ -122,7 +124,23 @@ uint16_t BitReader::getWordConstant() const {
 }
 
 void BitReader::skipBits(const int numBits) {
-    bitPosition += numBits;
-    byteIndex += bitPosition / 8;
-    bitPosition %= 8;
+    // if (print) {
+    //     std::cout << "Skipped " << numBits << " bits\n";
+    // }
+    // bitPosition += numBits;
+    // byteIndex += bitPosition / 8;
+    // bitPosition %= 8;
+
+    for (int i = 0; i < numBits; i++) {
+        getBit();
+    }
+}
+bool BitReader::reachedEnd() const {
+    return byteIndex >= static_cast<int>(bytes.size());
+}
+int BitReader::getByteIndex() {
+    return byteIndex;
+}
+int BitReader::getPos() {
+    return static_cast<int>(bitPosition);
 }

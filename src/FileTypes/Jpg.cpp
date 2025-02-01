@@ -15,6 +15,10 @@
 #include "ShaderUtil.h"
 #include <simde/x86/avx512.h>
 
+bool printFlag = false;
+int startOfScanIndex = 0;
+int bytesSkippedInScan = 0;
+
 void FrameHeaderComponentSpecification::print() const {
     std::cout << std::setw(25) << "Identifier: " << static_cast<int>(identifier) << "\n";
     std::cout << std::setw(25) << "HorizontalSampleFactor: " << static_cast<int>(horizontalSamplingFactor) << "\n";
@@ -280,7 +284,7 @@ Mcu* EntropyDecoder::decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3])
     for (auto& component : jpg->scanHeader.componentSpecifications) {
         if (component.componentId == 1) {
             for (int i = 0; i < jpg->frameHeader.luminanceComponentsPerMcu; i++) {
-                mcu->Y.push_back(std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc)));
+                mcu->Y[i] = (std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc)));
             }
         } else if (component.componentId == 2) {
             mcu->Cb = std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc));
@@ -289,6 +293,325 @@ Mcu* EntropyDecoder::decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3])
         }
     }
     return mcu;
+}
+
+void EntropyDecoder::skipZeros(BitReader& bitReader, std::array<float, 64>*& component, const int numToSkip, int& index, const int approximationLow, int spectralEnd) {
+    if (numToSkip + index >= Mcu::dataUnitLength) {
+        std::cerr << "Invalid number of zeros to skip: " << numToSkip << "\n";
+        std::cerr << "Index: " << index << "\n";
+    }
+    if (printFlag) {
+        std::cout << "Staring index of skip: " << std::dec << index << "\n";
+    }
+    int numZeroes = numToSkip;
+
+    int positive = 1 << approximationLow;
+    int negative = -(1 << approximationLow);
+    // !AreFloatsEqual((*component)[zigZagMap[index]], 0)
+    // do {
+    //     // if (!AreFloatsEqual((*component)[zigZagMap[index]], 0)) {
+    //     if (static_cast<int>((*component)[zigZagMap[index]]) != 0) {
+    //         if (printFlag) {
+    //             std::cout << "Non zero at index: " << index << " ";
+    //         }
+    //         switch (bitReader.getBit()) {
+    //         case 1:
+    //             if ((static_cast<int>((*component)[zigZagMap[index]]) & positive) == 0) {
+    //                 if ((*component)[zigZagMap[index]] >= 0) {
+    //                     (*component)[zigZagMap[index]] += static_cast<float>(positive);
+    //                 }
+    //                 else {
+    //                     (*component)[zigZagMap[index]] += static_cast<float>(negative);
+    //                 }
+    //             }
+    //             break;
+    //         case 0:
+    //             // do nothing
+    //                 break;
+    //         default: // -1, data stream is empty
+    //             std::cerr << "Error - Invalid AC value\n";
+    //             return;
+    //         }
+    //     }
+    //     else {
+    //         if (numZeroes == 0) {
+    //             break;
+    //         }
+    //         if (printFlag) {
+    //             std::cout << "Skipping zero at index: " << index << "\n";
+    //         }
+    //         numZeroes -= 1;
+    //     }
+    //
+    //     index += 1;
+    // } while (index <= spectralEnd);
+    // return;
+
+    if (numToSkip + index >= Mcu::dataUnitLength) {
+        std::cerr << "Invalid number of zeros to skip: " << numToSkip << "\n";
+        std::cerr << "Index: " << index << "\n";
+    }
+    // int positive = 1 << approximationLow;
+    // int negative = -(1 << approximationLow);
+    int zerosRead = 0;
+    
+    bool debug = printFlag;
+    if (debug) {
+        std::cout << "Start index: " << index << "\n";
+    }
+    if (numToSkip == 0) {
+        while (!AreFloatsEqual((*component)[zigZagMap[index]], 0.0f)) {
+            if (debug) {
+                std::cout << "Reading bit start at: " << index << ", ";
+            }
+            int bit = bitReader.getBit();
+            if (bit == 1) {
+                if ((*component)[zigZagMap[index]] > 0) {
+                    (*component)[zigZagMap[index]] += static_cast<float>(positive);
+                } else if ((*component)[zigZagMap[index]] < 0) {
+                    (*component)[zigZagMap[index]] += static_cast<float>(negative);
+                }
+            }
+            index++;
+        }
+    }
+
+    while (zerosRead < numToSkip) {
+        if (!AreFloatsEqual((*component)[zigZagMap[index]], 0.0f)) {
+            if (debug) {
+                std::cout << "Reading bit middle at: " << index << ", ";
+            }
+            int bit = bitReader.getBit();
+            if (bit == 1) {
+                if ((*component)[zigZagMap[index]] > 0) {
+                    (*component)[zigZagMap[index]] += static_cast<float>(positive);
+                } else if ((*component)[zigZagMap[index]] < 0) {
+                    (*component)[zigZagMap[index]] += static_cast<float>(negative);
+                }
+            }
+            index++;
+        } else {
+            if (debug) {
+                std::cout << "Skipping zeros at: " << index << "\n";
+            }
+            zerosRead++;
+            index++;
+        }
+    }
+
+    if (numToSkip == 16) {
+        return;
+    }
+    
+    while (!AreFloatsEqual((*component)[zigZagMap[index]], 0.0f)) {
+        if (debug) {
+            std::cout << "Reading bit end at: " << index << ", ";
+        }
+        int bit = bitReader.getBit();
+        if (bit == 1) {
+            if ((*component)[zigZagMap[index]] > 0) {
+                (*component)[zigZagMap[index]] += static_cast<float>(positive);
+            } else if ((*component)[zigZagMap[index]] < 0) {
+                (*component)[zigZagMap[index]] += static_cast<float>(negative);
+            }
+        }
+        index++;
+    }
+
+    if (debug) {
+        std::cout << "End index: " << index << "\n";    
+    }
+}
+
+void printComponent(std::array<float, 64>* component) {
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            std::cout << std::setw(5) << static_cast<int>((*component)[i * 8 + j]) << " ";
+        }
+        std::cout << std::endl;
+    }
+}
+
+void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, BitReader& bitReader, std::array<float, 64>* component, const int spectralStart, const int spectralEnd, const int approximationHigh,
+                                                const int approximationLow, const ScanHeaderComponentSpecification& componentInfo, int (&prevDc)[3], int& numBlocksToSkip) {
+    if (numBlocksToSkip > 0) {
+        if (approximationHigh == 0) {
+            // Do nothing
+        } else {
+            int positive = 1 << approximationLow;
+            int negative = -(1 << approximationLow);
+            for (int j = spectralStart; j <= spectralEnd; j++) {
+                if (!AreFloatsEqual((*component)[zigZagMap[j]], 0.0f)) {
+                    int bit = bitReader.getBit();
+                    if (bit == 1) {
+                        if ((*component)[zigZagMap[j]] > 0) {
+                            (*component)[zigZagMap[j]] += static_cast<float>(positive);
+                        } else if ((*component)[zigZagMap[j]] < 0) {
+                            (*component)[zigZagMap[j]] += static_cast<float>(negative);
+                        }
+                    }
+                }
+            }
+        }
+        numBlocksToSkip--;
+        return;
+    }
+
+    // DC Coefficient
+    if (spectralStart == 0 && spectralEnd == 0) {
+        // First scan
+        // TODO: Fix prevdc?
+        if (approximationHigh == 0) {
+            HuffmanTable& dcTable = jpg->dcHuffmanTables[componentInfo.dcTableSelector];
+            int dcCoefficient = (decodeDcCoefficient(bitReader, dcTable) << approximationLow) + prevDc[componentInfo.componentId - 1];
+            (*component)[0] = static_cast<float>(dcCoefficient);
+            prevDc[componentInfo.componentId - 1] = dcCoefficient;
+        }
+        // Refinement scan
+        else {
+            (*component)[0] += static_cast<float>(bitReader.getBit() << approximationLow);
+        }
+        return;
+    }
+
+    // AC Coefficients first scan
+    if (approximationHigh == 0) {
+        int index = spectralStart;
+        while (index <= spectralEnd) {
+            HuffmanTable& acTable = jpg->acHuffmanTables[componentInfo.acTableSelector];
+            auto [r, s] = decodeAcCoefficient(bitReader, acTable);
+            // TODO: skip
+            // if (printFlag) {
+            //     std::cout << "Symbol: " << std::hex << (r << 4) + s << std::dec << "\n";
+            // }
+            if (r == 0xF && s == 0x0) {
+                index += 16;
+                continue;
+            }
+            // End of Band 
+            if (s == 0x0) {
+                numBlocksToSkip = (1 << r) - 1 + static_cast<int>(bitReader.getNBits(r));
+                return;
+            }
+            index += r;
+            if (index > spectralEnd) {
+                break;
+            }
+            int coefficient = decodeSSSS(bitReader, s) << approximationLow;
+            (*component)[zigZagMap[index]] = static_cast<float>(coefficient);
+            index++;
+        }
+        return;
+        for (int i = spectralStart; i <= spectralEnd; ++i) {
+            HuffmanTable& acTable = jpg->acHuffmanTables[componentInfo.acTableSelector];
+            auto [numZeroes, coeffLength] = decodeAcCoefficient(bitReader, acTable);
+
+            if (coeffLength != 0) {
+                if (i + numZeroes > spectralEnd) {
+                    std::cout << "Error - Zero run-length exceeded spectral selection\n";
+                    return;
+                }
+                for (int j = 0; j < numZeroes; ++j, ++i) {
+                    (*component)[zigZagMap[i]] = 0;
+                }
+                if (coeffLength > 10) {
+                    std::cout << "Error - AC coefficient length greater than 10\n";
+                    return;
+                }
+
+                int coeff = decodeSSSS(bitReader, coeffLength);
+                (*component)[zigZagMap[i]] = static_cast<float>(coeff << approximationLow);
+            }
+            else {
+                if (numZeroes == 15) {
+                    if (i + numZeroes > spectralEnd) {
+                        std::cout << "Error - Zero run-length exceeded spectral selection\n";
+                        return;
+                    }
+                    for (int j = 0; j < numZeroes; ++j, ++i) {
+                        (*component)[zigZagMap[i]] = 0;
+                    }
+                }
+                else {
+                    numBlocksToSkip = (1 << numZeroes) - 1 + bitReader.getNBits(numZeroes);
+                    break;
+                }
+            }
+        }
+    }
+
+    // Ac Coefficients refinement scan
+    int index = spectralStart;
+    int numToAdd = 1 << approximationLow;
+    while (index <= spectralEnd) {
+        if (printFlag) {
+            std::cout << "\n\nIndex: " << std::dec << index << "\n";
+        }
+        HuffmanTable& acTable = jpg->acHuffmanTables[componentInfo.acTableSelector];
+        if (printFlag) {
+            std::cout << "Symbol bits ";
+        }
+        auto [r, s] = decodeAcCoefficient(bitReader, acTable);
+        if (printFlag) {
+            std::cout << "Symbol: " << std::hex << (r << 4) + s << std::dec << "\n";
+            std::cout << "ByteIndex: " << std::hex << bitReader.getByteIndex() << ", Pos: " << bitReader.getPos() << "\n";
+        }
+        if (r == 0xF && s == 0x0) {
+            // std::cout << "Skip 15" << std::endl;
+            // printComponent(component);
+            skipZeros(bitReader, component, 16, index, approximationLow, spectralEnd);
+            // printComponent(component);
+            if (printFlag) {
+                // printComponent(component);
+                // std::cout << "Byte Reader pos: " << std::hex << startOfScanIndex + bitReader.getByteIndex() << std::dec << "\n";
+            }
+            continue;
+        }
+        // End of Band 
+        if (s == 0x0) {
+            if (printFlag) {
+                std::cout << "EOB Index: " << index << "\n";
+            }
+            // std::cout << "EOB" << r << std::endl;
+            numBlocksToSkip = (1 << r) - 1 + static_cast<int>(bitReader.getNBits(r));
+            int positive = 1 << approximationLow;
+            int negative = -(1 << approximationLow);
+            while (index <= spectralEnd) {
+                if (!AreFloatsEqual((*component)[zigZagMap[index]], 0.0f)) {
+                    if (printFlag) {
+                        std::cout << "EOB bit ";
+                    }
+                    int bit = bitReader.getBit();
+                    if (bit == 1) {
+                        if ((*component)[zigZagMap[index]] > 0) {
+                            (*component)[zigZagMap[index]] += static_cast<float>(positive);
+                        } else if ((*component)[zigZagMap[index]] < 0) {
+                            (*component)[zigZagMap[index]] += static_cast<float>(negative);
+                        }
+                    }
+                }
+                index++;
+            }
+            if (printFlag) {
+                // printComponent(component);
+            }
+            break;
+        }
+        // std::cout << "Normal" << std::endl;
+        if (printFlag) {
+            // std::cout << "Normal Index: " << index << "\n";
+        }
+        if (printFlag) {
+            std::cout << "Normal coeff ";
+        }
+        int coeff = bitReader.getBit() == 1 ? numToAdd : numToAdd * -1;
+        skipZeros(bitReader, component, r, index, approximationLow, spectralEnd);
+        (*component)[zigZagMap[index]] += static_cast<float>(coeff);
+        index++;
+        if (printFlag) {
+            // printComponent(component);
+        }
+    }
 }
 
 void ScanHeaderComponentSpecification::print() const {
@@ -327,7 +650,19 @@ ScanHeader::ScanHeader(std::ifstream& file, const std::streampos& dataStartIndex
     file.read(reinterpret_cast<char*>(&spectralSelectionEnd), 1);
     file.read(reinterpret_cast<char*>(&successiveApproximationHigh), 1);
     successiveApproximationLow = GetNibble(successiveApproximationHigh, 1);
-    successiveApproximationHigh = GetNibble(successiveApproximationLow, 1);
+    successiveApproximationHigh = GetNibble(successiveApproximationHigh, 0);
+    if (spectralSelectionStart == 0 && spectralSelectionEnd != 0) {
+        std::cerr << "Error: Spectral selection cannot encode DC and AC coefficients in the same scan\n";
+    }
+    if (spectralSelectionStart > spectralSelectionEnd) {
+        std::cerr << "Error: Spectral selection start must be smaller than spectral selection end\n";
+    }
+    if (spectralSelectionStart > 63) {
+        std::cerr << "Error: Spectral selection start must be in the range 0-63\n";
+    }
+    if (spectralSelectionEnd > 63) {
+        std::cerr << "Error: Spectral selection end must be in the range 0-63\n";
+    }
 }
 
 void ColorBlock::print() const {
@@ -635,12 +970,20 @@ void Mcu::dequantize(Jpg* jpg) {
 }
 
 Mcu::Mcu() {
-    Y.reserve(1);
+    Y.push_back(std::make_shared<std::array<float, dataUnitLength>>());
+    Y[0]->fill(0);
+    Cb = std::make_shared<std::array<float, dataUnitLength>>();
+    Cb->fill(0);
+    Cr = std::make_shared<std::array<float, dataUnitLength>>();
+    Cr->fill(0);
     colorBlocks = std::vector(1, ColorBlock());
 }
 
 Mcu::Mcu(const int luminanceComponents, const int horizontalSampleSize, const int verticalSampleSize) {
-    Y.reserve(luminanceComponents);
+    for (int i : std::ranges::views::iota(0, luminanceComponents)) {
+        Y.push_back(std::make_shared<std::array<float, dataUnitLength>>());
+        Y[i]->fill(0);
+    }
     colorBlocks = std::vector(luminanceComponents, ColorBlock());
     this->horizontalSampleSize = horizontalSampleSize;
     this->verticalSampleSize = verticalSampleSize;
@@ -717,7 +1060,6 @@ void Jpg::readComments() {
     comment = std::string(length + 1, '\0');
     file.read(comment.data(), length);
 }
-
 
 void Jpg::processQuantizationQueue() {
     static double totalTime = 0.0f;
@@ -821,6 +1163,12 @@ void Jpg::readStartOfScan() {
             if (!file.read(reinterpret_cast<char*>(&byte), 1)) {
                 break;
             }
+            while (byte == 0xFF) {
+                file.get();
+                if (!file.read(reinterpret_cast<char*>(&byte), 1)) {
+                    break;
+                }
+            }
             if (byte >= RST0 && byte <= RST7) {
                 continue;
             } else if (byte == 0x00) {
@@ -829,7 +1177,7 @@ void Jpg::readStartOfScan() {
                 file.seekg(-2, std::ios::cur);
                 break; 
             } else {
-                std::cout << "Error: Unknown marker encountered in SOS data: " << std::hex << static_cast<int>(byte) << std::dec << "\n";
+                std::cerr << "Error: Unknown marker encountered in SOS data: " << std::hex << static_cast<int>(byte) << std::dec << "\n";
             }
         } else {
             bytes.push_back(previousByte);
@@ -867,6 +1215,106 @@ void Jpg::readStartOfScan() {
     std::cout << "Time to huffman decode: " << static_cast<double>(afterDecode - afterRead) / CLOCKS_PER_SEC << " seconds\n";
 }
 
+void Jpg::readProgressiveStartOfScan() {
+    acHuffmanTables[0].print();
+    bytesSkippedInScan = 0;
+    readScanHeader();
+    scanHeader.print();
+    std::cout << "\n";
+    std::cout << "Start of scan is at: " << std::hex << file.tellg() << std::dec << "\n";
+    if (scanHeader.componentSpecifications.size() == 1) {
+        if (scanHeader.spectralSelectionStart == 0) {
+            dcHuffmanTables[scanHeader.componentSpecifications[0].dcTableSelector].print();
+        } else {
+            acHuffmanTables[scanHeader.componentSpecifications[0].acTableSelector].print();
+        }
+    }
+    // Read entropy compressed bit stream
+    clock_t begin = clock();
+    std::vector<uint8_t> bytes;
+    uint8_t byte;
+    while (file.read(reinterpret_cast<char*>(&byte), 1)) {
+        if (uint8_t previousByte = byte; previousByte == 0xFF) {
+            if (!file.read(reinterpret_cast<char*>(&byte), 1)) {
+                break;
+            }
+            while (byte == 0xFF) {
+                file.get();
+                if (!file.read(reinterpret_cast<char*>(&byte), 1)) {
+                    break;
+                }
+            }
+            if (byte >= RST0 && byte <= RST7) {
+                continue;
+            } else if (byte == 0x00) {
+                bytes.push_back(previousByte);
+            } else if (byte == EOI || byte == DHT || byte == DQT || byte == SOS) {
+                file.seekg(-2, std::ios::cur);
+                break;
+            } else {
+                std::cout << "Error: Unknown marker encountered in SOS data: " << std::hex << static_cast<int>(byte) << std::dec << "\n";
+            }
+        } else {
+            bytes.push_back(previousByte);
+        }
+    }
+    clock_t afterRead = clock();
+    BitReader bitReader(bytes);
+    int prevDc[3] = {};
+
+    // std::thread quantizationThread = std::thread([&] {processQuantizationQueue();});
+    // std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
+    // std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
+    int mcuIndex = 0;
+    int componentsToSkip = 0;
+    while (mcuIndex < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth) {
+        if (restartInterval != 0 && mcuIndex % restartInterval == 0) {
+            bitReader.alignToByte();
+            prevDc[0] = 0;
+            prevDc[1] = 0;
+            prevDc[2] = 0;
+            componentsToSkip = 0;
+        }
+
+        if (scanHeader.spectralSelectionStart == 0 && scanHeader.spectralSelectionEnd == 0 && scanHeader.successiveApproximationHigh == 0) {
+            mcus.push_back(std::make_shared<Mcu>());
+        }
+        bool printMcu = mcuIndex == 1128 || mcuIndex == 1127;
+        if ( mcuIndex == 1128 || mcuIndex == 1127) {
+            printFlag = true;
+        } else {
+            printFlag = false;
+        }
+        bitReader.print = printFlag;
+        if (printMcu) {
+            std::cout << "Before Decode\n";
+            mcus[mcuIndex]->print();
+        }
+        // Decode AC coefficient
+        for (auto& componentInfo : scanHeader.componentSpecifications) {
+            std::shared_ptr<std::array<float, 64>> component;
+            if (componentInfo.componentId == 1) {
+                component = mcus[mcuIndex]->Y[0];
+            } else if (componentInfo.componentId == 2) {
+                component = mcus[mcuIndex]->Cb;
+            } else if (componentInfo.componentId == 3) {
+                component = mcus[mcuIndex]->Cr;
+            }
+            if (printFlag) {
+                std::cout << "\n\n\n";
+                std::cout << "Index: " << mcuIndex << "\n";
+            }
+            EntropyDecoder::decodeProgressiveComponent(this, bitReader, component.get(), scanHeader.spectralSelectionStart, scanHeader.spectralSelectionEnd,
+                scanHeader.successiveApproximationHigh, scanHeader.successiveApproximationLow, componentInfo, prevDc, componentsToSkip);
+        }
+        if (printMcu) {
+            mcus[mcuIndex]->print();
+            std::cout << "After Decode\n";
+        }
+        mcuIndex++;
+    }
+}
+
 void Jpg::readFile() {
     uint8_t byte;
     while (!file.eof()) {
@@ -889,7 +1337,13 @@ void Jpg::readFile() {
             } else if (marker == COM) {
                 readComments();
             } else if (marker == SOS) {
-                readStartOfScan();
+                if (frameHeader.encodingProcess == SOF0) {
+                    std::cout << "Baseline Scan\n";
+                    readStartOfScan();
+                } else if (frameHeader.encodingProcess == SOF2) {
+                    std::cout << "\n\n\n\nProgressive Scan\n";
+                    readProgressiveStartOfScan();
+                }
             } else if (marker == EOI) {
                 break;
             }
