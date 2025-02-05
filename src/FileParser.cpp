@@ -26,7 +26,7 @@ static int bmpMain(const int argc, char* argv[]) {
 
 int main(const int argc, char* argv[]) {
     clock_t begin = clock();
-    std::string filename = "crab";
+    std::string filename = "progtesth";
     std::cout << "Processing file: " << filename << '\n';
     std::ostringstream path;
     path << filename << ".jpg";
@@ -37,10 +37,25 @@ int main(const int argc, char* argv[]) {
     Jpg jpg(path.str());
 
     if (jpg.frameHeader.encodingProcess != 0xC0) {
+        std::cout << "--------Dequantize---------\n";
         for (auto& mcu : jpg.mcus) {
             mcu->dequantize(&jpg);
+            mcu->print();
+        }
+
+        std::cout << "--------IDCT---------\n";
+        for (auto& mcu : jpg.mcus) {
             mcu->performInverseDCT();
+            mcu->print();
+        }
+
+        std::cout << "--------Color---------\n";
+        for (auto& mcu : jpg.mcus) {
             mcu->generateColorBlocks();
+            for (auto& color : mcu->colorBlocks) {
+                color.print();
+                std::cout << '\n';
+            }
         }
     }
     

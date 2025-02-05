@@ -1,0 +1,10 @@
+# Ignore VSCode and Rider
+.vs/
+.idea/
+# Ignore build output folders
+Debug/
+Release/
+x64/
+x86/
+ARM/
+ARM64/
