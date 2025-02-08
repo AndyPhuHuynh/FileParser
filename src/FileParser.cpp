@@ -26,7 +26,7 @@ static int bmpMain(const int argc, char* argv[]) {
 
 int main(const int argc, char* argv[]) {
     clock_t begin = clock();
-    std::string filename = "progtesth";
+    std::string filename = "cat";
     std::cout << "Processing file: " << filename << '\n';
     std::ostringstream path;
     path << filename << ".jpg";
@@ -36,28 +36,14 @@ int main(const int argc, char* argv[]) {
     
     Jpg jpg(path.str());
 
-    if (jpg.frameHeader.encodingProcess != 0xC0) {
-        std::cout << "--------Dequantize---------\n";
-        for (auto& mcu : jpg.mcus) {
-            mcu->dequantize(&jpg);
-            mcu->print();
-        }
-
-        std::cout << "--------IDCT---------\n";
-        for (auto& mcu : jpg.mcus) {
-            mcu->performInverseDCT();
-            mcu->print();
-        }
-
-        std::cout << "--------Color---------\n";
-        for (auto& mcu : jpg.mcus) {
-            mcu->generateColorBlocks();
-            for (auto& color : mcu->colorBlocks) {
-                color.print();
-                std::cout << '\n';
-            }
-        }
-    }
+    // TODO: Multithread reading SOS for progressive JPEGS 
+    // if (jpg.frameHeader.encodingProcess != 0xC0) {
+    //     for (auto& mcu : jpg.mcus) {
+    //         mcu->dequantize(&jpg);
+    //         mcu->performInverseDCT();
+    //         mcu->generateColorBlocks();
+    //     }
+    // }
     
     jpg.writeBmp(out.str());
     // jpg.printInfo();

@@ -10,13 +10,12 @@ uint16_t SwapBytes(uint16_t value);
 bool AreFloatsEqual(float a, float b, float epsilon = std::numeric_limits<float>::epsilon() * 1000);
 
 class BitReader {
-public:
-    bool print = false;
 private:
     std::vector<uint8_t> bytes;
     int byteIndex = 0;
     uint8_t bitPosition = 0;
 public:
+    BitReader() = default;
     explicit BitReader(const std::vector<uint8_t>& bytes);
     uint8_t getBit();
     uint32_t getNBits(int numBits);
@@ -26,6 +25,5 @@ public:
     uint16_t getWordConstant() const;
     void skipBits(int numBits);
     bool reachedEnd() const;
-    int getByteIndex();
-    int getPos();
+    void addByte(uint8_t byte);
 };

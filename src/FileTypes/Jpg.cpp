@@ -164,6 +164,7 @@ HuffmanTable::HuffmanTable(std::ifstream& file, const std::streampos& dataStartI
         code = code << 1;
     }
     generateLookupTable();
+    isInitialized = true;
 }
 
 void HuffmanTable::generateLookupTable() {
@@ -235,19 +236,19 @@ std::pair<int, int> EntropyDecoder::decodeAcCoefficient(BitReader& bitReader, co
     return {r, s};
 }
 
-std::array<float, 64>* EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification& component, int (&prevDc)[3]) {
+std::array<float, 64>* EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp, int (&prevDc)[3]) {
     std::array<float, 64>* result = new std::array<float, 64>();
     result->fill(0);
     // DC Coefficient
-    HuffmanTable &dcTable = jpg->dcHuffmanTables[component.dcTableSelector];
-    int dcCoefficient = decodeDcCoefficient(bitReader, dcTable) + prevDc[component.componentId - 1];
+    HuffmanTable &dcTable = jpg->dcHuffmanTables[scanComp.dcTableIteration][scanComp.dcTableSelector];
+    int dcCoefficient = decodeDcCoefficient(bitReader, dcTable) + prevDc[scanComp.componentId - 1];
     (*result)[0] = static_cast<float>(dcCoefficient);
-    prevDc[component.componentId - 1] = dcCoefficient;
+    prevDc[scanComp.componentId - 1] = dcCoefficient;
 
     // AC Coefficients
     int index = 1;
     while (index < Mcu::dataUnitLength) {
-        HuffmanTable &acTable = jpg->acHuffmanTables[component.acTableSelector];
+        HuffmanTable &acTable = jpg->acHuffmanTables[scanComp.acTableIteration][scanComp.acTableSelector];
         auto [r, s] = decodeAcCoefficient(bitReader, acTable);
         if (r == 0x0 && s == 0x0) {
             break;
@@ -267,17 +268,17 @@ std::array<float, 64>* EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitR
     return result;
 }
 
-Mcu* EntropyDecoder::decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]) {
+Mcu* EntropyDecoder::decodeMcu(Jpg* jpg, ScanHeader& scanHeader, int (&prevDc)[3]) {
     Mcu* mcu = new Mcu(jpg->frameHeader.luminanceComponentsPerMcu, jpg->frameHeader.maxHorizontalSample, jpg->frameHeader.maxVerticalSample);
-    for (auto& component : jpg->scanHeader.componentSpecifications) {
+    for (auto& component : scanHeader.componentSpecifications) {
         if (component.componentId == 1) {
             for (int i = 0; i < jpg->frameHeader.luminanceComponentsPerMcu; i++) {
-                mcu->Y[i] = (std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc)));
+                mcu->Y[i] = (std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, scanHeader.bitReader, component, prevDc)));
             }
         } else if (component.componentId == 2) {
-            mcu->Cb = std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc));
+            mcu->Cb = std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, scanHeader.bitReader, component, prevDc));
         } else if (component.componentId == 3) {
-            mcu->Cr = std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, bitReader, component, prevDc));
+            mcu->Cr = std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, scanHeader.bitReader, component, prevDc));
         }
     }
     return mcu;
@@ -349,8 +350,13 @@ static void printComponent(std::array<float, 64>* component) {
     }
 }
 
-void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, BitReader& bitReader, std::array<float, 64>* component, const int spectralStart, const int spectralEnd, const int approximationHigh,
-                                                const int approximationLow, const ScanHeaderComponentSpecification& componentInfo, int (&prevDc)[3], int& numBlocksToSkip) {
+void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, std::array<float, 64>* component, ScanHeader& scanHeader,
+    const ScanHeaderComponentSpecification& componentInfo, int (&prevDc)[3], int& numBlocksToSkip) {
+    const int approximationHigh = scanHeader.successiveApproximationHigh;
+    const int approximationLow = scanHeader.successiveApproximationLow;
+    const int spectralStart = scanHeader.spectralSelectionStart;
+    const int spectralEnd = scanHeader.spectralSelectionEnd;
+    
     if (numBlocksToSkip > 0) {
         if (approximationHigh == 0) {
             // Do nothing
@@ -359,7 +365,7 @@ void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, BitReader& bitReader, 
             int negative = -(1 << approximationLow);
             for (int j = spectralStart; j <= spectralEnd; j++) {
                 if (!AreFloatsEqual((*component)[zigZagMap[j]], 0.0f)) {
-                    int bit = bitReader.getBit();
+                    int bit = scanHeader.bitReader.getBit();
                     if (bit == 1) {
                         if ((*component)[zigZagMap[j]] > 0) {
                             (*component)[zigZagMap[j]] += static_cast<float>(positive);
@@ -378,14 +384,14 @@ void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, BitReader& bitReader, 
     if (spectralStart == 0 && spectralEnd == 0) {
         // First scan
         if (approximationHigh == 0) {
-            HuffmanTable& dcTable = jpg->dcHuffmanTables[componentInfo.dcTableSelector];
-            int dcCoefficient = (decodeDcCoefficient(bitReader, dcTable) << approximationLow) + prevDc[componentInfo.componentId - 1];
+            HuffmanTable& dcTable = jpg->dcHuffmanTables[componentInfo.dcTableIteration][componentInfo.dcTableSelector];
+            int dcCoefficient = (decodeDcCoefficient(scanHeader.bitReader, dcTable) << approximationLow) + prevDc[componentInfo.componentId - 1];
             (*component)[0] = static_cast<float>(dcCoefficient);
             prevDc[componentInfo.componentId - 1] = dcCoefficient;
         }
         // Refinement scan
         else {
-            (*component)[0] += static_cast<float>(bitReader.getBit() << approximationLow);
+            (*component)[0] += static_cast<float>(scanHeader.bitReader.getBit() << approximationLow);
         }
         return;
     }
@@ -394,22 +400,22 @@ void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, BitReader& bitReader, 
     if (approximationHigh == 0) {
         int index = spectralStart;
         while (index <= spectralEnd) {
-            HuffmanTable& acTable = jpg->acHuffmanTables[componentInfo.acTableSelector];
-            auto [r, s] = decodeAcCoefficient(bitReader, acTable);
+            HuffmanTable& acTable = jpg->acHuffmanTables[componentInfo.acTableIteration][componentInfo.acTableSelector];
+            auto [r, s] = decodeAcCoefficient(scanHeader.bitReader, acTable);
             if (r == 0xF && s == 0x0) {
                 index += 16;
                 continue;
             }
             // End of Band 
             if (s == 0x0) {
-                numBlocksToSkip = (1 << r) - 1 + static_cast<int>(bitReader.getNBits(r));
+                numBlocksToSkip = (1 << r) - 1 + static_cast<int>(scanHeader.bitReader.getNBits(r));
                 return;
             }
             index += r;
             if (index > spectralEnd) {
                 break;
             }
-            int coefficient = decodeSSSS(bitReader, s) << approximationLow;
+            int coefficient = decodeSSSS(scanHeader.bitReader, s) << approximationLow;
             (*component)[zigZagMap[index]] = static_cast<float>(coefficient);
             index++;
         }
@@ -420,20 +426,20 @@ void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, BitReader& bitReader, 
     int index = spectralStart;
     int numToAdd = 1 << approximationLow;
     while (index <= spectralEnd) {
-        HuffmanTable& acTable = jpg->acHuffmanTables[componentInfo.acTableSelector];
-        auto [r, s] = decodeAcCoefficient(bitReader, acTable);
+        HuffmanTable& acTable = jpg->acHuffmanTables[componentInfo.acTableIteration][componentInfo.acTableSelector];
+        auto [r, s] = decodeAcCoefficient(scanHeader.bitReader, acTable);
         if (r == 0xF && s == 0x0) {
-            skipZeros(bitReader, component, 16, index, approximationLow, spectralEnd);
+            skipZeros(scanHeader.bitReader, component, 16, index, approximationLow, spectralEnd);
             continue;
         }
         // End of Band 
         if (s == 0x0) {
-            numBlocksToSkip = (1 << r) - 1 + static_cast<int>(bitReader.getNBits(r));
+            numBlocksToSkip = (1 << r) - 1 + static_cast<int>(scanHeader.bitReader.getNBits(r));
             int positive = 1 << approximationLow;
             int negative = -(1 << approximationLow);
             while (index <= spectralEnd) {
                 if (!AreFloatsEqual((*component)[zigZagMap[index]], 0.0f)) {
-                    int bit = bitReader.getBit();
+                    int bit = scanHeader.bitReader.getBit();
                     if (bit == 1) {
                         if ((*component)[zigZagMap[index]] > 0) {
                             (*component)[zigZagMap[index]] += static_cast<float>(positive);
@@ -446,8 +452,8 @@ void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, BitReader& bitReader, 
             }
             break;
         }
-        int coeff = bitReader.getBit() == 1 ? numToAdd : numToAdd * -1;
-        skipZeros(bitReader, component, r, index, approximationLow, spectralEnd);
+        int coeff = scanHeader.bitReader.getBit() == 1 ? numToAdd : numToAdd * -1;
+        skipZeros(scanHeader.bitReader, component, r, index, approximationLow, spectralEnd);
         (*component)[zigZagMap[index]] += static_cast<float>(coeff);
         index++;
     }
@@ -470,7 +476,8 @@ void ScanHeader::print() const {
     std::cout << std::setw(26) << "Approximation Low: " << static_cast<int>(successiveApproximationLow) << "\n";
 }
 
-ScanHeader::ScanHeader(std::ifstream& file, const std::streampos& dataStartIndex) {
+ScanHeader::ScanHeader(Jpg* jpg, const std::streampos& dataStartIndex) {
+    std::ifstream& file = jpg->file;
     file.seekg(dataStartIndex, std::ios::beg);
     uint8_t numComponents;
     file.read(reinterpret_cast<char*>(&numComponents), 1);
@@ -483,16 +490,33 @@ ScanHeader::ScanHeader(std::ifstream& file, const std::streampos& dataStartIndex
         file.read(reinterpret_cast<char*>(&tables), 1);
         if (componentId == 0) zeroBased = true;
         if (zeroBased) componentId++;
-        componentSpecifications.emplace_back(componentId, GetNibble(tables, 0), GetNibble(tables, 1));
+
+        // Get the iterations for quantization and huffman tables
+
+        int qTableSelector = jpg->frameHeader.componentSpecifications[componentId].quantizationTableSelector;
+        int qTableIteration = static_cast<int>(jpg->quantizationTables.size()) - 1;
+        while (!jpg->quantizationTables[qTableIteration][qTableSelector].isSet) {
+            qTableIteration--;
+        }
+        
+        int dcSelector = GetNibble(tables, 0);
+        int dcIteration = static_cast<int>(jpg->dcHuffmanTables.size()) - 1;
+        while (!jpg->dcHuffmanTables[dcIteration][dcSelector].isInitialized) {
+            dcIteration--;
+        }
+        int acSelector = GetNibble(tables, 1);
+        int acIteration = static_cast<int>(jpg->acHuffmanTables.size()) - 1;
+        while (!jpg->acHuffmanTables[acIteration][acSelector].isInitialized) {
+            acIteration--;
+        }
+        
+        componentSpecifications.emplace_back(componentId, dcSelector, acSelector, qTableIteration, dcIteration, acIteration);
     }
     file.read(reinterpret_cast<char*>(&spectralSelectionStart), 1);
     file.read(reinterpret_cast<char*>(&spectralSelectionEnd), 1);
     file.read(reinterpret_cast<char*>(&successiveApproximationHigh), 1);
     successiveApproximationLow = GetNibble(successiveApproximationHigh, 1);
     successiveApproximationHigh = GetNibble(successiveApproximationHigh, 0);
-    if (spectralSelectionStart == 0 && spectralSelectionEnd != 0) {
-        std::cerr << "Error: Spectral selection cannot encode DC and AC coefficients in the same scan\n";
-    }
     if (spectralSelectionStart > spectralSelectionEnd) {
         std::cerr << "Error: Spectral selection start must be smaller than spectral selection end\n";
     }
@@ -807,19 +831,16 @@ void Mcu::dequantize(std::array<float, dataUnitLength>& array, const Quantizatio
     }
 }
 
-void Mcu::dequantize(Jpg* jpg) {
-    if (!isQuantized) {
-        std::cout << "Warning: Data unit has already been dequantized, cannot dequantize again";
-        return;
+void Mcu::dequantize(Jpg* jpg, const ScanHeaderComponentSpecification& scanComp) {
+    if (scanComp.componentId == 1) {
+        for (auto& y : Y) {
+            dequantize(*y, jpg->quantizationTables[scanComp.quantizationTableIteration][jpg->frameHeader.componentSpecifications[1].quantizationTableSelector]);
+        }
+    } else if (scanComp.componentId == 2){
+        dequantize(*Cb, jpg->quantizationTables[scanComp.quantizationTableIteration][jpg->frameHeader.componentSpecifications[2].quantizationTableSelector]);
+    } else if (scanComp.componentId == 3){
+        dequantize(*Cr, jpg->quantizationTables[scanComp.quantizationTableIteration][jpg->frameHeader.componentSpecifications[3].quantizationTableSelector]);
     }
-    for (auto& y : Y) {
-        dequantize(*y, jpg->quantizationTables[jpg->frameHeader.componentSpecifications[1].quantizationTableSelector]);
-    }
-    if (jpg->frameHeader.componentSpecifications.size() > 1) {
-        dequantize(*Cb, jpg->quantizationTables[jpg->frameHeader.componentSpecifications[2].quantizationTableSelector]);
-        dequantize(*Cr, jpg->quantizationTables[jpg->frameHeader.componentSpecifications[3].quantizationTableSelector]);
-    }
-    isQuantized = false;
 }
 
 Mcu::Mcu() {
@@ -875,7 +896,11 @@ void Jpg::readQuantizationTables() {
         std::streampos dataStartIndex = file.tellg();
 
         QuantizationTable quantizationTable(file, dataStartIndex, is8Bit);
-        quantizationTables[tableId] = quantizationTable;
+        int iteration = 0;
+        while (quantizationTables[iteration][tableId].isSet) {
+            iteration++;
+        }
+        quantizationTables[iteration][tableId] = quantizationTable;
         length -= (static_cast<uint16_t>(file.tellg()) - static_cast<uint16_t>(dataStartIndex));
     }
 }
@@ -890,12 +915,13 @@ void Jpg::readHuffmanTables() {
         uint8_t tableClass = GetNibble(tableId, 0);
         tableId = GetNibble(tableId, 1);
         std::streampos dataStartIndex = file.tellg();
-        
-        if (tableClass == 0) {
-            dcHuffmanTables[tableId] = HuffmanTable(file, dataStartIndex);
-        } else {
-            acHuffmanTables[tableId] = HuffmanTable(file, dataStartIndex);
+
+        auto& tables = tableClass == 0 ? dcHuffmanTables : acHuffmanTables;
+        int iteration = 0;
+        while (tables[iteration][tableId].isInitialized) {
+            iteration++;
         }
+        tables[iteration][tableId] = HuffmanTable(file, dataStartIndex);
         
         length -= (static_cast<uint16_t>(file.tellg()) - static_cast<uint16_t>(dataStartIndex));
     }
@@ -919,7 +945,7 @@ void Jpg::readComments() {
     file.read(comment.data(), length);
 }
 
-void Jpg::processQuantizationQueue() {
+void Jpg::processQuantizationQueue(const std::vector<ScanHeaderComponentSpecification>& scanComps) {
     static double totalTime = 0.0f;
     while (true) {
         std::unique_lock quantizationLock(quantizationQueue.mutex);
@@ -931,7 +957,9 @@ void Jpg::processQuantizationQueue() {
             quantizationQueue.queue.pop();
             quantizationLock.unlock();
             clock_t begin = clock();
-            mcu->dequantize(this);
+            for (const auto& scanComp : scanComps) {
+                mcu->dequantize(this, scanComp);
+            }
             clock_t end = clock();
             totalTime += (end - begin);
             {
@@ -1004,16 +1032,17 @@ void Jpg::processColorConversionQueue() {
     std::cout << "Total time on color: " << (totalTime) / CLOCKS_PER_SEC << " seconds\n";
 }
 
-void Jpg::readScanHeader() {
+std::shared_ptr<ScanHeader> Jpg::readScanHeader() {
     file.seekg(2, std::ios::cur); // Skip past the length bytes
-    scanHeader = ScanHeader(file, file.tellg());
+    std::shared_ptr<ScanHeader> scanHeader = std::make_shared<ScanHeader>(this, file.tellg());
+    scanHeaders.emplace_back(scanHeader);
+    return scanHeader;
 }
 
-void Jpg::readStartOfScan() {
-    readScanHeader();
+void Jpg::readBaselineStartOfScan() {
+    std::shared_ptr<ScanHeader> scanHeader = readScanHeader();
     // Read entropy compressed bit stream
     clock_t begin = clock();
-    std::vector<uint8_t> bytes;
     uint8_t byte;
     while (file.read(reinterpret_cast<char*>(&byte), 1)) {
         uint8_t previousByte = byte;
@@ -1030,7 +1059,7 @@ void Jpg::readStartOfScan() {
             if (byte >= RST0 && byte <= RST7) {
                 continue;
             } else if (byte == 0x00) {
-                bytes.push_back(previousByte);
+                scanHeader->bitReader.addByte(previousByte);
             } else if (byte == EOI) {
                 file.seekg(-2, std::ios::cur);
                 break; 
@@ -1038,25 +1067,24 @@ void Jpg::readStartOfScan() {
                 std::cerr << "Error: Unknown marker encountered in SOS data: " << std::hex << static_cast<int>(byte) << std::dec << "\n";
             }
         } else {
-            bytes.push_back(previousByte);
+            scanHeader->bitReader.addByte(previousByte);
         }
     }
     clock_t afterRead = clock();
-    BitReader bitReader(bytes);
     int prevDc[3] = {};
 
-    std::thread quantizationThread = std::thread([&] {processQuantizationQueue();});
+    std::thread quantizationThread = std::thread([&] {processQuantizationQueue(scanHeader->componentSpecifications);});
     std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
     std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
     
     for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
         if (restartInterval != 0 && i % restartInterval == 0) {
-            bitReader.alignToByte();
+            scanHeader->bitReader.alignToByte();
             prevDc[0] = 0;
             prevDc[1] = 0;
             prevDc[2] = 0;
         }
-        auto mcu = std::shared_ptr<Mcu>(EntropyDecoder::decodeMcu(this, bitReader, prevDc));
+        auto mcu = std::shared_ptr<Mcu>(EntropyDecoder::decodeMcu(this, *scanHeader, prevDc));
         mcus.push_back(mcu);
         std::unique_lock lock(quantizationQueue.mutex);
         quantizationQueue.queue.push(mcu);
@@ -1073,11 +1101,203 @@ void Jpg::readStartOfScan() {
     std::cout << "Time to huffman decode: " << static_cast<double>(afterDecode - afterRead) / CLOCKS_PER_SEC << " seconds\n";
 }
 
+void Jpg::createMcus() {
+    if (static_cast<int>(scanIndices.size()) < 1) {
+        scanIndices.emplace_back(std::make_unique<AtomicCondition>());
+    }
+    for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
+        mcus.push_back(std::make_shared<Mcu>(frameHeader.luminanceComponentsPerMcu, frameHeader.maxHorizontalSample, frameHeader.maxVerticalSample));
+        std::unique_lock lock(scanIndices[0]->mutex);
+        scanIndices[0]->value = i;
+        scanIndices[0]->condition.notify_one();
+    }
+}
+
+void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const int scanNumber) {
+    auto pollCurrentScan = [&] (const int mcuIndex) -> void {
+        // Step 1: Lock to safely access scanIndices
+        std::shared_ptr<AtomicCondition> scanData;
+        {
+            std::unique_lock scanLock(scanIndiciesMutex);
+            scanData = scanIndices[scanNumber];
+        }
+
+        // Step 2: Lock the specific scanData mutex and wait
+        std::unique_lock lock(scanData->mutex);
+        scanData->condition.wait(lock, [&] {
+            return scanData->value >= mcuIndex;
+        });
+    };
+
+    auto pushToNextScan = [&] (const int mcuIndex) -> void {
+        std::shared_ptr<AtomicCondition> nextScanData;
+        {
+            std::unique_lock scanLock(scanIndiciesMutex);
+            nextScanData = scanIndices[scanNumber + 1];
+        }
+        std::unique_lock lock(nextScanData->mutex);
+        nextScanData->value = mcuIndex;
+        nextScanData->condition.notify_one();
+        std::stringstream msg2;
+        msg2 << "Setting scan " << scanNumber + 1 << ", to index: " << mcuIndex << std::endl;
+        std::cout << msg2.str();
+    };
+    
+    int prevDc[3] = {};
+    int componentsToSkip = 0;
+
+    // One component per scan
+    if (scan->componentSpecifications.size() == 1) {
+        auto& scanSpec = scan->componentSpecifications[0];
+        auto& frameSpec = frameHeader.componentSpecifications[scan->componentSpecifications[0].componentId];
+
+        // Only luminance component
+        if (scanSpec.componentId == 1) {
+            int blocksProcessed = 0;
+            const int maxBlockY = (frameHeader.height + 7) / 8;
+            const int maxBlockX = (frameHeader.width + 7) / 8;
+            for (int blockY = 0; blockY < maxBlockY; blockY++) {
+                for (int blockX = 0; blockX < maxBlockX; blockX++) {
+                    // Get mcuIndex based on the current index
+                    const int luminanceRow = blockY % frameSpec.verticalSamplingFactor;
+                    const int luminanceColumn = blockX % frameSpec.horizontalSamplingFactor;
+                    const int mcuRow = blockY / frameSpec.verticalSamplingFactor;
+                    const int mcuColumn = blockX / frameSpec.horizontalSamplingFactor;
+                    const int mcuIndex = mcuRow * frameHeader.mcuImageWidth + mcuColumn;
+
+                    std::stringstream msg;
+                    // msg << "Scan Index: " << scanNumber << ", McuIndex: " << mcuIndex << std::endl;;
+                    std::cout << msg.str();
+                    
+                    if (restartInterval != 0 && blocksProcessed % restartInterval == 0) {
+                        scan->bitReader.alignToByte();
+                        prevDc[0] = 0;
+                        prevDc[1] = 0;
+                        prevDc[2] = 0;
+                        componentsToSkip = 0;
+                    }
+
+                    pollCurrentScan(mcuIndex);
+                    
+                    const int luminanceIndex = luminanceColumn + luminanceRow * frameHeader.maxHorizontalSample;
+                    EntropyDecoder::decodeProgressiveComponent(this, mcus[mcuIndex]->Y[luminanceIndex].get(),
+                                                               *scan, scanSpec, prevDc, componentsToSkip);
+                    
+                    // Push the mcu to the next queue
+                    bool pushToQueue = (luminanceIndex == frameHeader.luminanceComponentsPerMcu - 1) ||
+                        (blockX == maxBlockX - 1 && luminanceRow == frameHeader.maxVerticalSample - 1) ||
+                        (blockY == maxBlockY - 1 && luminanceColumn == frameHeader.maxHorizontalSample - 1) ||
+                        (blockX == maxBlockX - 1 && blockY == maxBlockY - 1);
+
+                    if (pushToQueue) {
+                        pushToNextScan(mcuIndex);
+                        if (scanNumber == static_cast<int>(scanHeaders.size() - 1)) {
+                            quantizationQueue.queue.push(mcus[mcuIndex]);
+                        }
+                    }
+                    
+                    blocksProcessed++;
+                }
+            }
+            if (scanNumber == static_cast<int>(scanHeaders.size() - 1)) {
+                quantizationQueue.allProductsAdded = true;
+            }
+        }
+        // Only chroma component
+        else {
+            for (int mcuIndex = 0; mcuIndex < frameHeader.mcuImageWidth * frameHeader.mcuImageHeight; mcuIndex++) {
+                std::stringstream msg;
+                // msg << "Scan Index: " << scanNumber << ", McuIndex: " << mcuIndex << std::endl;;
+                std::cout << msg.str();
+                if (restartInterval != 0 && mcuIndex % restartInterval == 0) {
+                    scan->bitReader.alignToByte();
+                    prevDc[0] = 0;
+                    prevDc[1] = 0;
+                    prevDc[2] = 0;
+                    componentsToSkip = 0;
+                }
+
+                pollCurrentScan(mcuIndex);
+                
+                if (scanSpec.componentId == 2) {
+                    EntropyDecoder::decodeProgressiveComponent(this, mcus[mcuIndex]->Cb.get(), *scan, scanSpec,
+                                                               prevDc, componentsToSkip);
+                } else if (scanSpec.componentId == 3) {
+                    EntropyDecoder::decodeProgressiveComponent(this, mcus[mcuIndex]->Cr.get(), *scan, scanSpec,
+                                                               prevDc, componentsToSkip);
+                }
+
+                // Push mcu to next queue
+                pushToNextScan(mcuIndex);
+                if (scanNumber == static_cast<int>(scanHeaders.size() - 1)) {
+                    quantizationQueue.queue.push(mcus[mcuIndex]);
+                }
+            }
+            if (scanNumber == static_cast<int>(scanHeaders.size() - 1)) {
+                quantizationQueue.allProductsAdded = true; 
+            }
+        }
+    }
+    // Multiple components per scan (DC Coefficients only)
+    else {
+        for (int mcuIndex = 0; mcuIndex < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; mcuIndex++) {
+            std::stringstream msg;
+            // msg << "Scan Index: " << scanNumber << ", McuIndex: " << mcuIndex << std::endl;;
+            std::cout << msg.str();
+            if (restartInterval != 0 && mcuIndex % restartInterval == 0) {
+                scan->bitReader.alignToByte();
+                prevDc[0] = 0;
+                prevDc[1] = 0;
+                prevDc[2] = 0;
+                componentsToSkip = 0;
+            }
+
+            pollCurrentScan(mcuIndex);
+            
+            for (auto& componentInfo : scan->componentSpecifications) {
+                std::shared_ptr<std::array<float, 64>> component;
+                if (componentInfo.componentId == 1) {
+                    for (int i = 0; i < frameHeader.luminanceComponentsPerMcu; i++) {
+                        EntropyDecoder::decodeProgressiveComponent(this,  mcus[mcuIndex]->Y[i].get(), *scan, componentInfo,
+                                                                   prevDc, componentsToSkip);
+                    }
+                } else if (componentInfo.componentId == 2) {
+                    EntropyDecoder::decodeProgressiveComponent(this, mcus[mcuIndex]->Cb.get(), *scan, componentInfo,
+                                                               prevDc, componentsToSkip);
+                } else if (componentInfo.componentId == 3) {
+                    EntropyDecoder::decodeProgressiveComponent(this, mcus[mcuIndex]->Cr.get(), *scan, componentInfo,
+                                                               prevDc, componentsToSkip);
+                }
+            }
+            // Push mcu to next queue
+            pushToNextScan(mcuIndex);
+            if (scanNumber == static_cast<int>(scanHeaders.size() - 1)) {
+                quantizationQueue.queue.push(mcus[mcuIndex]);
+            }
+        }
+        if (scanNumber == static_cast<int>(scanHeaders.size() - 1)) {
+            quantizationQueue.allProductsAdded = true;
+        }
+    }
+    std::cout << "Done with scan " << scanNumber << std::endl;
+}
+
 void Jpg::readProgressiveStartOfScan() {
-    readScanHeader();
+    if (currentScan == 0) {
+        std::unique_lock scanLock(scanIndiciesMutex);
+        scanIndices.emplace_back(std::make_shared<AtomicCondition>());
+        for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
+            mcus.push_back(std::make_shared<Mcu>(frameHeader.luminanceComponentsPerMcu, frameHeader.maxHorizontalSample, frameHeader.maxVerticalSample));
+        }
+        scanIndices[0]->value = frameHeader.mcuImageHeight * frameHeader.mcuImageWidth - 1;
+    }
+    
+    std::shared_ptr<ScanHeader> scanHeader = readScanHeader();
+    if (scanHeader->spectralSelectionStart == 0 && scanHeader->spectralSelectionEnd != 0) {
+        std::cerr << "Error: Spectral selection cannot encode DC and AC coefficients in the same scan\n";
+    }
     // Read entropy compressed bit stream
-    clock_t begin = clock();
-    std::vector<uint8_t> bytes;
+
     uint8_t byte;
     while (file.read(reinterpret_cast<char*>(&byte), 1)) {
         if (uint8_t previousByte = byte; previousByte == 0xFF) {
@@ -1093,145 +1313,15 @@ void Jpg::readProgressiveStartOfScan() {
             if (byte >= RST0 && byte <= RST7) {
                 continue;
             } else if (byte == 0x00) {
-                bytes.push_back(previousByte);
-            } else if (byte == EOI || byte == DHT || byte == DQT || byte == SOS) {
+                scanHeader->bitReader.addByte(previousByte);
+            } else if (byte == EOI || byte == DHT || byte == DQT || byte == SOS || byte == DRI) {
                 file.seekg(-2, std::ios::cur);
                 break;
             } else {
                 std::cout << "Error: Unknown marker encountered in SOS data: " << std::hex << static_cast<int>(byte) << std::dec << "\n";
             }
         } else {
-            bytes.push_back(previousByte);
-        }
-    }
-    clock_t afterRead = clock();
-    BitReader bitReader(bytes);
-    bool dcFirstVisit = scanHeader.spectralSelectionStart == 0 && scanHeader.spectralSelectionEnd == 0 && scanHeader.successiveApproximationHigh == 0;
-    int prevDc[3] = {};
-
-    // std::thread quantizationThread = std::thread([&] {processQuantizationQueue();});
-    // std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
-    // std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
-    int componentsToSkip = 0;
-
-    // One component per scan
-    if (scanHeader.componentSpecifications.size() == 1) {
-        int testCount = 0;
-        int loopCount = 0;
-        auto& scanSpec = scanHeader.componentSpecifications[0];
-        auto& frameSpec = frameHeader.componentSpecifications[scanHeader.componentSpecifications[0].componentId];
-
-        // Only luminance component
-        if (scanSpec.componentId == 1) {
-            // for (int temp = 0; temp < testCount; temp++) {
-            //     std::cout << "Test #" << temp << std::endl;
-            // }
-            // std::cout << "--------------------------\n";
-            // for (int i = 0; i < mcus.size(); i++) {
-            //     for (int j = 0; j < frameSpec.horizontalSamplingFactor; j++) {
-            //         testCount += 1;
-            //         EntropyDecoder::decodeProgressiveComponent(this, bitReader, mcus[i]->Y[j].get(),
-            //             scanHeader.spectralSelectionStart, scanHeader.spectralSelectionEnd, scanHeader.successiveApproximationHigh, scanHeader.successiveApproximationLow, scanSpec,
-            //             prevDc, componentsToSkip);
-            //         printComponent(mcus[i]->Y[j].get());
-            //         std::cout << "\n\n";
-            //     }
-            // }
-            // return;
-            std::cout << "Luminance Only\n";
-            for (int blockY = 0; blockY < (frameHeader.height + 7) / 8; blockY++) {
-            // for (int blockY = 0; blockY < frameHeader.mcuImageHeight * frameHeader.maxVerticalSample; blockY++) {
-                for (int blockX = 0; blockX < (frameHeader.width + 7) / 8; blockX++) {
-                    // Get mcuIndex based on components in frame and the current index
-                    const int luminanceRow = blockY % frameSpec.verticalSamplingFactor;
-                    const int luminanceColumn = blockX % frameSpec.horizontalSamplingFactor;
-                    const int mcuRow = blockY / frameSpec.verticalSamplingFactor;
-                    const int mcuColumn = blockX / frameSpec.horizontalSamplingFactor;
-                    const int mcuIndex = mcuRow * frameHeader.mcuImageWidth + mcuColumn;
-                    
-                    if (dcFirstVisit && static_cast<int>(mcus.size()) <= mcuIndex) {
-                        mcus.push_back(std::make_shared<Mcu>(frameHeader.luminanceComponentsPerMcu, frameHeader.maxHorizontalSample, frameHeader.maxVerticalSample));
-                    }
-                    // TODO: Restart Interval Fix 
-                    if (restartInterval != 0 && mcuIndex % restartInterval == 0) {
-                        bitReader.alignToByte();
-                        prevDc[0] = 0;
-                        prevDc[1] = 0;
-                        prevDc[2] = 0;
-                        componentsToSkip = 0;
-                    }
-                    
-                        EntropyDecoder::decodeProgressiveComponent(this, bitReader, mcus[mcuIndex]->Y[luminanceColumn + luminanceRow * frameHeader.maxHorizontalSample].get(),
-                            scanHeader.spectralSelectionStart, scanHeader.spectralSelectionEnd, scanHeader.successiveApproximationHigh, scanHeader.successiveApproximationLow, scanSpec,
-                            prevDc, componentsToSkip);
-                        printComponent(mcus[mcuIndex]->Y[luminanceColumn + luminanceRow * frameHeader.maxHorizontalSample].get());
-                        std::cout << "\n\n";
-                }
-            }
-        }
-        // Only chroma component
-        else {
-            std::cout << "Chroma only\n";
-            for (int mcuIndex = 0; mcuIndex < frameHeader.mcuImageWidth * frameHeader.mcuImageHeight; mcuIndex++) {
-                testCount += 1;
-                if (dcFirstVisit && static_cast<int>(mcus.size()) <= mcuIndex) {
-                    mcus.push_back(std::make_shared<Mcu>(frameHeader.luminanceComponentsPerMcu, frameHeader.maxHorizontalSample, frameHeader.maxVerticalSample));
-                }
-                if (scanSpec.componentId == 2) {
-                    EntropyDecoder::decodeProgressiveComponent(this, bitReader, mcus[mcuIndex]->Cb.get(), scanHeader.spectralSelectionStart, scanHeader.spectralSelectionEnd,
-                        scanHeader.successiveApproximationHigh, scanHeader.successiveApproximationLow, scanSpec, prevDc, componentsToSkip);
-                    printComponent(mcus[mcuIndex]->Cb.get());
-                    std::cout << "\n\n";
-                } else if (scanSpec.componentId == 3) {
-                    EntropyDecoder::decodeProgressiveComponent(this, bitReader, mcus[mcuIndex]->Cr.get(), scanHeader.spectralSelectionStart, scanHeader.spectralSelectionEnd,
-                        scanHeader.successiveApproximationHigh, scanHeader.successiveApproximationLow, scanSpec, prevDc, componentsToSkip);
-                    printComponent(mcus[mcuIndex]->Cr.get());
-                    std::cout << "\n\n";
-                }
-            }
-        }
-        std::cout << testCount << " tests passed\n";
-        std::cout << loopCount << " tests passed\n";
-    }
-    // Multiple components per scan (DC Coefficients only)
-    else {
-        std::cout << "Multiple per scan\n";
-        for (int mcuIndex = 0; mcuIndex < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; mcuIndex++) {
-            if (restartInterval != 0 && mcuIndex % restartInterval == 0) {
-                bitReader.alignToByte();
-                prevDc[0] = 0;
-                prevDc[1] = 0;
-                prevDc[2] = 0;
-                componentsToSkip = 0;
-            }
-
-            if (dcFirstVisit && static_cast<int>(mcus.size()) <= mcuIndex) {
-                mcus.push_back(std::make_shared<Mcu>(frameHeader.luminanceComponentsPerMcu, frameHeader.maxHorizontalSample, frameHeader.maxVerticalSample));
-            }
-            for (auto& componentInfo : scanHeader.componentSpecifications) {
-                std::shared_ptr<std::array<float, 64>> component;
-                if (componentInfo.componentId == 1) {
-                    for (int i = 0; i < frameHeader.luminanceComponentsPerMcu; i++) {
-                        EntropyDecoder::decodeProgressiveComponent(this, bitReader, mcus[mcuIndex]->Y[i].get(), scanHeader.spectralSelectionStart, scanHeader.spectralSelectionEnd,
-                            scanHeader.successiveApproximationHigh, scanHeader.successiveApproximationLow, componentInfo, prevDc, componentsToSkip);
-                        std::cout <<"Luminance Multi:\n";
-                        printComponent(mcus[mcuIndex]->Y[i].get());
-                        std::cout << "\n\n";
-                    }
-                } else if (componentInfo.componentId == 2) {
-                    EntropyDecoder::decodeProgressiveComponent(this, bitReader, mcus[mcuIndex]->Cb.get(), scanHeader.spectralSelectionStart, scanHeader.spectralSelectionEnd,
-                            scanHeader.successiveApproximationHigh, scanHeader.successiveApproximationLow, componentInfo, prevDc, componentsToSkip);
-                    std::cout <<"Cb:\n";
-                    printComponent(mcus[mcuIndex]->Cb.get());
-                    std::cout << "\n\n";
-                } else if (componentInfo.componentId == 3) {
-                    EntropyDecoder::decodeProgressiveComponent(this, bitReader, mcus[mcuIndex]->Cr.get(), scanHeader.spectralSelectionStart, scanHeader.spectralSelectionEnd,
-                            scanHeader.successiveApproximationHigh, scanHeader.successiveApproximationLow, componentInfo, prevDc, componentsToSkip);
-                    std::cout <<"Cr:\n";
-                    printComponent(mcus[mcuIndex]->Cr.get());
-                    std::cout << "\n\n";
-                }
-            }
+            scanHeader->bitReader.addByte(previousByte);
         }
     }
 }
@@ -1259,13 +1349,61 @@ void Jpg::readFile() {
                 readComments();
             } else if (marker == SOS) {
                 if (frameHeader.encodingProcess == SOF0) {
-                    std::cout << "Baseline Scan\n";
-                    readStartOfScan();
+                    readBaselineStartOfScan();
                 } else if (frameHeader.encodingProcess == SOF2) {
-                    std::cout << "\n\n\n\nProgressive Scan\n";
                     readProgressiveStartOfScan();
                 }
             } else if (marker == EOI) {
+                if (frameHeader.encodingProcess == SOF2) {
+                    std::vector<std::shared_ptr<std::thread>> threads;
+                    for (int i = 0; i < static_cast<int>(scanHeaders.size()); i++) {
+                        int scanNumber = i;
+                        threads.emplace_back(std::make_shared<std::thread>([this, scanNumber] {
+                            processProgressiveStartOfScan(scanHeaders[scanNumber], scanNumber);
+                        }));
+                        threads[i]->join();
+                    }
+                    //
+                    // std::thread quantizationThread = std::thread([&] {processQuantizationQueue();});
+                    // std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
+                    // std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
+
+                    for (auto &thread : threads) {
+                        thread->join();
+                    }
+
+                    // quantizationThread.join();
+                    // idctThread.join();
+                    // colorConversionThread.join();
+                    
+                    break;
+                    for (int mcuIndex = 0; mcuIndex < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; mcuIndex++) {
+                        // Check if the previous scan has finished reading this mcu
+                        
+                        std::cout << "Before lock\n";
+
+                        // Step 1: Lock to safely access scanIndices
+                        std::shared_ptr<AtomicCondition> scanData;
+                        {
+                            std::unique_lock scanLock(scanIndiciesMutex);
+                            scanData = scanIndices[currentScan];
+                        }
+                        std::unique_lock lock(scanIndices[currentScan]->mutex);
+                        scanIndices[currentScan]->condition.wait(lock, [&] {
+                            return scanIndices[currentScan]->value >= mcuIndex;
+                        });
+                        lock.unlock();
+                        
+                        std::cout << "After lock\n";
+                        // mcus[mcuIndex]->dequantize(this);
+                        mcus[mcuIndex]->performInverseDCT();
+                        mcus[mcuIndex]->generateColorBlocks();
+                    }
+
+                    for (auto& thread : scanThreads) {
+                        thread->join();
+                    }
+                }
                 break;
             }
         }
@@ -1277,28 +1415,28 @@ void Jpg::printInfo() const {
         std::cout << "Restart Interval: " << restartInterval << '\n';
     }
     frameHeader.print();
-    scanHeader.print();
-    
-    for (size_t i = 0; i < quantizationTables.size(); i++) {
-        if (quantizationTables[i].isSet) {
-            std::cout << "Quantization Table #" << i << "\n";
-            quantizationTables[i].print();
-        }
-    }
-    
-    for (size_t i = 0; i < dcHuffmanTables.size(); i++) {
-        if (!dcHuffmanTables[i].encodings.empty()) {
-            std::cout << "DC Huffman Table #" << i << "\n";
-            dcHuffmanTables[i].print();
-        }
-    }
-    
-    for (size_t i = 0; i < acHuffmanTables.size(); i++) {
-        if (!acHuffmanTables[i].encodings.empty()) {
-            std::cout << "AC Huffman Table #" << i << "\n";
-            acHuffmanTables[i].print();
-        }
-    }
+    // scanHeader.print();
+    //
+    // for (size_t i = 0; i < quantizationTables.size(); i++) {
+    //     if (quantizationTables[i].isSet) {
+    //         std::cout << "Quantization Table #" << i << "\n";
+    //         quantizationTables[i].print();
+    //     }
+    // }
+    //
+    // for (size_t i = 0; i < dcHuffmanTables.size(); i++) {
+    //     if (!dcHuffmanTables[i].encodings.empty()) {
+    //         std::cout << "DC Huffman Table #" << i << "\n";
+    //         dcHuffmanTables[i].print();
+    //     }
+    // }
+    //
+    // for (size_t i = 0; i < acHuffmanTables.size(); i++) {
+    //     if (!acHuffmanTables[i].encodings.empty()) {
+    //         std::cout << "AC Huffman Table #" << i << "\n";
+    //         acHuffmanTables[i].print();
+    //     }
+    // }
 
     if (!comment.empty()) {
         std::cout << "Comment: " << comment << "\n";

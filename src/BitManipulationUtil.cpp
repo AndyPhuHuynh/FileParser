@@ -54,16 +54,10 @@ uint8_t BitReader::getBit() {
         bitPosition = 0;
         byteIndex++;
     }
-    if (print) {
-        std::cout << "Read one bit " << static_cast<int>(bit) << "\n";
-    }
     return bit;
 }
 
 uint32_t BitReader::getNBits(const int numBits) {
-    if (print) {
-        std::cout << "Read " << numBits << " bits\n";
-    }
     if (numBits == 0) return 0;
     if (numBits < 1 || numBits > 32) {
         std::ostringstream message;
@@ -124,23 +118,15 @@ uint16_t BitReader::getWordConstant() const {
 }
 
 void BitReader::skipBits(const int numBits) {
-    // if (print) {
-    //     std::cout << "Skipped " << numBits << " bits\n";
-    // }
-    // bitPosition += numBits;
-    // byteIndex += bitPosition / 8;
-    // bitPosition %= 8;
-
-    for (int i = 0; i < numBits; i++) {
-        getBit();
-    }
+    bitPosition += numBits;
+    byteIndex += bitPosition / 8;
+    bitPosition %= 8;
 }
+
 bool BitReader::reachedEnd() const {
     return byteIndex >= static_cast<int>(bytes.size());
 }
-int BitReader::getByteIndex() {
-    return byteIndex;
-}
-int BitReader::getPos() {
-    return static_cast<int>(bitPosition);
+
+void BitReader::addByte(const uint8_t byte) {
+    bytes.push_back(byte);
 }

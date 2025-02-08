@@ -206,6 +206,7 @@ public:
     static constexpr int maxEncodingLength = 16;
     std::vector<HuffmanEncoding> encodings;
     std::unique_ptr<std::array<HuffmanTableEntry, 256>> table;
+    bool isInitialized = false;
     
     HuffmanTable() = default;
     HuffmanTable(std::ifstream& file, const std::streampos& dataStartIndex);
@@ -220,9 +221,15 @@ public:
     uint8_t dcTableSelector;
     uint8_t acTableSelector;
 
+    uint8_t quantizationTableIteration;
+    uint8_t dcTableIteration;
+    uint8_t acTableIteration;
+
     ScanHeaderComponentSpecification() = default;
-    ScanHeaderComponentSpecification(const uint8_t componentId, const uint8_t dcTableSelector, const uint8_t acTableSelector)
-        : componentId(componentId), dcTableSelector(dcTableSelector), acTableSelector(acTableSelector) {}
+    ScanHeaderComponentSpecification(const uint8_t componentId, const uint8_t dcTableSelector, const uint8_t acTableSelector,
+        const uint8_t quantizationTableIteration, const uint8_t dcTableIteration, const uint8_t acTableIteration)
+        : componentId(componentId), dcTableSelector(dcTableSelector), acTableSelector(acTableSelector), quantizationTableIteration(quantizationTableIteration),
+        dcTableIteration(dcTableIteration), acTableIteration(acTableIteration) {}
     void print() const;
 };
 
@@ -233,9 +240,10 @@ public:
     uint8_t spectralSelectionEnd;
     uint8_t successiveApproximationHigh;
     uint8_t successiveApproximationLow;
-
+    BitReader bitReader;
+    
     ScanHeader() = default;
-    ScanHeader(std::ifstream& file, const std::streampos& dataStartIndex);
+    ScanHeader(Jpg* jpg, const std::streampos& dataStartIndex);
     void print() const;
 };
 
@@ -252,7 +260,6 @@ class Mcu {
 public:
     static constexpr int dataUnitLength = 64;
     bool postDctMode = true; // True = After FDCT, IDCT needs to be performed
-    bool isQuantized = true;
     // Component 1
     std::vector<std::shared_ptr<std::array<float, dataUnitLength>>> Y;
     // Component 2
@@ -273,7 +280,7 @@ public:
     static void performInverseDCT(std::array<float, 64>& array);
     void performInverseDCT();
     static void dequantize(std::array<float, 64>& array, const QuantizationTable& quantizationTable);
-    void dequantize(Jpg* jpg);
+    void dequantize(Jpg* jpg, const ScanHeaderComponentSpecification& scanComp);
 };
 
 class EntropyDecoder {
@@ -281,13 +288,13 @@ public:
     static int decodeSSSS(BitReader& bitReader, const int SSSS);
     static int decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
     static std::pair<int, int> decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
-    static std::array<float, 64>* decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification& component, int (&prevDc)[3]);
-    static Mcu* decodeMcu(Jpg* jpg, BitReader& bitReader, int (&prevDc)[3]);
+    static std::array<float, 64>* decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp, int (&prevDc)[3]);
+    static Mcu* decodeMcu(Jpg* jpg, ScanHeader& scanHeader, int (&prevDc)[3]);
 
     static void skipZeros(BitReader& bitReader, std::array<float, 64>*& component, int numToSkip, int& index, int approximationLow, int spectralEnd);
     static int decodeProgressiveDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
-    static void decodeProgressiveComponent(Jpg* jpg, BitReader& bitReader, std::array<float, 64>* component, int spectralStart, int spectralEnd, int approximationHigh,
-                                           int approximationLow, const ScanHeaderComponentSpecification& componentInfo, int (&prevDc)[3], int& numBlocksToSkip);
+    static void decodeProgressiveComponent(Jpg* jpg, std::array<float, 64>* component,
+        ScanHeader& scanHeader, const ScanHeaderComponentSpecification& componentInfo, int (&prevDc)[3], int& numBlocksToSkip);
 };
 
 struct ConsumerQueue {
@@ -297,23 +304,39 @@ struct ConsumerQueue {
     bool allProductsAdded = false;
 };
 
+struct AtomicCondition {
+    std::mutex mutex;
+    int value = -1;
+    std::condition_variable condition;
+};
+
 /* TODO: Arithmetic Coding */
-// TODO: Hierarchical mode 
 class Jpg {
 public:
     std::ifstream file;
     FrameHeader frameHeader;
-    ScanHeader scanHeader;
     std::string comment;
-    std::array<QuantizationTable, 4> quantizationTables;
-    std::array<HuffmanTable, 4> dcHuffmanTables;
-    std::array<HuffmanTable, 4> acHuffmanTables;
+    // Index in the vector is the iteration, index in the array is the table number
+    std::vector<std::array<QuantizationTable, 4>> quantizationTables =  std::vector<std::array<QuantizationTable, 4>>(1);
+    std::vector<std::array<HuffmanTable, 4>> dcHuffmanTables = std::vector<std::array<HuffmanTable, 4>>(1);
+    std::vector<std::array<HuffmanTable, 4>> acHuffmanTables = std::vector<std::array<HuffmanTable, 4>>(1);
     uint16_t restartInterval = 0;
     std::vector<std::shared_ptr<Mcu>> mcus;
 private:   
     ConsumerQueue quantizationQueue;
     ConsumerQueue idctQuantizationQueue;
     ConsumerQueue colorConversionQueue;
+
+    uint8_t currentQuantizationTableIteration = -1;
+    uint8_t currentAcHuffmanTableIteration = -1;
+    uint8_t currentDcHuffmanTableIteration = -1;
+    
+    std::vector<std::shared_ptr<ScanHeader>> scanHeaders;
+    int currentScan = 0;
+    // the value of scanIndicies[i] indicates the mcuIndex that scan #i can read up to
+    std::mutex scanIndiciesMutex;
+    std::vector<std::shared_ptr<AtomicCondition>> scanIndices;
+    std::vector<std::unique_ptr<std::thread>> scanThreads;
     
 public:
     explicit Jpg(const std::string& path);
@@ -325,11 +348,13 @@ private:
     void readDefineNumberOfLines();
     void readDefineRestartIntervals();
     void readComments();
-    void processQuantizationQueue();
+    void processQuantizationQueue(const std::vector<ScanHeaderComponentSpecification>& scanComps);
     void processIdctQuantizationQueue();
     void processColorConversionQueue();
-    void readScanHeader();
-    void readStartOfScan();
+    std::shared_ptr<ScanHeader> readScanHeader();
+    void readBaselineStartOfScan();
+    void createMcus();
+    void processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, int scanNumber);
     void readProgressiveStartOfScan();
     void readFile();
 public:
