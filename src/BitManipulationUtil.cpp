@@ -1,7 +1,6 @@
 ﻿#include "BitManipulationUtil.h"
 
 #include <cstdint>
-#include <iostream>
 #include <sstream>
 
 unsigned char GetBitFromLeft(const unsigned char byte, const int pos) {

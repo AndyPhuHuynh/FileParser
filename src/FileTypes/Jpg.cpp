@@ -195,10 +195,16 @@ uint8_t HuffmanTable::decodeNextValue(BitReader& bitReader) const {
     uint16_t word = bitReader.getWordConstant();
     auto& decoding = (*table)[static_cast<uint8_t>(word >> 8 & 0xFF)];
     if (decoding.table == nullptr) {
+        if (decoding.bitLength == 0) {
+            std::cerr << "Huffman encoding does not exist!\n" << std::endl;
+        }
         bitReader.skipBits(decoding.bitLength);
         return decoding.value;
     }
     auto& decoding2 = (*decoding.table)[static_cast<uint8_t>(word & 0xFF)];
+    if (decoding2.table == nullptr && decoding2.bitLength == 0) {
+        std::cerr << "Huffman encoding does not exist!\n" << std::endl;
+    }
     bitReader.skipBits(decoding2.bitLength);
     return decoding2.value;
 }
@@ -495,18 +501,18 @@ ScanHeader::ScanHeader(Jpg* jpg, const std::streampos& dataStartIndex) {
 
         int qTableSelector = jpg->frameHeader.componentSpecifications[componentId].quantizationTableSelector;
         int qTableIteration = static_cast<int>(jpg->quantizationTables.size()) - 1;
-        while (!jpg->quantizationTables[qTableIteration][qTableSelector].isSet) {
+        while (qTableIteration > 0 && !jpg->quantizationTables[qTableIteration][qTableSelector].isSet) {
             qTableIteration--;
         }
         
         int dcSelector = GetNibble(tables, 0);
         int dcIteration = static_cast<int>(jpg->dcHuffmanTables.size()) - 1;
-        while (!jpg->dcHuffmanTables[dcIteration][dcSelector].isInitialized) {
+        while (dcIteration > 0 && !jpg->dcHuffmanTables[dcIteration][dcSelector].isInitialized) {
             dcIteration--;
         }
         int acSelector = GetNibble(tables, 1);
         int acIteration = static_cast<int>(jpg->acHuffmanTables.size()) - 1;
-        while (!jpg->acHuffmanTables[acIteration][acSelector].isInitialized) {
+        while (acIteration > 0 && !jpg->acHuffmanTables[acIteration][acSelector].isInitialized) {
             acIteration--;
         }
         
@@ -526,6 +532,22 @@ ScanHeader::ScanHeader(Jpg* jpg, const std::streampos& dataStartIndex) {
     if (spectralSelectionEnd > 63) {
         std::cerr << "Error: Spectral selection end must be in the range 0-63\n";
     }
+
+    restartInterval = jpg->currentRestartInterval;
+}
+
+bool ScanHeader::containsComponentId(const int id) {
+    return std::ranges::any_of(componentSpecifications, [id](auto& comp) {
+        return comp.componentId == id;
+    });
+}
+
+ScanHeaderComponentSpecification& ScanHeader::getComponent(int id) {
+    for (auto& comp : componentSpecifications) {
+        if (comp.componentId == id) return comp;
+    }
+    std::cerr << "Error: No component with id " << id << " found\n";
+    return componentSpecifications[0];
 }
 
 void ColorBlock::print() const {
@@ -899,6 +921,9 @@ void Jpg::readQuantizationTables() {
         int iteration = 0;
         while (quantizationTables[iteration][tableId].isSet) {
             iteration++;
+            if (static_cast<int>(quantizationTables.size()) <= iteration) {
+                quantizationTables.emplace_back();
+            }
         }
         quantizationTables[iteration][tableId] = quantizationTable;
         length -= (static_cast<uint16_t>(file.tellg()) - static_cast<uint16_t>(dataStartIndex));
@@ -920,7 +945,13 @@ void Jpg::readHuffmanTables() {
         int iteration = 0;
         while (tables[iteration][tableId].isInitialized) {
             iteration++;
+            if (static_cast<int>(tables.size()) <= iteration) {
+                tables.emplace_back();
+            }
         }
+
+        std::string classStr = tableClass == 0 ? "DC" : "AC";
+        std::cout << "Reading huffman table, type " << classStr << ", id: " << static_cast<int>(tableId) << ", iteration: " << iteration << std::endl;  
         tables[iteration][tableId] = HuffmanTable(file, dataStartIndex);
         
         length -= (static_cast<uint16_t>(file.tellg()) - static_cast<uint16_t>(dataStartIndex));
@@ -935,8 +966,8 @@ void Jpg::readDefineNumberOfLines() {
 
 void Jpg::readDefineRestartIntervals() {
     file.seekg(2, std::ios::cur); // Skip past the length bytes
-    file.read(reinterpret_cast<char*>(&restartInterval), 2);
-    restartInterval = SwapBytes(restartInterval);
+    file.read(reinterpret_cast<char*>(&currentRestartInterval), 2);
+    currentRestartInterval = SwapBytes(currentRestartInterval);
 }
 
 void Jpg::readComments() {
@@ -1033,6 +1064,7 @@ void Jpg::processColorConversionQueue() {
 }
 
 std::shared_ptr<ScanHeader> Jpg::readScanHeader() {
+    std::cout << "Reading scan header #: " << scanHeaders.size() << "\n";
     file.seekg(2, std::ios::cur); // Skip past the length bytes
     std::shared_ptr<ScanHeader> scanHeader = std::make_shared<ScanHeader>(this, file.tellg());
     scanHeaders.emplace_back(scanHeader);
@@ -1078,7 +1110,7 @@ void Jpg::readBaselineStartOfScan() {
     std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
     
     for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
-        if (restartInterval != 0 && i % restartInterval == 0) {
+        if (scanHeader->restartInterval != 0 && i % scanHeader->restartInterval == 0) {
             scanHeader->bitReader.alignToByte();
             prevDc[0] = 0;
             prevDc[1] = 0;
@@ -1113,6 +1145,20 @@ void Jpg::createMcus() {
     }
 }
 
+void Jpg::pushToNextScan(const int mcuIndex, const int scanNumber) {
+    std::shared_ptr<AtomicCondition> nextScanData;
+    {
+        std::unique_lock scanLock(scanIndiciesMutex);
+        nextScanData = scanIndices[scanNumber + 1];
+    }
+    std::unique_lock lock(nextScanData->mutex);
+    nextScanData->value = mcuIndex;
+    nextScanData->condition.notify_one();
+    // std::stringstream msg2;
+    // msg2 << "Setting scan " << scanNumber + 1 << ", to index: " << mcuIndex << std::endl;
+    // std::cout << msg2.str();
+}
+
 void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const int scanNumber) {
     auto pollCurrentScan = [&] (const int mcuIndex) -> void {
         // Step 1: Lock to safely access scanIndices
@@ -1129,23 +1175,10 @@ void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const
         });
     };
 
-    auto pushToNextScan = [&] (const int mcuIndex) -> void {
-        std::shared_ptr<AtomicCondition> nextScanData;
-        {
-            std::unique_lock scanLock(scanIndiciesMutex);
-            nextScanData = scanIndices[scanNumber + 1];
-        }
-        std::unique_lock lock(nextScanData->mutex);
-        nextScanData->value = mcuIndex;
-        nextScanData->condition.notify_one();
-        std::stringstream msg2;
-        msg2 << "Setting scan " << scanNumber + 1 << ", to index: " << mcuIndex << std::endl;
-        std::cout << msg2.str();
-    };
-    
+    const int finalScanNumber = static_cast<int>(scanHeaders.size() - 1);
     int prevDc[3] = {};
     int componentsToSkip = 0;
-
+    
     // One component per scan
     if (scan->componentSpecifications.size() == 1) {
         auto& scanSpec = scan->componentSpecifications[0];
@@ -1164,12 +1197,8 @@ void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const
                     const int mcuRow = blockY / frameSpec.verticalSamplingFactor;
                     const int mcuColumn = blockX / frameSpec.horizontalSamplingFactor;
                     const int mcuIndex = mcuRow * frameHeader.mcuImageWidth + mcuColumn;
-
-                    std::stringstream msg;
-                    // msg << "Scan Index: " << scanNumber << ", McuIndex: " << mcuIndex << std::endl;;
-                    std::cout << msg.str();
                     
-                    if (restartInterval != 0 && blocksProcessed % restartInterval == 0) {
+                    if (scan->restartInterval != 0 && blocksProcessed % scan->restartInterval == 0) {
                         scan->bitReader.alignToByte();
                         prevDc[0] = 0;
                         prevDc[1] = 0;
@@ -1190,26 +1219,26 @@ void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const
                         (blockX == maxBlockX - 1 && blockY == maxBlockY - 1);
 
                     if (pushToQueue) {
-                        pushToNextScan(mcuIndex);
-                        if (scanNumber == static_cast<int>(scanHeaders.size() - 1)) {
+                        if (scanNumber >= finalScanNumber) {
+                            std::unique_lock queueLock(quantizationQueue.mutex);
                             quantizationQueue.queue.push(mcus[mcuIndex]);
+                            quantizationQueue.condition.notify_one();
+                        } else {
+                            pushToNextScan(mcuIndex, scanNumber);
                         }
                     }
-                    
                     blocksProcessed++;
                 }
             }
-            if (scanNumber == static_cast<int>(scanHeaders.size() - 1)) {
+            if (scanNumber == finalScanNumber) {
+                std::unique_lock queueLock(quantizationQueue.mutex);
                 quantizationQueue.allProductsAdded = true;
             }
         }
         // Only chroma component
         else {
             for (int mcuIndex = 0; mcuIndex < frameHeader.mcuImageWidth * frameHeader.mcuImageHeight; mcuIndex++) {
-                std::stringstream msg;
-                // msg << "Scan Index: " << scanNumber << ", McuIndex: " << mcuIndex << std::endl;;
-                std::cout << msg.str();
-                if (restartInterval != 0 && mcuIndex % restartInterval == 0) {
+                if (scan->restartInterval != 0 && mcuIndex % scan->restartInterval == 0) {
                     scan->bitReader.alignToByte();
                     prevDc[0] = 0;
                     prevDc[1] = 0;
@@ -1228,12 +1257,16 @@ void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const
                 }
 
                 // Push mcu to next queue
-                pushToNextScan(mcuIndex);
-                if (scanNumber == static_cast<int>(scanHeaders.size() - 1)) {
+                if (scanNumber >= finalScanNumber) {
+                    std::unique_lock queueLock(quantizationQueue.mutex);
                     quantizationQueue.queue.push(mcus[mcuIndex]);
+                    quantizationQueue.condition.notify_one();
+                } else {
+                    pushToNextScan(mcuIndex, scanNumber);
                 }
             }
-            if (scanNumber == static_cast<int>(scanHeaders.size() - 1)) {
+            if (scanNumber == finalScanNumber) {
+                std::unique_lock queueLock(quantizationQueue.mutex);
                 quantizationQueue.allProductsAdded = true; 
             }
         }
@@ -1241,10 +1274,7 @@ void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const
     // Multiple components per scan (DC Coefficients only)
     else {
         for (int mcuIndex = 0; mcuIndex < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; mcuIndex++) {
-            std::stringstream msg;
-            // msg << "Scan Index: " << scanNumber << ", McuIndex: " << mcuIndex << std::endl;;
-            std::cout << msg.str();
-            if (restartInterval != 0 && mcuIndex % restartInterval == 0) {
+            if (scan->restartInterval != 0 && mcuIndex % scan->restartInterval == 0) {
                 scan->bitReader.alignToByte();
                 prevDc[0] = 0;
                 prevDc[1] = 0;
@@ -1270,22 +1300,25 @@ void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const
                 }
             }
             // Push mcu to next queue
-            pushToNextScan(mcuIndex);
-            if (scanNumber == static_cast<int>(scanHeaders.size() - 1)) {
+            if (scanNumber >= finalScanNumber) {
+                std::unique_lock queueLock(quantizationQueue.mutex);
                 quantizationQueue.queue.push(mcus[mcuIndex]);
+                quantizationQueue.condition.notify_one();
+            } else {
+                pushToNextScan(mcuIndex, scanNumber);
             }
         }
-        if (scanNumber == static_cast<int>(scanHeaders.size() - 1)) {
+        if (scanNumber == finalScanNumber) {
+            std::unique_lock queueLock(quantizationQueue.mutex);
             quantizationQueue.allProductsAdded = true;
         }
     }
-    std::cout << "Done with scan " << scanNumber << std::endl;
 }
 
 void Jpg::readProgressiveStartOfScan() {
+    scanIndices.emplace_back(std::make_shared<AtomicCondition>());
     if (currentScan == 0) {
         std::unique_lock scanLock(scanIndiciesMutex);
-        scanIndices.emplace_back(std::make_shared<AtomicCondition>());
         for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
             mcus.push_back(std::make_shared<Mcu>(frameHeader.luminanceComponentsPerMcu, frameHeader.maxHorizontalSample, frameHeader.maxVerticalSample));
         }
@@ -1324,6 +1357,7 @@ void Jpg::readProgressiveStartOfScan() {
             scanHeader->bitReader.addByte(previousByte);
         }
     }
+    currentScan++;
 }
 
 void Jpg::readFile() {
@@ -1355,54 +1389,40 @@ void Jpg::readFile() {
                 }
             } else if (marker == EOI) {
                 if (frameHeader.encodingProcess == SOF2) {
+                    dcHuffmanTables[0][0].print();
+                    dcHuffmanTables[0][1].print();
+                    
+                    
                     std::vector<std::shared_ptr<std::thread>> threads;
                     for (int i = 0; i < static_cast<int>(scanHeaders.size()); i++) {
                         int scanNumber = i;
-                        threads.emplace_back(std::make_shared<std::thread>([this, scanNumber] {
-                            processProgressiveStartOfScan(scanHeaders[scanNumber], scanNumber);
-                        }));
-                        threads[i]->join();
-                    }
-                    //
-                    // std::thread quantizationThread = std::thread([&] {processQuantizationQueue();});
-                    // std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
-                    // std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
-
-                    for (auto &thread : threads) {
-                        thread->join();
+                        processProgressiveStartOfScan(scanHeaders[scanNumber], scanNumber);
+                        // threads.emplace_back(std::make_shared<std::thread>([this, scanNumber] {
+                        //     processProgressiveStartOfScan(scanHeaders[scanNumber], scanNumber);
+                        // }));
+                        // threads[i]->join();
                     }
 
-                    // quantizationThread.join();
-                    // idctThread.join();
-                    // colorConversionThread.join();
-                    
-                    break;
-                    for (int mcuIndex = 0; mcuIndex < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; mcuIndex++) {
-                        // Check if the previous scan has finished reading this mcu
-                        
-                        std::cout << "Before lock\n";
-
-                        // Step 1: Lock to safely access scanIndices
-                        std::shared_ptr<AtomicCondition> scanData;
-                        {
-                            std::unique_lock scanLock(scanIndiciesMutex);
-                            scanData = scanIndices[currentScan];
+                    std::vector<ScanHeaderComponentSpecification> scanHeaderComponents;
+                    for (int i = 1; i <= static_cast<int>(frameHeader.componentSpecifications.size()); i++) {
+                        for (int j = static_cast<int>(scanHeaders.size()) - 1; j >= 0; j--) {
+                            if (scanHeaders[j]->containsComponentId(i)) {
+                                scanHeaderComponents.push_back(scanHeaders[j]->getComponent(i));
+                            }
                         }
-                        std::unique_lock lock(scanIndices[currentScan]->mutex);
-                        scanIndices[currentScan]->condition.wait(lock, [&] {
-                            return scanIndices[currentScan]->value >= mcuIndex;
-                        });
-                        lock.unlock();
-                        
-                        std::cout << "After lock\n";
-                        // mcus[mcuIndex]->dequantize(this);
-                        mcus[mcuIndex]->performInverseDCT();
-                        mcus[mcuIndex]->generateColorBlocks();
                     }
-
-                    for (auto& thread : scanThreads) {
-                        thread->join();
-                    }
+                    
+                    std::thread quantizationThread = std::thread([&] {processQuantizationQueue(scanHeaderComponents);});
+                    std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
+                    std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
+                    
+                    // for (auto &thread : threads) {
+                    //     thread->join();
+                    // }
+                    
+                    quantizationThread.join();
+                    idctThread.join();
+                    colorConversionThread.join();
                 }
                 break;
             }
@@ -1410,10 +1430,8 @@ void Jpg::readFile() {
     }
 }
 
+// TODO: Fix printInfo
 void Jpg::printInfo() const {
-    if (restartInterval != 0) {
-        std::cout << "Restart Interval: " << restartInterval << '\n';
-    }
     frameHeader.print();
     // scanHeader.print();
     //
@@ -1451,6 +1469,7 @@ Jpg::Jpg(const std::string& path) {
 typedef unsigned char byte;
 typedef unsigned int uint;
 
+// TODO: Make writeing to bmp faster
 void putInt(byte*& bufferPos, const uint v) {
     *bufferPos++ = v >>  0;
     *bufferPos++ = v >>  8;

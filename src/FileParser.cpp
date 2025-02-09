@@ -26,7 +26,7 @@ static int bmpMain(const int argc, char* argv[]) {
 
 int main(const int argc, char* argv[]) {
     clock_t begin = clock();
-    std::string filename = "cat";
+    std::string filename = "treeprogdiscord";
     std::cout << "Processing file: " << filename << '\n';
     std::ostringstream path;
     path << filename << ".jpg";

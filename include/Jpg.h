@@ -240,10 +240,13 @@ public:
     uint8_t spectralSelectionEnd;
     uint8_t successiveApproximationHigh;
     uint8_t successiveApproximationLow;
-    BitReader bitReader;
+    BitReader bitReader = BitReader();
+    uint16_t restartInterval;
     
     ScanHeader() = default;
     ScanHeader(Jpg* jpg, const std::streampos& dataStartIndex);
+    bool containsComponentId(int id);
+    ScanHeaderComponentSpecification& getComponent(int id);
     void print() const;
 };
 
@@ -259,7 +262,8 @@ public:
 class Mcu {
 public:
     static constexpr int dataUnitLength = 64;
-    bool postDctMode = true; // True = After FDCT, IDCT needs to be performed
+    // True = After FDCT, IDCT needs to be performed
+    bool postDctMode = true; 
     // Component 1
     std::vector<std::shared_ptr<std::array<float, dataUnitLength>>> Y;
     // Component 2
@@ -320,20 +324,16 @@ public:
     std::vector<std::array<QuantizationTable, 4>> quantizationTables =  std::vector<std::array<QuantizationTable, 4>>(1);
     std::vector<std::array<HuffmanTable, 4>> dcHuffmanTables = std::vector<std::array<HuffmanTable, 4>>(1);
     std::vector<std::array<HuffmanTable, 4>> acHuffmanTables = std::vector<std::array<HuffmanTable, 4>>(1);
-    uint16_t restartInterval = 0;
+    uint16_t currentRestartInterval = 0;
     std::vector<std::shared_ptr<Mcu>> mcus;
-private:   
+private:
     ConsumerQueue quantizationQueue;
     ConsumerQueue idctQuantizationQueue;
     ConsumerQueue colorConversionQueue;
-
-    uint8_t currentQuantizationTableIteration = -1;
-    uint8_t currentAcHuffmanTableIteration = -1;
-    uint8_t currentDcHuffmanTableIteration = -1;
     
     std::vector<std::shared_ptr<ScanHeader>> scanHeaders;
     int currentScan = 0;
-    // the value of scanIndicies[i] indicates the mcuIndex that scan #i can read up to
+    // The value of scanIndicies[i] indicates the mcuIndex that scan #i can read up to
     std::mutex scanIndiciesMutex;
     std::vector<std::shared_ptr<AtomicCondition>> scanIndices;
     std::vector<std::unique_ptr<std::thread>> scanThreads;
@@ -354,6 +354,8 @@ private:
     std::shared_ptr<ScanHeader> readScanHeader();
     void readBaselineStartOfScan();
     void createMcus();
+    // Used in progressive jpegs when a scan is done processing an mcu
+    void pushToNextScan(int mcuIndex, int scanNumber);
     void processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, int scanNumber);
     void readProgressiveStartOfScan();
     void readFile();
