@@ -1,6 +1,7 @@
 ﻿// ReSharper disable All
 #pragma once
 #include <array>
+#include <cmath>
 #include <fstream>
 #include <map>
 #include <numbers>
@@ -9,6 +10,7 @@
 #include <queue>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 
 #include "BitManipulationUtil.h"
 

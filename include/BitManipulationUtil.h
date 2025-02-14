@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 unsigned char GetBitFromLeft(unsigned char byte, int pos);

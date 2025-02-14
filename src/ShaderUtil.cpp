@@ -2,7 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
-#include <Gl/glew.h>
+#include <GL/glew.h>
 
 float NormalizeToNdc(const float value, const int span) {
     return (value / static_cast<float>(span)) * 2 - 1;

@@ -7,6 +7,7 @@
 static int bmpMain(const int argc, char* argv[]) {
     if (argc != 2) {
         std::cerr << "Usage: ./FileParser <filename>" << '\n';
+        std::terminate();
     }
     
     std::string filePath = argv[1];
@@ -25,8 +26,11 @@ static int bmpMain(const int argc, char* argv[]) {
 }
 
 int main(const int argc, char* argv[]) {
+
+    bmpMain(argc, argv);
+    return 0;
     clock_t begin = clock();
-    std::string filename = "treeprog";
+    std::string filename = "./test-images/cat";
     std::cout << "Processing file: " << filename << '\n';
     std::ostringstream path;
     path << filename << ".jpg";

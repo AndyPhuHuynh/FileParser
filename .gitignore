@@ -1,5 +1,6 @@
 # Ignore VSCode and Rider
 .vs/
+.vscode/
 .idea/
 # Ignore build output folders
 Debug/
@@ -9,3 +10,10 @@ x86/
 ARM/
 ARM64/
 FileParser/
+# Ignore Cmake
+bin/
+build/
+CMakeFiles/
+Makefile
+CMakeCache.txt
+cmake_install.cmake
