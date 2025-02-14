@@ -196,14 +196,14 @@ uint8_t HuffmanTable::decodeNextValue(BitReader& bitReader) const {
     auto& decoding = (*table)[static_cast<uint8_t>(word >> 8 & 0xFF)];
     if (decoding.table == nullptr) {
         if (decoding.bitLength == 0) {
-            std::cerr << "Huffman encoding does not exist!\n" << std::endl;
+            std::cerr << "Huffman encoding does not exist!\n";
         }
         bitReader.skipBits(decoding.bitLength);
         return decoding.value;
     }
     auto& decoding2 = (*decoding.table)[static_cast<uint8_t>(word & 0xFF)];
     if (decoding2.table == nullptr && decoding2.bitLength == 0) {
-        std::cerr << "Huffman encoding does not exist!\n" << std::endl;
+        std::cerr << "Huffman encoding does not exist!\n";
     }
     bitReader.skipBits(decoding2.bitLength);
     return decoding2.value;
@@ -222,7 +222,7 @@ void HuffmanTable::print() const {
 }
 
 
-int EntropyDecoder::decodeSSSS(BitReader& bitReader, const int SSSS) {
+int Jpg::decodeSSSS(BitReader& bitReader, const int SSSS) {
     int coefficient = static_cast<int>(bitReader.getNBits(SSSS));
     if (coefficient < 1 << (SSSS - 1)) {
         coefficient -= (1 << SSSS) - 1;
@@ -230,23 +230,23 @@ int EntropyDecoder::decodeSSSS(BitReader& bitReader, const int SSSS) {
     return coefficient;
 }
 
-int EntropyDecoder::decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) {
+int Jpg::decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) {
     int sCategory = huffmanTable.decodeNextValue(bitReader);
     return sCategory == 0 ? 0 : decodeSSSS(bitReader, sCategory);
 }
 
-std::pair<int, int> EntropyDecoder::decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) {
+std::pair<int, int> Jpg::decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) {
     uint8_t rs = huffmanTable.decodeNextValue(bitReader);
     uint8_t r = GetNibble(rs, 0);
     uint8_t s = GetNibble(rs, 1);
     return {r, s};
 }
 
-std::array<float, 64>* EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp, int (&prevDc)[3]) {
+std::array<float, 64>* Jpg::decodeComponent(BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp, int (&prevDc)[3]) {
     std::array<float, 64>* result = new std::array<float, 64>();
     result->fill(0);
     // DC Coefficient
-    HuffmanTable &dcTable = jpg->dcHuffmanTables[scanComp.dcTableIteration][scanComp.dcTableSelector];
+    HuffmanTable &dcTable = dcHuffmanTables[scanComp.dcTableIteration][scanComp.dcTableSelector];
     int dcCoefficient = decodeDcCoefficient(bitReader, dcTable) + prevDc[scanComp.componentId - 1];
     (*result)[0] = static_cast<float>(dcCoefficient);
     prevDc[scanComp.componentId - 1] = dcCoefficient;
@@ -254,7 +254,7 @@ std::array<float, 64>* EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitR
     // AC Coefficients
     int index = 1;
     while (index < Mcu::dataUnitLength) {
-        HuffmanTable &acTable = jpg->acHuffmanTables[scanComp.acTableIteration][scanComp.acTableSelector];
+        HuffmanTable &acTable = acHuffmanTables[scanComp.acTableIteration][scanComp.acTableSelector];
         auto [r, s] = decodeAcCoefficient(bitReader, acTable);
         if (r == 0x0 && s == 0x0) {
             break;
@@ -274,23 +274,21 @@ std::array<float, 64>* EntropyDecoder::decodeComponent(Jpg* jpg, BitReader& bitR
     return result;
 }
 
-Mcu* EntropyDecoder::decodeMcu(Jpg* jpg, ScanHeader& scanHeader, int (&prevDc)[3]) {
-    Mcu* mcu = new Mcu(jpg->frameHeader.luminanceComponentsPerMcu, jpg->frameHeader.maxHorizontalSample, jpg->frameHeader.maxVerticalSample);
+void Jpg::decodeMcu(Mcu* mcu, ScanHeader& scanHeader, int (&prevDc)[3]) {
     for (auto& component : scanHeader.componentSpecifications) {
         if (component.componentId == 1) {
-            for (int i = 0; i < jpg->frameHeader.luminanceComponentsPerMcu; i++) {
-                mcu->Y[i] = (std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, scanHeader.bitReader, component, prevDc)));
+            for (int i = 0; i < frameHeader.luminanceComponentsPerMcu; i++) {
+                mcu->Y[i] = (std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(scanHeader.bitReader, component, prevDc)));
             }
         } else if (component.componentId == 2) {
-            mcu->Cb = std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, scanHeader.bitReader, component, prevDc));
+            mcu->Cb = std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(scanHeader.bitReader, component, prevDc));
         } else if (component.componentId == 3) {
-            mcu->Cr = std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(jpg, scanHeader.bitReader, component, prevDc));
+            mcu->Cr = std::unique_ptr<std::array<float, Mcu::dataUnitLength>>(decodeComponent(scanHeader.bitReader, component, prevDc));
         }
     }
-    return mcu;
 }
 
-void EntropyDecoder::skipZeros(BitReader& bitReader, std::array<float, 64>*& component, const int numToSkip, int& index, const int approximationLow, int spectralEnd) {
+void Jpg::skipZeros(BitReader& bitReader, std::array<float, 64>*& component, const int numToSkip, int& index, const int approximationLow) {
     if (numToSkip + index >= Mcu::dataUnitLength) {
         std::cerr << "Invalid number of zeros to skip: " << numToSkip << "\n";
         std::cerr << "Index: " << index << "\n";
@@ -347,16 +345,7 @@ void EntropyDecoder::skipZeros(BitReader& bitReader, std::array<float, 64>*& com
     }
 }
 
-static void printComponent(std::array<float, 64>* component) {
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++) {
-            std::cout << std::setw(3) << (*component)[j + i * 8] << " ";
-        }
-        std::cout << std::endl;
-    }
-}
-
-void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, std::array<float, 64>* component, ScanHeader& scanHeader,
+void Jpg::decodeProgressiveComponent(std::array<float, 64>* component, ScanHeader& scanHeader,
     const ScanHeaderComponentSpecification& componentInfo, int (&prevDc)[3], int& numBlocksToSkip) {
     const int approximationHigh = scanHeader.successiveApproximationHigh;
     const int approximationLow = scanHeader.successiveApproximationLow;
@@ -390,7 +379,7 @@ void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, std::array<float, 64>*
     if (spectralStart == 0 && spectralEnd == 0) {
         // First scan
         if (approximationHigh == 0) {
-            HuffmanTable& dcTable = jpg->dcHuffmanTables[componentInfo.dcTableIteration][componentInfo.dcTableSelector];
+            HuffmanTable& dcTable = dcHuffmanTables[componentInfo.dcTableIteration][componentInfo.dcTableSelector];
             int dcCoefficient = (decodeDcCoefficient(scanHeader.bitReader, dcTable) << approximationLow) + prevDc[componentInfo.componentId - 1];
             (*component)[0] = static_cast<float>(dcCoefficient);
             prevDc[componentInfo.componentId - 1] = dcCoefficient;
@@ -406,7 +395,7 @@ void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, std::array<float, 64>*
     if (approximationHigh == 0) {
         int index = spectralStart;
         while (index <= spectralEnd) {
-            HuffmanTable& acTable = jpg->acHuffmanTables[componentInfo.acTableIteration][componentInfo.acTableSelector];
+            HuffmanTable& acTable = acHuffmanTables[componentInfo.acTableIteration][componentInfo.acTableSelector];
             auto [r, s] = decodeAcCoefficient(scanHeader.bitReader, acTable);
             if (r == 0xF && s == 0x0) {
                 index += 16;
@@ -432,10 +421,10 @@ void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, std::array<float, 64>*
     int index = spectralStart;
     int numToAdd = 1 << approximationLow;
     while (index <= spectralEnd) {
-        HuffmanTable& acTable = jpg->acHuffmanTables[componentInfo.acTableIteration][componentInfo.acTableSelector];
+        HuffmanTable& acTable = acHuffmanTables[componentInfo.acTableIteration][componentInfo.acTableSelector];
         auto [r, s] = decodeAcCoefficient(scanHeader.bitReader, acTable);
         if (r == 0xF && s == 0x0) {
-            skipZeros(scanHeader.bitReader, component, 16, index, approximationLow, spectralEnd);
+            skipZeros(scanHeader.bitReader, component, 16, index, approximationLow);
             continue;
         }
         // End of Band 
@@ -459,27 +448,31 @@ void EntropyDecoder::decodeProgressiveComponent(Jpg* jpg, std::array<float, 64>*
             break;
         }
         int coeff = scanHeader.bitReader.getBit() == 1 ? numToAdd : numToAdd * -1;
-        skipZeros(scanHeader.bitReader, component, r, index, approximationLow, spectralEnd);
+        skipZeros(scanHeader.bitReader, component, r, index, approximationLow);
         (*component)[zigZagMap[index]] += static_cast<float>(coeff);
         index++;
     }
 }
 
 void ScanHeaderComponentSpecification::print() const {
-    std::cout << std::setw(25) << "Component Id: " << static_cast<int>(componentId) << "\n";
-    std::cout << std::setw(25) << "DC Table Id: " << static_cast<int>(dcTableSelector) << "\n";
-    std::cout << std::setw(25) << "AC Table Id: " << static_cast<int>(acTableSelector) << "\n";
+    std::cout << std::setw(30) << "Component Id: " << static_cast<int>(componentId) << "\n";
+    std::cout << std::setw(30) << "DC Table Id: " << static_cast<int>(dcTableSelector) << "\n";
+    std::cout << std::setw(30) << "AC Table Id: " << static_cast<int>(acTableSelector) << "\n";
+    std::cout << std::setw(30) << "Quantization Table Iteration: " << static_cast<int>(quantizationTableIteration) << "\n";
+    std::cout << std::setw(30) << "DC Table Iteration: " << static_cast<int>(dcTableIteration) << "\n";
+    std::cout << std::setw(30) << "AC Table Iteration: " << static_cast<int>(acTableIteration) << "\n";
 }
 
 void ScanHeader::print() const {
-    std::cout << std::setw(25) << "Number of Components: " << componentSpecifications.size() << "\n";
+    std::cout << std::setw(30) << "Number of Components: " << componentSpecifications.size() << "\n";
     for (auto& component : componentSpecifications) {
         component.print();
     }
-    std::cout << std::setw(26) << "Spectral Selection Start: " << static_cast<int>(spectralSelectionStart) << "\n";
-    std::cout << std::setw(26) << "Spectral Selection End: " << static_cast<int>(spectralSelectionEnd) << "\n";
-    std::cout << std::setw(26) << "Approximation High: " << static_cast<int>(successiveApproximationHigh) << "\n";
-    std::cout << std::setw(26) << "Approximation Low: " << static_cast<int>(successiveApproximationLow) << "\n";
+    std::cout << std::setw(30) << "Spectral Selection Start: " << static_cast<int>(spectralSelectionStart) << "\n";
+    std::cout << std::setw(30) << "Spectral Selection End: " << static_cast<int>(spectralSelectionEnd) << "\n";
+    std::cout << std::setw(30) << "Approximation High: " << static_cast<int>(successiveApproximationHigh) << "\n";
+    std::cout << std::setw(30) << "Approximation Low: " << static_cast<int>(successiveApproximationLow) << "\n";
+    std::cout << std::setw(30) << "Restart Interval: " << static_cast<int>(restartInterval) << "\n";
 }
 
 ScanHeader::ScanHeader(Jpg* jpg, const std::streampos& dataStartIndex) {
@@ -498,7 +491,6 @@ ScanHeader::ScanHeader(Jpg* jpg, const std::streampos& dataStartIndex) {
         if (zeroBased) componentId++;
 
         // Get the iterations for quantization and huffman tables
-
         int qTableSelector = jpg->frameHeader.componentSpecifications[componentId].quantizationTableSelector;
         int qTableIteration = static_cast<int>(jpg->quantizationTables.size()) - 1;
         while (qTableIteration > 0 && !jpg->quantizationTables[qTableIteration][qTableSelector].isSet) {
@@ -582,7 +574,7 @@ void ColorBlock::print() const {
 
 void Mcu::print() const {
     std::cout << std::dec;
-    std::cout << "Luminance (Y)        | Blue Chrominance (Cb)        | Red Chrominance (Cr)" << '\n';
+    std::cout << "Luminance (Y)(x" << Y.size() << ")        | Blue Chrominance (Cb)        | Red Chrominance (Cr)" << '\n';
     std::cout << "----------------------------------------------------------------------------------\n";
 
     for (int y = 0; y < 8; y++) {
@@ -901,6 +893,9 @@ void Jpg::readFrameHeader(const uint8_t frameMarker) {
     file.seekg(2, std::ios::cur); // Skip past length bytes
     frameHeader = FrameHeader(frameMarker, file, file.tellg());
     mcus.reserve(frameHeader.mcuImageHeight * frameHeader.mcuImageWidth);
+    for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
+        mcus.emplace_back(std::make_shared<Mcu>(frameHeader.luminanceComponentsPerMcu, frameHeader.maxHorizontalSample, frameHeader.maxVerticalSample));
+    }
 }
 
 void Jpg::readQuantizationTables() {
@@ -949,11 +944,7 @@ void Jpg::readHuffmanTables() {
                 tables.emplace_back();
             }
         }
-
-        std::string classStr = tableClass == 0 ? "DC" : "AC";
-        std::cout << "Reading huffman table, type " << classStr << ", id: " << static_cast<int>(tableId) << ", iteration: " << iteration << std::endl;  
         tables[iteration][tableId] = HuffmanTable(file, dataStartIndex);
-        
         length -= (static_cast<uint16_t>(file.tellg()) - static_cast<uint16_t>(dataStartIndex));
     }
 }
@@ -1064,7 +1055,6 @@ void Jpg::processColorConversionQueue() {
 }
 
 std::shared_ptr<ScanHeader> Jpg::readScanHeader() {
-    std::cout << "Reading scan header #: " << scanHeaders.size() << "\n";
     file.seekg(2, std::ios::cur); // Skip past the length bytes
     std::shared_ptr<ScanHeader> scanHeader = std::make_shared<ScanHeader>(this, file.tellg());
     scanHeaders.emplace_back(scanHeader);
@@ -1074,7 +1064,6 @@ std::shared_ptr<ScanHeader> Jpg::readScanHeader() {
 void Jpg::readBaselineStartOfScan() {
     std::shared_ptr<ScanHeader> scanHeader = readScanHeader();
     // Read entropy compressed bit stream
-    clock_t begin = clock();
     uint8_t byte;
     while (file.read(reinterpret_cast<char*>(&byte), 1)) {
         uint8_t previousByte = byte;
@@ -1102,79 +1091,35 @@ void Jpg::readBaselineStartOfScan() {
             scanHeader->bitReader.addByte(previousByte);
         }
     }
-    clock_t afterRead = clock();
-    int prevDc[3] = {};
-
-    std::thread quantizationThread = std::thread([&] {processQuantizationQueue(scanHeader->componentSpecifications);});
-    std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
-    std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
-    
-    for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
-        if (scanHeader->restartInterval != 0 && i % scanHeader->restartInterval == 0) {
-            scanHeader->bitReader.alignToByte();
-            prevDc[0] = 0;
-            prevDc[1] = 0;
-            prevDc[2] = 0;
-        }
-        auto mcu = std::shared_ptr<Mcu>(EntropyDecoder::decodeMcu(this, *scanHeader, prevDc));
-        mcus.push_back(mcu);
-        std::unique_lock lock(quantizationQueue.mutex);
-        quantizationQueue.queue.push(mcu);
-        quantizationQueue.condition.notify_one();
-    }
-    clock_t afterDecode = clock();
-    std::unique_lock lock(quantizationQueue.mutex);
-    quantizationQueue.allProductsAdded = true;
-    lock.unlock();
-    quantizationThread.join();
-    idctThread.join();
-    colorConversionThread.join();
-    std::cout << "Time to read bytes: " << static_cast<double>(afterRead - begin) / CLOCKS_PER_SEC << " seconds\n";
-    std::cout << "Time to huffman decode: " << static_cast<double>(afterDecode - afterRead) / CLOCKS_PER_SEC << " seconds\n";
 }
 
-void Jpg::createMcus() {
-    if (static_cast<int>(scanIndices.size()) < 1) {
-        scanIndices.emplace_back(std::make_unique<AtomicCondition>());
+void Jpg::pollCurrentScan(const int mcuIndex, const int scanNumber) {
+    // Step 1: Lock to safely access scanIndices
+    std::shared_ptr<AtomicCondition> scanData;
+    {
+        std::unique_lock scanLock(scanIndicesMutex);
+        scanData = scanIndices[scanNumber];
     }
-    for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
-        mcus.push_back(std::make_shared<Mcu>(frameHeader.luminanceComponentsPerMcu, frameHeader.maxHorizontalSample, frameHeader.maxVerticalSample));
-        std::unique_lock lock(scanIndices[0]->mutex);
-        scanIndices[0]->value = i;
-        scanIndices[0]->condition.notify_one();
-    }
-}
+
+    // Step 2: Lock the specific scanData mutex and wait
+    std::unique_lock lock(scanData->mutex);
+    scanData->condition.wait(lock, [&] {
+        return scanData->value >= mcuIndex;
+    });
+};
 
 void Jpg::pushToNextScan(const int mcuIndex, const int scanNumber) {
     std::shared_ptr<AtomicCondition> nextScanData;
     {
-        std::unique_lock scanLock(scanIndiciesMutex);
+        std::unique_lock scanLock(scanIndicesMutex);
         nextScanData = scanIndices[scanNumber + 1];
     }
     std::unique_lock lock(nextScanData->mutex);
     nextScanData->value = mcuIndex;
     nextScanData->condition.notify_one();
-    // std::stringstream msg2;
-    // msg2 << "Setting scan " << scanNumber + 1 << ", to index: " << mcuIndex << std::endl;
-    // std::cout << msg2.str();
 }
 
-void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const int scanNumber) {
-    auto pollCurrentScan = [&] (const int mcuIndex) -> void {
-        // Step 1: Lock to safely access scanIndices
-        std::shared_ptr<AtomicCondition> scanData;
-        {
-            std::unique_lock scanLock(scanIndiciesMutex);
-            scanData = scanIndices[scanNumber];
-        }
-
-        // Step 2: Lock the specific scanData mutex and wait
-        std::unique_lock lock(scanData->mutex);
-        scanData->condition.wait(lock, [&] {
-            return scanData->value >= mcuIndex;
-        });
-    };
-
+void Jpg::processProgressiveStartOfScan(const std::shared_ptr<ScanHeader>& scan, const int scanNumber) {
     const int finalScanNumber = static_cast<int>(scanHeaders.size() - 1);
     int prevDc[3] = {};
     int componentsToSkip = 0;
@@ -1206,11 +1151,10 @@ void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const
                         componentsToSkip = 0;
                     }
 
-                    pollCurrentScan(mcuIndex);
+                    pollCurrentScan(mcuIndex, scanNumber);
                     
                     const int luminanceIndex = luminanceColumn + luminanceRow * frameHeader.maxHorizontalSample;
-                    EntropyDecoder::decodeProgressiveComponent(this, mcus[mcuIndex]->Y[luminanceIndex].get(),
-                                                               *scan, scanSpec, prevDc, componentsToSkip);
+                    decodeProgressiveComponent(mcus[mcuIndex]->Y[luminanceIndex].get(), *scan, scanSpec, prevDc, componentsToSkip);
                     
                     // Push the mcu to the next queue
                     bool pushToQueue = (luminanceIndex == frameHeader.luminanceComponentsPerMcu - 1) ||
@@ -1246,14 +1190,12 @@ void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const
                     componentsToSkip = 0;
                 }
 
-                pollCurrentScan(mcuIndex);
+                pollCurrentScan(mcuIndex, scanNumber);
                 
                 if (scanSpec.componentId == 2) {
-                    EntropyDecoder::decodeProgressiveComponent(this, mcus[mcuIndex]->Cb.get(), *scan, scanSpec,
-                                                               prevDc, componentsToSkip);
+                    decodeProgressiveComponent(mcus[mcuIndex]->Cb.get(), *scan, scanSpec, prevDc, componentsToSkip);
                 } else if (scanSpec.componentId == 3) {
-                    EntropyDecoder::decodeProgressiveComponent(this, mcus[mcuIndex]->Cr.get(), *scan, scanSpec,
-                                                               prevDc, componentsToSkip);
+                    decodeProgressiveComponent(mcus[mcuIndex]->Cr.get(), *scan, scanSpec, prevDc, componentsToSkip);
                 }
 
                 // Push mcu to next queue
@@ -1282,21 +1224,18 @@ void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const
                 componentsToSkip = 0;
             }
 
-            pollCurrentScan(mcuIndex);
+            pollCurrentScan(mcuIndex, scanNumber);
             
             for (auto& componentInfo : scan->componentSpecifications) {
                 std::shared_ptr<std::array<float, 64>> component;
                 if (componentInfo.componentId == 1) {
                     for (int i = 0; i < frameHeader.luminanceComponentsPerMcu; i++) {
-                        EntropyDecoder::decodeProgressiveComponent(this,  mcus[mcuIndex]->Y[i].get(), *scan, componentInfo,
-                                                                   prevDc, componentsToSkip);
+                        decodeProgressiveComponent(mcus[mcuIndex]->Y[i].get(), *scan, componentInfo, prevDc, componentsToSkip);
                     }
                 } else if (componentInfo.componentId == 2) {
-                    EntropyDecoder::decodeProgressiveComponent(this, mcus[mcuIndex]->Cb.get(), *scan, componentInfo,
-                                                               prevDc, componentsToSkip);
+                    decodeProgressiveComponent(mcus[mcuIndex]->Cb.get(), *scan, componentInfo, prevDc, componentsToSkip);
                 } else if (componentInfo.componentId == 3) {
-                    EntropyDecoder::decodeProgressiveComponent(this, mcus[mcuIndex]->Cr.get(), *scan, componentInfo,
-                                                               prevDc, componentsToSkip);
+                    decodeProgressiveComponent(mcus[mcuIndex]->Cr.get(), *scan, componentInfo, prevDc, componentsToSkip);
                 }
             }
             // Push mcu to next queue
@@ -1316,12 +1255,8 @@ void Jpg::processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, const
 }
 
 void Jpg::readProgressiveStartOfScan() {
-    scanIndices.emplace_back(std::make_shared<AtomicCondition>());
-    if (currentScan == 0) {
-        std::unique_lock scanLock(scanIndiciesMutex);
-        for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
-            mcus.push_back(std::make_shared<Mcu>(frameHeader.luminanceComponentsPerMcu, frameHeader.maxHorizontalSample, frameHeader.maxVerticalSample));
-        }
+    if (scanIndices.size() == 1) {
+        std::unique_lock scanLock(scanIndicesMutex);
         scanIndices[0]->value = frameHeader.mcuImageHeight * frameHeader.mcuImageWidth - 1;
     }
     
@@ -1357,8 +1292,85 @@ void Jpg::readProgressiveStartOfScan() {
             scanHeader->bitReader.addByte(previousByte);
         }
     }
-    currentScan++;
 }
+
+void Jpg::readStartOfScan() {
+    scanIndices.emplace_back(std::make_shared<AtomicCondition>());
+    if (frameHeader.encodingProcess == SOF0) {
+        readBaselineStartOfScan();
+    } else if (frameHeader.encodingProcess == SOF2) {
+        readProgressiveStartOfScan();
+    }
+}
+
+void Jpg::decodeBaseLine() {
+    auto& scanHeader = scanHeaders[0];
+    int prevDc[3] = {};
+    
+    std::thread quantizationThread = std::thread([&] {processQuantizationQueue(scanHeader->componentSpecifications);});
+    std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
+    std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
+    
+    for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
+        if (scanHeader->restartInterval != 0 && i % scanHeader->restartInterval == 0) {
+            scanHeader->bitReader.alignToByte();
+            prevDc[0] = 0;
+            prevDc[1] = 0;
+            prevDc[2] = 0;
+        }
+        auto& mcu = mcus[i];
+        decodeMcu(mcu.get(), *scanHeader, prevDc);
+        std::unique_lock lock(quantizationQueue.mutex);
+        quantizationQueue.queue.push(mcu);
+        quantizationQueue.condition.notify_one();
+    }
+    std::unique_lock lock(quantizationQueue.mutex);
+    quantizationQueue.allProductsAdded = true;
+    lock.unlock();
+    quantizationThread.join();
+    idctThread.join();
+    colorConversionThread.join();
+}
+
+void Jpg::decodeProgressive() {
+    std::vector<std::shared_ptr<std::thread>> threads;
+    for (int i = 0; i < static_cast<int>(scanHeaders.size()); i++) {
+        int scanNumber = i;
+        threads.emplace_back(std::make_shared<std::thread>([this, scanNumber] {
+            processProgressiveStartOfScan(scanHeaders[scanNumber], scanNumber);
+        }));
+    }
+
+    std::vector<ScanHeaderComponentSpecification> scanHeaderComponents;
+    for (int i = 1; i <= static_cast<int>(frameHeader.componentSpecifications.size()); i++) {
+        for (int j = static_cast<int>(scanHeaders.size()) - 1; j >= 0; j--) {
+            if (scanHeaders[j]->containsComponentId(i)) {
+                scanHeaderComponents.push_back(scanHeaders[j]->getComponent(i));
+            }
+        }
+    }
+                    
+    std::thread quantizationThread = std::thread([&] {processQuantizationQueue(scanHeaderComponents);});
+    std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
+    std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
+                    
+    for (auto &thread : threads) {
+        thread->join();
+    }
+    
+    quantizationThread.join();
+    idctThread.join();
+    colorConversionThread.join();
+}
+
+void Jpg::decode() {
+    if (frameHeader.encodingProcess == SOF0) {
+        decodeBaseLine();
+    } else if (frameHeader.encodingProcess == SOF2) {
+        decodeProgressive();
+    }
+}
+
 
 void Jpg::readFile() {
     uint8_t byte;
@@ -1382,79 +1394,53 @@ void Jpg::readFile() {
             } else if (marker == COM) {
                 readComments();
             } else if (marker == SOS) {
-                if (frameHeader.encodingProcess == SOF0) {
-                    readBaselineStartOfScan();
-                } else if (frameHeader.encodingProcess == SOF2) {
-                    readProgressiveStartOfScan();
-                }
+                readStartOfScan();
             } else if (marker == EOI) {
-                if (frameHeader.encodingProcess == SOF2) {
-                    dcHuffmanTables[0][0].print();
-                    dcHuffmanTables[0][1].print();
-                    
-                    
-                    std::vector<std::shared_ptr<std::thread>> threads;
-                    for (int i = 0; i < static_cast<int>(scanHeaders.size()); i++) {
-                        int scanNumber = i;
-                        processProgressiveStartOfScan(scanHeaders[scanNumber], scanNumber);
-                        // threads.emplace_back(std::make_shared<std::thread>([this, scanNumber] {
-                        //     processProgressiveStartOfScan(scanHeaders[scanNumber], scanNumber);
-                        // }));
-                        // threads[i]->join();
-                    }
-
-                    std::vector<ScanHeaderComponentSpecification> scanHeaderComponents;
-                    for (int i = 1; i <= static_cast<int>(frameHeader.componentSpecifications.size()); i++) {
-                        for (int j = static_cast<int>(scanHeaders.size()) - 1; j >= 0; j--) {
-                            if (scanHeaders[j]->containsComponentId(i)) {
-                                scanHeaderComponents.push_back(scanHeaders[j]->getComponent(i));
-                            }
-                        }
-                    }
-                    
-                    std::thread quantizationThread = std::thread([&] {processQuantizationQueue(scanHeaderComponents);});
-                    std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
-                    std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
-                    
-                    // for (auto &thread : threads) {
-                    //     thread->join();
-                    // }
-                    
-                    quantizationThread.join();
-                    idctThread.join();
-                    colorConversionThread.join();
-                }
+                decode();
                 break;
             }
         }
     }
 }
 
-// TODO: Fix printInfo
 void Jpg::printInfo() const {
     frameHeader.print();
-    // scanHeader.print();
-    //
-    // for (size_t i = 0; i < quantizationTables.size(); i++) {
-    //     if (quantizationTables[i].isSet) {
-    //         std::cout << "Quantization Table #" << i << "\n";
-    //         quantizationTables[i].print();
-    //     }
-    // }
-    //
-    // for (size_t i = 0; i < dcHuffmanTables.size(); i++) {
-    //     if (!dcHuffmanTables[i].encodings.empty()) {
-    //         std::cout << "DC Huffman Table #" << i << "\n";
-    //         dcHuffmanTables[i].print();
-    //     }
-    // }
-    //
-    // for (size_t i = 0; i < acHuffmanTables.size(); i++) {
-    //     if (!acHuffmanTables[i].encodings.empty()) {
-    //         std::cout << "AC Huffman Table #" << i << "\n";
-    //         acHuffmanTables[i].print();
-    //     }
-    // }
+    
+    std::cout << "\nScan Information:\n";
+    for (int i = 0; i < static_cast<int>(scanHeaders.size()); i++) {
+        std::cout << "Scan #" << i << ":\n";
+        scanHeaders[i]->print();
+    }
+
+    std::cout << "\nQuantization Tables:\n";
+    for (int iteration = 0; iteration < static_cast<int>(quantizationTables.size()); iteration++) {
+        for (size_t i = 0; i < quantizationTables.size(); i++) {
+            if (quantizationTables[iteration][i].isSet) {
+                std::cout << "Quantization Iteration " << iteration << ", Table #" << i << "\n";
+                quantizationTables[iteration][i].print();
+            }
+        }
+    }
+
+    std::cout << "\nDC Huffman Tables:\n";
+    for (int iteration = 0; iteration < static_cast<int>(dcHuffmanTables.size()); iteration++) {
+        for (size_t i = 0; i < dcHuffmanTables.size(); i++) {
+            if (dcHuffmanTables[iteration][i].isInitialized) {
+                std::cout << "DC Huffman Iteration " << iteration << ", Table #" << i << "\n";
+                dcHuffmanTables[iteration][i].print();
+            }
+        }
+    }
+
+    std::cout << "\nAC Huffman Tables:\n";
+    for (int iteration = 0; iteration < static_cast<int>(acHuffmanTables.size()); iteration++) {
+        for (size_t i = 0; i < acHuffmanTables.size(); i++) {
+            if (acHuffmanTables[iteration][i].isInitialized) {
+                std::cout << "AC Huffman Iteration " << iteration << ", Table #" << i << "\n";
+                acHuffmanTables[iteration][i].print();
+            }
+        }
+    }
 
     if (!comment.empty()) {
         std::cout << "Comment: " << comment << "\n";
@@ -1469,7 +1455,7 @@ Jpg::Jpg(const std::string& path) {
 typedef unsigned char byte;
 typedef unsigned int uint;
 
-// TODO: Make writeing to bmp faster
+// TODO: Make writing to bmp faster
 void putInt(byte*& bufferPos, const uint v) {
     *bufferPos++ = v >>  0;
     *bufferPos++ = v >>  8;
@@ -1534,7 +1520,7 @@ void Jpg::writeBmp(const std::string& filename) const {
         }
     }
 
-    outFile.write((char*)buffer, size);
+    outFile.write(reinterpret_cast<char*>(buffer), size);
     outFile.close();
     delete[] buffer;
     clock_t end = clock();

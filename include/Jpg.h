@@ -287,20 +287,6 @@ public:
     void dequantize(Jpg* jpg, const ScanHeaderComponentSpecification& scanComp);
 };
 
-class EntropyDecoder {
-public:
-    static int decodeSSSS(BitReader& bitReader, const int SSSS);
-    static int decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
-    static std::pair<int, int> decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
-    static std::array<float, 64>* decodeComponent(Jpg* jpg, BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp, int (&prevDc)[3]);
-    static Mcu* decodeMcu(Jpg* jpg, ScanHeader& scanHeader, int (&prevDc)[3]);
-
-    static void skipZeros(BitReader& bitReader, std::array<float, 64>*& component, int numToSkip, int& index, int approximationLow, int spectralEnd);
-    static int decodeProgressiveDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
-    static void decodeProgressiveComponent(Jpg* jpg, std::array<float, 64>* component,
-        ScanHeader& scanHeader, const ScanHeaderComponentSpecification& componentInfo, int (&prevDc)[3], int& numBlocksToSkip);
-};
-
 struct ConsumerQueue {
     std::mutex mutex;
     std::condition_variable condition;
@@ -320,26 +306,34 @@ public:
     std::ifstream file;
     FrameHeader frameHeader;
     std::string comment;
+    uint16_t currentRestartInterval = 0;
     // Index in the vector is the iteration, index in the array is the table number
     std::vector<std::array<QuantizationTable, 4>> quantizationTables =  std::vector<std::array<QuantizationTable, 4>>(1);
     std::vector<std::array<HuffmanTable, 4>> dcHuffmanTables = std::vector<std::array<HuffmanTable, 4>>(1);
     std::vector<std::array<HuffmanTable, 4>> acHuffmanTables = std::vector<std::array<HuffmanTable, 4>>(1);
-    uint16_t currentRestartInterval = 0;
-    std::vector<std::shared_ptr<Mcu>> mcus;
 private:
+    std::vector<std::shared_ptr<Mcu>> mcus;
     ConsumerQueue quantizationQueue;
     ConsumerQueue idctQuantizationQueue;
     ConsumerQueue colorConversionQueue;
     
-    std::vector<std::shared_ptr<ScanHeader>> scanHeaders;
-    int currentScan = 0;
     // The value of scanIndicies[i] indicates the mcuIndex that scan #i can read up to
-    std::mutex scanIndiciesMutex;
+    std::mutex scanIndicesMutex;
     std::vector<std::shared_ptr<AtomicCondition>> scanIndices;
-    std::vector<std::unique_ptr<std::thread>> scanThreads;
+    std::vector<std::shared_ptr<ScanHeader>> scanHeaders;
     
 public:
     explicit Jpg(const std::string& path);
+    // Methods to decode entropy encoded data.
+private:
+    static int decodeSSSS(BitReader& bitReader, const int SSSS);
+    static int decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
+    static std::pair<int, int> decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
+    std::array<float, 64>* decodeComponent(BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp, int (&prevDc)[3]);
+    void decodeMcu(Mcu* mcu, ScanHeader& scanHeader, int (&prevDc)[3]);
+    static void skipZeros(BitReader& bitReader, std::array<float, 64>*& component, int numToSkip, int& index, int approximationLow);
+    void decodeProgressiveComponent(std::array<float, 64>* component, ScanHeader& scanHeader,
+        const ScanHeaderComponentSpecification& componentInfo, int (&prevDc)[3], int& numBlocksToSkip);
 private:
     uint16_t readLengthBytes();
     void readFrameHeader(uint8_t frameMarker);
@@ -353,14 +347,18 @@ private:
     void processColorConversionQueue();
     std::shared_ptr<ScanHeader> readScanHeader();
     void readBaselineStartOfScan();
-    void createMcus();
+    // Used in progressive jpegs to test if the scan is ready to process an mcu
+    void pollCurrentScan(int mcuIndex, int scanNumber);
     // Used in progressive jpegs when a scan is done processing an mcu
     void pushToNextScan(int mcuIndex, int scanNumber);
-    void processProgressiveStartOfScan(std::shared_ptr<ScanHeader>& scan, int scanNumber);
+    void processProgressiveStartOfScan(const std::shared_ptr<ScanHeader>& scan, int scanNumber);
     void readProgressiveStartOfScan();
+    void readStartOfScan();
+    void decodeBaseLine();
+    void decodeProgressive();
+    void decode();
     void readFile();
 public:
     void writeBmp(const std::string& filename) const;
     void printInfo() const;
 };
-

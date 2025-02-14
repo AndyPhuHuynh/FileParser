@@ -26,7 +26,7 @@ static int bmpMain(const int argc, char* argv[]) {
 
 int main(const int argc, char* argv[]) {
     clock_t begin = clock();
-    std::string filename = "treeprogdiscord";
+    std::string filename = "treeprog";
     std::cout << "Processing file: " << filename << '\n';
     std::ostringstream path;
     path << filename << ".jpg";
@@ -35,18 +35,9 @@ int main(const int argc, char* argv[]) {
     out << filename << ".bmp";
     
     Jpg jpg(path.str());
-
-    // TODO: Multithread reading SOS for progressive JPEGS 
-    // if (jpg.frameHeader.encodingProcess != 0xC0) {
-    //     for (auto& mcu : jpg.mcus) {
-    //         mcu->dequantize(&jpg);
-    //         mcu->performInverseDCT();
-    //         mcu->generateColorBlocks();
-    //     }
-    // }
     
     jpg.writeBmp(out.str());
-    // jpg.printInfo();
+    jpg.printInfo();
     // Bmp bmp("sample.bmp");
     // bmp.render();
     clock_t end = clock();
