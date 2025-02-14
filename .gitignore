@@ -1,21 +1,21 @@
 # Ignore VSCode and Rider
-.vs/
-.vscode/
-.idea/
+/.vs/
+/.vscode/
+/.idea/
 # Ignore build output folders
-Debug/
-Release/
-x64/
-x86/
-ARM/
-ARM64/
-FileParser/
+/Debug/
+/Release/
+/x64/
+/x86/
+/ARM/
+/ARM64/
+/FileParser/
 # Ignore Cmake
-bin/
-build/
-CMakeFiles/
-Makefile
-CMakeCache.txt
-cmake_install.cmake
+/bin/
+/build/
+/CMakeFiles/
+/Makefile
+/CMakeCache.txt
+/cmake_install.cmake
 # Test Images
-test-images
+/test-images
