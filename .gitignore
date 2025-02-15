@@ -10,6 +10,7 @@
 /ARM/
 /ARM64/
 /FileParser/
+*.dir
 # Ignore Cmake
 /bin/
 /build/
@@ -17,3 +18,7 @@
 /Makefile
 /CMakeCache.txt
 /cmake_install.cmake
+# Ignore Visual Studio project files
+*.vcxproj
+*.vcxproj.filters
+*.sln
