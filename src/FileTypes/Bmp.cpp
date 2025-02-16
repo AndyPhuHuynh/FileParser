@@ -2,18 +2,11 @@
 #include <iostream>
 #include <cmath>
 
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
-
 #include "BitManipulationUtil.h"
 #include "Bmp.h"
+#include "Renderer.h"
+#include "RenderWindow.h"
 #include "ShaderUtil.h"
-
-BmpPoint::BmpPoint() {
-    x = 0;
-    y = 0;
-    color = Color();
-}
 
 BmpHeader BmpHeader::getHeaderFromFile(std::ifstream& file) {
     BmpHeader header;
@@ -105,9 +98,9 @@ void Bmp::initColorTable() {
     }
 }
 
-std::vector<BmpPoint> Bmp::getPoints() {
-    std::vector<BmpPoint> points;
-    points.reserve(info.width * info.height);
+std::vector<Point> Bmp::getPoints() {
+    std::vector<Point> points;
+    points.reserve(static_cast<int>(info.width * info.height));
     file.seekg(header.dataOffset, std::ios::beg);
     
     for (uint32_t y = 0; y < info.height; y++) {
@@ -122,7 +115,7 @@ std::vector<BmpPoint> Bmp::getPoints() {
     return points;
 }
 
-void Bmp::ParseRowByteOrLessNoCompression(std::vector<BmpPoint>& points, float normalizedY) {
+void Bmp::ParseRowByteOrLessNoCompression(std::vector<Point>& points, float normalizedY) {
     uint32_t pixelsInRowRead = 0;
     bool allNonPaddingBitsRead = false;
     for (uint32_t byteInRow = 0; byteInRow < rowSize; byteInRow++) {
@@ -161,7 +154,7 @@ void Bmp::ParseRowByteOrLessNoCompression(std::vector<BmpPoint>& points, float n
     }
 }
 
-void Bmp::ParseRow24BitNoCompression(std::vector<BmpPoint>& points, float normalizedY) {
+void Bmp::ParseRow24BitNoCompression(std::vector<Point>& points, float normalizedY) {
     for (uint32_t x = 0; x < rowSize / 3; x++) {
         unsigned char byte;
         float normalizedX = NormalizeToNdc(static_cast<float>(x), static_cast<int>(info.width));
@@ -181,7 +174,7 @@ void Bmp::ParseRow24BitNoCompression(std::vector<BmpPoint>& points, float normal
     file.seekg(padding, std::ios::cur);
 }
 
-int Bmp::render() {
+int Bmp::render(Renderer& renderer) {
     if (rasterEncoding != BmpRasterEncoding::Monochrome &&
         rasterEncoding != BmpRasterEncoding::FourBitNoCompression &&
         rasterEncoding != BmpRasterEncoding::EightBitNoCompression &&
@@ -192,87 +185,9 @@ int Bmp::render() {
         return -1;
     }
     
-    std::cout << "Rendering..." << '\n';
-    if (!glfwInit()) {
-        return -1;
-    }
-
-    // Create a window
-    GLFWwindow *window = glfwCreateWindow(static_cast<int>(info.width), static_cast<int>(info.height), "Hello World!",nullptr, nullptr);
-    if (!window) {
-        glfwTerminate();
-        return -1;
-    }
-
-    // Make window current context
-    glfwMakeContextCurrent(window);
-
-    // Initialize glew
-    if (glewInit() != GLEW_OK) {
-        std::cout << "Failed to initialize GLEW" << '\n';
-        return -1;
-    }
-
-    std::cout << "OpenGL version: " << glGetString(GL_VERSION) << '\n';
-    // std::ifstream vertexShaderFile("shaders/Basic.vert");
-    // std::ifstream fragShaderFile("shaders/Basic.frag");
-    // std::string vertexShader{std::istreambuf_iterator<char>(vertexShaderFile), std::istreambuf_iterator<char>()};
-    // std::string fragShader{std::istreambuf_iterator<char>(fragShaderFile), std::istreambuf_iterator<char>()};
-
-    std::string vertexShader = R"(
-        #version 330 core
-
-        layout(location = 0) in vec2 position;
-        layout(location = 1) in vec4 colorToDraw;
-
-        out vec4 colorToSend;
-
-        void main() {
-            gl_Position = vec4(position, 0.0, 1.0);
-            colorToSend = colorToDraw;
-        }
-    )";
-
-    std::string fragShader = R"(
-        #version 330 core
-
-        in vec4 colorToSend;
-
-        layout(location = 0) out vec4 color;
-
-        void main() {
-            color = colorToSend;
-        }
-    )";
-
-    const unsigned int shaderProgram = CreateShader(vertexShader, fragShader);
-    glUseProgram(shaderProgram);
-    glViewport(0, 0, static_cast<int>(info.width), static_cast<int>(info.height));
-    
-    std::vector<BmpPoint> points = getPoints();
-    
-    int pointsSize = static_cast<int>(sizeof(BmpPoint) * points.size());
-    unsigned int buffer;
-    glGenBuffers(1, &buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, buffer);
-    glBufferData(GL_ARRAY_BUFFER, pointsSize, points.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(BmpPoint), nullptr);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(BmpPoint), reinterpret_cast<void*>(2 * sizeof(float)));
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    
-    while (!glfwWindowShouldClose(window)) {
-        glClear(GL_COLOR_BUFFER_BIT);
-        
-        // Rendering code goes here
-        glDrawArrays(GL_POINTS, 0, static_cast<int>(points.size()));
-        
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-    }
-
-    glDeleteProgram(shaderProgram);
-    glfwTerminate();
+    auto& window = renderer.createWindow(static_cast<int>(info.width), static_cast<int>(info.height), "Bmp", RenderMode::Point);
+    window->showWindow();
+    window->setBufferDataPoints(getPoints());
     return 0;
 }
 

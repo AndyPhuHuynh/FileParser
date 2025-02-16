@@ -1,8 +1,12 @@
 ﻿#pragma once
-#include <fstream>
-#include <iostream>
-#include <vector>
+
 #include "Color.h"
+#include "Point.h"
+
+#include <fstream>
+#include <vector>
+
+#include "Renderer.h"
 
 enum class BmpRasterEncoding : std::uint8_t {
     None,
@@ -48,15 +52,6 @@ struct BmpInfo {
     int getNumColors() const;
 };
 
-struct BmpPoint {
-    float x;
-    float y;
-    Color color;
-
-    BmpPoint();
-    BmpPoint(const float x, const float y, const Color& color) : x(x), y(y), color(color) {}
-};
-
 class Bmp {
     static constexpr int fileColorTableOffset = 0x36;
 
@@ -69,11 +64,11 @@ public:
     uint32_t rowSize;
     
     explicit Bmp(const std::string& path);
-    int render();
+    int render(Renderer& renderer);
     
 private:
-    std::vector<BmpPoint> getPoints();
-    void ParseRowByteOrLessNoCompression(std::vector<BmpPoint>& points, float normalizedY);
-    void ParseRow24BitNoCompression(std::vector<BmpPoint>& points, float normalizedY);
+    std::vector<Point> getPoints();
+    void ParseRowByteOrLessNoCompression(std::vector<Point>& points, float normalizedY);
+    void ParseRow24BitNoCompression(std::vector<Point>& points, float normalizedY);
     void initColorTable();
 };

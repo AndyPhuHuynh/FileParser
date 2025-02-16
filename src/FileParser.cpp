@@ -3,11 +3,12 @@
 
 #include "Bmp.h"
 #include "Jpg.h"
+#include "Renderer.h"
 
-static int bmpMain(const int argc, char* argv[]) {
+static int bmpMain(const int argc, char* argv[], Renderer& renderer) {
     if (argc != 2) {
         std::cerr << "Usage: ./FileParser <filename>" << '\n';
-        std::terminate();
+        return -1;
     }
     
     std::string filePath = argv[1];
@@ -16,18 +17,26 @@ static int bmpMain(const int argc, char* argv[]) {
         std::cout << "The file path is valid and points to a file: " << filePath << '\n';
     } else {
         std::cerr << "Error: The file path is invalid or does not point to a regular file: " << filePath << '\n';
-        return 1;
+        return -1;
     }
     
     Bmp bmp(filePath);
-    bmp.render();
+    bmp.render(renderer);
     
     return 0;
 }
 
 int main(const int argc, char* argv[]) {
+    Renderer renderer;
 
-    bmpMain(argc, argv);
+    // std::thread cmdThread([&] {
+    //     bmpMain(argc, argv, renderer);
+    // });
+    //
+    // cmdThread.detach();
+    bmpMain(argc, argv, renderer);
+    renderer.run();
+    std::cout << "End main\n";
     return 0;
     clock_t begin = clock();
     std::string filename = "./test-images/cat";
