@@ -3,8 +3,6 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
-#include <iostream>
-
 #include "ShaderUtil.h"
 #include "Renderer.h"
 #include "Point.h"
@@ -22,7 +20,7 @@ RenderWindow::RenderWindow(Renderer *renderer, const int width, const int height
     glfwMakeContextCurrent(m_window);
     
     // Initialize glew
-    if (!m_renderer->isGlewInitialized()) {
+    if (!m_renderer->m_glewInitialized) {
         m_renderer->initializeGlew();
     }
     glGenBuffers(1, &m_vertexBuffer);
@@ -61,16 +59,6 @@ RenderWindow::~RenderWindow() {
     glfwDestroyWindow(m_window);
 }
 
-void RenderWindow::hideWindow() {
-    m_visible = false;
-    glfwHideWindow(m_window);
-}
-
-void RenderWindow::showWindow() {
-    m_visible = true;
-    glfwShowWindow(m_window);
-}
-
 void RenderWindow::setRenderMode(const RenderMode mode) {
     m_renderMode = mode;
     if (m_shaderProgram != 0) {
@@ -93,6 +81,74 @@ bool RenderWindow::isVisible() {
     return m_visible;
 }
 
+std::future<void> RenderWindow::windowShouldCloseAsync() {
+    auto promise = std::make_shared<std::promise<void>>();
+
+    if (m_renderer->onRenderThread()) {
+        windowShouldCloseAsync();
+        promise->set_value();
+    } else {
+        m_renderer->queueFunction([this, promise] {
+            windowShouldCloseAsync();
+            promise->set_value();
+        });
+    }
+
+    return promise->get_future();
+}
+
+std::future<void> RenderWindow::hideWindowAsync() {
+    auto promise = std::make_shared<std::promise<void>>();
+
+    if (m_renderer->onRenderThread()) {
+        hideWindow();
+        promise->set_value();
+    } else {
+        m_renderer->queueFunction([this, promise] {
+            hideWindow();
+            promise->set_value();
+        });
+    }
+
+    return promise->get_future();
+}
+
+std::future<void> RenderWindow::showWindowAsync() {
+    auto promise = std::make_shared<std::promise<void>>();
+
+    if (m_renderer->onRenderThread()) {
+        showWindow();
+        promise->set_value();
+    } else {
+        m_renderer->queueFunction([this, promise] {
+            showWindow();
+            promise->set_value();
+        });
+    }
+
+    return promise->get_future();
+}
+
+std::future<void> RenderWindow::setBufferDataPointsAsync(const std::vector<Point>& points) {
+    auto promise = std::make_shared<std::promise<void>>();
+
+    if (m_renderer->onRenderThread()) {
+        setBufferDataPoints(points);
+        promise->set_value();
+    } else {
+        m_renderer->queueFunction([this, promise, points] {
+            setBufferDataPoints(points);
+            promise->set_value();
+        });
+    }
+
+    return promise->get_future();
+}
+
+void RenderWindow::renderFrame() {
+    (this->*m_render)();
+}
+
 void RenderWindow::makeCurrentContext() {
     glfwMakeContextCurrent(m_window);
 }
@@ -101,22 +157,29 @@ bool RenderWindow::windowShouldClose() {
     return glfwWindowShouldClose(m_window);
 }
 
+
+void RenderWindow::hideWindow() {
+    m_visible = false;
+    glfwHideWindow(m_window);
+}
+
+void RenderWindow::showWindow() {
+    m_visible = true;
+    glfwShowWindow(m_window);
+}
+
 void RenderWindow::setBufferDataPoints(const std::vector<Point>& points) {
+    makeCurrentContext();
     int pointsByteSize = static_cast<int>(sizeof(Point) * points.size());
     glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
     glBufferData(GL_ARRAY_BUFFER, pointsByteSize, points.data(), GL_STATIC_DRAW);
     m_vertexCount = static_cast<int>(points.size());
 }
 
-void RenderWindow::renderFrame() {
-    (this->*m_render)();
-}
-
 void RenderWindow::renderPoints() {
+    makeCurrentContext();
     glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
     glClear(GL_COLOR_BUFFER_BIT);
-    
     glDrawArrays(GL_POINTS, 0, m_vertexCount);
-        
     glfwSwapBuffers(m_window);
 }

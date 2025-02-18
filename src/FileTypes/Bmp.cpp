@@ -1,6 +1,8 @@
 ﻿#include <fstream>
 #include <iostream>
 #include <cmath>
+#include <future>
+#include <memory>
 
 #include "BitManipulationUtil.h"
 #include "Bmp.h"
@@ -185,9 +187,12 @@ int Bmp::render(Renderer& renderer) {
         return -1;
     }
     
-    auto& window = renderer.createWindow(static_cast<int>(info.width), static_cast<int>(info.height), "Bmp", RenderMode::Point);
-    window->showWindow();
-    window->setBufferDataPoints(getPoints());
+    auto windowFuture = renderer.createWindowAsync(static_cast<int>(info.width), static_cast<int>(info.height), "Bmp", RenderMode::Point);
+    
+    if (auto window = windowFuture.get().lock()) {
+        window->showWindowAsync();
+        window->setBufferDataPointsAsync(getPoints());
+    }
     return 0;
 }
 

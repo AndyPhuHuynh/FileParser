@@ -28,14 +28,17 @@ static int bmpMain(const int argc, char* argv[], Renderer& renderer) {
 
 int main(const int argc, char* argv[]) {
     Renderer renderer;
-
-    // std::thread cmdThread([&] {
-    //     bmpMain(argc, argv, renderer);
-    // });
-    //
-    // cmdThread.detach();
-    bmpMain(argc, argv, renderer);
     renderer.run();
+    
+    std::thread cmdThread([&] {
+        bmpMain(argc, argv, renderer);
+        bmpMain(argc, argv, renderer);
+    });
+    
+    cmdThread.detach();
+    while (renderer.isRunning()) {
+        
+    }
     std::cout << "End main\n";
     return 0;
     clock_t begin = clock();

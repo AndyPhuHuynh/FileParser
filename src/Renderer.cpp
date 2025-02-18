@@ -1,5 +1,6 @@
 ﻿#include <algorithm>
 #include <iostream>
+#include <future>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -19,8 +20,12 @@ Renderer::~Renderer() {
     glfwTerminate();
 }
 
-bool Renderer::isGlewInitialized() {
-    return m_glewInitialized;
+bool Renderer::isRunning() const {
+    return m_running;
+}
+
+bool Renderer::onRenderThread() const {
+    return std::this_thread::get_id() == m_renderThreadId;
 }
 
 void Renderer::initializeGlew() {
@@ -33,18 +38,95 @@ void Renderer::initializeGlew() {
     }
 }
 
-std::unique_ptr<RenderWindow>& Renderer::createWindow(int width, int height, const std::string& title, RenderMode renderMode) {
-    m_renderWindows.emplace_back(std::make_unique<RenderWindow>(this, width, height, title, renderMode));
+std::future<std::weak_ptr<RenderWindow>> Renderer::createWindowAsync(
+    const int width, const int height, const std::string& title, const RenderMode renderMode) {
+    auto promise = std::make_shared<std::promise<std::weak_ptr<RenderWindow>>>();
+
+    if (std::this_thread::get_id() == m_renderThreadId) {
+        promise->set_value(createWindow(width, height, title, renderMode));
+    } else {
+        queueFunction([this, promise, width, height, title, renderMode]() {
+            promise->set_value(createWindow(width, height, title, renderMode));
+        });
+    }
+
+    return promise->get_future();
+}
+
+std::future<void> Renderer::removeWindowAsync(const std::shared_ptr<RenderWindow>& renderWindow) {
+    auto promise = std::make_shared<std::promise<void>>();
+
+    if (std::this_thread::get_id() == m_renderThreadId) {
+        removeWindow(renderWindow);
+        promise->set_value();
+    } else {
+        queueFunction([this, promise, renderWindow]() {
+            removeWindow(renderWindow);
+            promise->set_value();
+        });
+    }
+
+    return promise->get_future();
+}
+
+std::future<void> Renderer::removeWindowAsync(const std::weak_ptr<RenderWindow>& renderWindow) {
+    auto promise = std::make_shared<std::promise<void>>();
+
+    if (std::this_thread::get_id() == m_renderThreadId) {
+        removeWindow(renderWindow);
+        promise->set_value();
+    } else {
+        queueFunction([this, promise, renderWindow]() {
+            removeWindow(renderWindow);
+            promise->set_value();
+        });
+    }
+
+    return promise->get_future();
+}
+
+std::weak_ptr<RenderWindow> Renderer::createWindow(const int width, const int height, const std::string& title, const RenderMode renderMode) {
+    m_renderWindows.emplace_back(std::make_shared<RenderWindow>(this, width, height, title, renderMode));
     return m_renderWindows.back();
 }
 
-void Renderer::removeWindow(const std::unique_ptr<RenderWindow>& renderWindow) {
+void Renderer::removeWindow(const std::shared_ptr<RenderWindow>& renderWindow) {
     std::erase(m_renderWindows, renderWindow);
+}
+
+void Renderer::removeWindow(const std::weak_ptr<RenderWindow>& renderWindow) {
+    if (auto renderWindowShared = renderWindow.lock()) {
+        std::erase(m_renderWindows, renderWindowShared);
+    }
 }
 
 void Renderer::run() {
     m_running = true;
+    m_renderThread = std::thread([&] {
+        processEventLoop();
+    });
+    m_renderThreadId = m_renderThread.get_id();
+    m_renderThread.detach();
+}
+
+void Renderer::stopRendering() {
+    m_running = false;
+}
+
+void Renderer::processEventLoop() {
     while (m_running) {
+        // Handle functions queue
+        std::queue<std::function<void()>> functions;
+        std::unique_lock lock(m_functionQueueMutex);
+        std::swap(functions, m_functionQueue);
+        lock.unlock();
+        while (!functions.empty()) {
+            auto function = functions.front();
+            function();
+            functions.pop();
+        }
+        
+        // Render windows
         for (int i = static_cast<int>(m_renderWindows.size()) - 1; i >= 0; i--) {
             auto& window = m_renderWindows[i];
             window->makeCurrentContext();
@@ -58,11 +140,7 @@ void Renderer::run() {
     }
 }
 
-void Renderer::stopRendering() {
-    m_running = false;
-}
-
-void Renderer::addFunction(std::function<void()> function) {
+void Renderer::queueFunction(const std::function<void()>& function) {
     std::unique_lock lock(m_functionQueueMutex);
     m_functionQueue.push(function);
 }
