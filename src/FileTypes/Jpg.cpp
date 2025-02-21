@@ -8,12 +8,16 @@
 #include <ctime>
 #include <ranges>
 #include <vector>
+
+#include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <simde/x86/avx512.h>
 
 #include "BitManipulationUtil.h"
 #include "Bmp.h"
 #include "ShaderUtil.h"
-#include <simde/x86/avx512.h>
+#include "Renderer.h"
+#include "RenderWindow.h"
 
 void FrameHeaderComponentSpecification::print() const {
     std::cout << std::setw(25) << "Identifier: " << static_cast<int>(identifier) << "\n";
@@ -892,7 +896,7 @@ uint16_t Jpg::readLengthBytes() {
 void Jpg::readFrameHeader(const uint8_t frameMarker) {
     file.seekg(2, std::ios::cur); // Skip past length bytes
     frameHeader = FrameHeader(frameMarker, file, file.tellg());
-    mcus.reserve(frameHeader.mcuImageHeight * frameHeader.mcuImageWidth);
+    mcus.reserve(static_cast<unsigned int>(frameHeader.mcuImageHeight * frameHeader.mcuImageWidth));
     for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
         mcus.emplace_back(std::make_shared<Mcu>(frameHeader.luminanceComponentsPerMcu, frameHeader.maxHorizontalSample, frameHeader.maxVerticalSample));
     }
@@ -1525,4 +1529,52 @@ void Jpg::writeBmp(const std::string& filename) const {
     delete[] buffer;
     clock_t end = clock();
     std::cout << "Time to write: " << static_cast<double>(end - begin) / CLOCKS_PER_SEC << " seconds\n";
+}
+
+void Jpg::render(Renderer& renderer) const {
+    std::vector<Point> points;
+    points.reserve(static_cast<unsigned int>(frameHeader.width * frameHeader.height));
+    // For every mcu
+    for (int mcuIndex = 0; mcuIndex < static_cast<int>(mcus.size()); mcuIndex++) {
+        int mcuX = mcuIndex % frameHeader.mcuImageWidth;
+        int mcuY = mcuIndex / frameHeader.mcuImageWidth;
+        
+        // // For every color block in the Mcu
+        for (int blockY = 0; blockY < frameHeader.maxVerticalSample; blockY++) {
+            for (int blockX = 0; blockX < frameHeader.maxHorizontalSample; blockX++) {
+                constexpr int blockSideLength = 8;
+                auto& [R, G, B] = mcus[mcuIndex]->colorBlocks[blockY * frameHeader.maxHorizontalSample + blockX];
+        
+                // For every color in the color block
+                for (int colorY = 0; colorY < blockSideLength; colorY++) {
+                    int pointY = (mcuY * frameHeader.mcuPixelHeight) + (blockY * blockSideLength) + colorY;
+                    if (pointY >= frameHeader.height) {
+                        break;
+                    }
+                    for (int colorX = 0; colorX < blockSideLength; colorX++) {
+                        int pointX = (mcuX * frameHeader.mcuPixelWidth) + (blockX * blockSideLength) + colorX;
+                        if (pointX >= frameHeader.width) {
+                            break;
+                        }
+                        Color color = Color(R[colorY * blockSideLength + colorX],
+                            G[colorY * blockSideLength + colorX],
+                            B[colorY * blockSideLength + colorX]);
+                        color.normalizeColor();
+                        
+                        float normalX = NormalizeToNdc(static_cast<float>(pointX), frameHeader.width);
+                        float normalY = NormalizeToNdc(static_cast<float>(pointY), frameHeader.height) * -1;
+                        
+                        points.emplace_back(normalX, normalY, color);
+                    }
+                }
+            }
+        }
+    }
+
+    auto windowFuture = renderer.createWindowAsync(frameHeader.width, frameHeader.height, "Jpeg", RenderMode::Point);
+    
+    if (auto window = windowFuture.get().lock()) {
+        window->showWindowAsync();
+        window->setBufferDataPointsAsync(points);
+    }
 }

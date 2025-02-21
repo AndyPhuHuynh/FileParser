@@ -1,6 +1,13 @@
 ﻿#include "Color.h"
 #include <iostream>
 
+Color::Color(const float r, const float g, const float b) {
+    this->r = r;
+    this->g = g;
+    this->b = b;
+    this->a = 255;
+}
+
 void Color::print() const {
     std::cout
         <<   "r: " << r

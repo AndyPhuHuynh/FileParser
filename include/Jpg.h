@@ -13,6 +13,7 @@
 #include <condition_variable>
 
 #include "BitManipulationUtil.h"
+#include "Renderer.h"
 
 // Start of Frame markers, non-differential, Huffman coding
 constexpr uint8_t SOF0 = 0xC0; // Baseline DCT
@@ -363,4 +364,5 @@ private:
 public:
     void writeBmp(const std::string& filename) const;
     void printInfo() const;
+    void render(Renderer& renderer) const;
 };

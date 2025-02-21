@@ -2,10 +2,13 @@
 #include <iostream>
 
 #include "Bmp.h"
+#include "FileUtil.h"
 #include "Jpg.h"
 #include "Renderer.h"
 
-static int bmpMain(const int argc, char* argv[], Renderer& renderer) {
+static int Main(const int argc, char* argv[], Renderer& renderer) {
+    using namespace fileUtils;
+    
     if (argc != 2) {
         std::cerr << "Usage: ./FileParser <filename>" << '\n';
         return -1;
@@ -19,20 +22,32 @@ static int bmpMain(const int argc, char* argv[], Renderer& renderer) {
         std::cerr << "Error: The file path is invalid or does not point to a regular file: " << filePath << '\n';
         return -1;
     }
-    
-    Bmp bmp(filePath);
-    bmp.render(renderer);
+
+    switch (GetFileType(filePath)) {
+    case FileType::Bmp: {
+        Bmp bmp(filePath);
+        bmp.render(renderer);
+        break;
+    }
+    case FileType::Jpg: {
+        Jpg jpg(filePath);
+        jpg.render(renderer);
+        break;
+    }
+    case FileType::None:
+        break;
+    }
     
     return 0;
 }
 
+// TODO: Separate renderer and conversion functions into separate modules
 int main(const int argc, char* argv[]) {
     Renderer renderer;
     renderer.run();
     
     std::thread cmdThread([&] {
-        bmpMain(argc, argv, renderer);
-        bmpMain(argc, argv, renderer);
+        Main(argc, argv, renderer);
     });
     
     cmdThread.detach();
@@ -41,22 +56,4 @@ int main(const int argc, char* argv[]) {
     }
     std::cout << "End main\n";
     return 0;
-    clock_t begin = clock();
-    std::string filename = "./test-images/cat";
-    std::cout << "Processing file: " << filename << '\n';
-    std::ostringstream path;
-    path << filename << ".jpg";
-    
-    std::ostringstream out;
-    out << filename << ".bmp";
-    
-    Jpg jpg(path.str());
-    
-    jpg.writeBmp(out.str());
-    jpg.printInfo();
-    // Bmp bmp("sample.bmp");
-    // bmp.render();
-    clock_t end = clock();
-    double time_spent = static_cast<double>(end - begin) / CLOCKS_PER_SEC;
-    std::cout << "Total time: " << time_spent << '\n';
 }
