@@ -8,6 +8,8 @@
 #include "Renderer.h"
 #include "RenderWindow.h"
 
+static Renderer *s_renderer = nullptr;
+
 Renderer::Renderer() {
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW\n";
@@ -18,6 +20,15 @@ Renderer::~Renderer() {
     stopRendering();
     m_renderWindows.clear();
     glfwTerminate();
+}
+
+void Renderer::Init() {
+    s_renderer = new Renderer();
+    s_renderer->run();
+}
+
+Renderer* Renderer::GetInstance() {
+    return s_renderer;
 }
 
 bool Renderer::isRunning() const {

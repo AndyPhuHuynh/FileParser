@@ -64,11 +64,11 @@ public:
     uint32_t rowSize;
     
     explicit Bmp(const std::string& path);
-    int render(Renderer& renderer);
+    int render();
     
 private:
-    std::vector<Point> getPoints();
-    void ParseRowByteOrLessNoCompression(std::vector<Point>& points, float normalizedY);
-    void ParseRow24BitNoCompression(std::vector<Point>& points, float normalizedY);
+    std::shared_ptr<std::vector<Point>> getPoints();
+    void ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, float normalizedY);
+    void ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, float normalizedY);
     void initColorTable();
 };

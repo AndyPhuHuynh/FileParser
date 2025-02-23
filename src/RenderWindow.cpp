@@ -129,7 +129,7 @@ std::future<void> RenderWindow::showWindowAsync() {
     return promise->get_future();
 }
 
-std::future<void> RenderWindow::setBufferDataPointsAsync(const std::vector<Point>& points) {
+std::future<void> RenderWindow::setBufferDataPointsAsync(const std::shared_ptr<std::vector<Point>>& points) {
     auto promise = std::make_shared<std::promise<void>>();
 
     if (m_renderer->onRenderThread()) {
@@ -168,12 +168,12 @@ void RenderWindow::showWindow() {
     glfwShowWindow(m_window);
 }
 
-void RenderWindow::setBufferDataPoints(const std::vector<Point>& points) {
+void RenderWindow::setBufferDataPoints(const std::shared_ptr<std::vector<Point>>& points) {
     makeCurrentContext();
-    int pointsByteSize = static_cast<int>(sizeof(Point) * points.size());
+    int pointsByteSize = static_cast<int>(sizeof(Point) * points->size());
     glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, pointsByteSize, points.data(), GL_STATIC_DRAW);
-    m_vertexCount = static_cast<int>(points.size());
+    glBufferData(GL_ARRAY_BUFFER, pointsByteSize, points->data(), GL_STATIC_DRAW);
+    m_vertexCount = static_cast<int>(points->size());
 }
 
 void RenderWindow::renderPoints() {

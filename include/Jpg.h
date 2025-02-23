@@ -264,6 +264,7 @@ public:
 
 class Mcu {
 public:
+    int qcount = 0;
     static constexpr int dataUnitLength = 64;
     // True = After FDCT, IDCT needs to be performed
     bool postDctMode = true; 
@@ -317,7 +318,7 @@ public:
 private:
     std::vector<std::shared_ptr<Mcu>> mcus;
     ConsumerQueue quantizationQueue;
-    ConsumerQueue idctQuantizationQueue;
+    ConsumerQueue idctQueue;
     ConsumerQueue colorConversionQueue;
     
     // The value of scanIndicies[i] indicates the mcuIndex that scan #i can read up to
@@ -346,7 +347,7 @@ private:
     void readDefineRestartIntervals();
     void readComments();
     void processQuantizationQueue(const std::vector<ScanHeaderComponentSpecification>& scanComps);
-    void processIdctQuantizationQueue();
+    void processIdctQueue();
     void processColorConversionQueue();
     std::shared_ptr<ScanHeader> readScanHeader();
     void readBaselineStartOfScan();
@@ -364,5 +365,5 @@ private:
 public:
     void writeBmp(const std::string& filename) const;
     void printInfo() const;
-    void render(Renderer& renderer) const;
+    void render() const;
 };

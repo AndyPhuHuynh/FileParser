@@ -100,9 +100,9 @@ void Bmp::initColorTable() {
     }
 }
 
-std::vector<Point> Bmp::getPoints() {
-    std::vector<Point> points;
-    points.reserve(static_cast<int>(info.width * info.height));
+std::shared_ptr<std::vector<Point>> Bmp::getPoints() {
+    std::shared_ptr<std::vector<Point>> points = std::make_shared<std::vector<Point>>();
+    points->reserve(static_cast<int>(info.width * info.height));
     file.seekg(header.dataOffset, std::ios::beg);
     
     for (uint32_t y = 0; y < info.height; y++) {
@@ -117,7 +117,7 @@ std::vector<Point> Bmp::getPoints() {
     return points;
 }
 
-void Bmp::ParseRowByteOrLessNoCompression(std::vector<Point>& points, float normalizedY) {
+void Bmp::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, float normalizedY) {
     uint32_t pixelsInRowRead = 0;
     bool allNonPaddingBitsRead = false;
     for (uint32_t byteInRow = 0; byteInRow < rowSize; byteInRow++) {
@@ -149,14 +149,14 @@ void Bmp::ParseRowByteOrLessNoCompression(std::vector<Point>& points, float norm
             }
             Color color = colorTable[index];
 
-            points.emplace_back(normalizedX, normalizedY, color);
+            points->emplace_back(normalizedX, normalizedY, color);
                 
             pixelsInRowRead++;
         }
     }
 }
 
-void Bmp::ParseRow24BitNoCompression(std::vector<Point>& points, float normalizedY) {
+void Bmp::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, float normalizedY) {
     for (uint32_t x = 0; x < rowSize / 3; x++) {
         unsigned char byte;
         float normalizedX = NormalizeToNdc(static_cast<float>(x), static_cast<int>(info.width));
@@ -170,13 +170,13 @@ void Bmp::ParseRow24BitNoCompression(std::vector<Point>& points, float normalize
         color.a = 255.0f;
         color.normalizeColor();
         
-        points.emplace_back(normalizedX, normalizedY, color);
+        points->emplace_back(normalizedX, normalizedY, color);
     }
     uint32_t padding = rowSize % 3;
     file.seekg(padding, std::ios::cur);
 }
 
-int Bmp::render(Renderer& renderer) {
+int Bmp::render() {
     if (rasterEncoding != BmpRasterEncoding::Monochrome &&
         rasterEncoding != BmpRasterEncoding::FourBitNoCompression &&
         rasterEncoding != BmpRasterEncoding::EightBitNoCompression &&
@@ -187,11 +187,11 @@ int Bmp::render(Renderer& renderer) {
         return -1;
     }
     
-    auto windowFuture = renderer.createWindowAsync(static_cast<int>(info.width), static_cast<int>(info.height), "Bmp", RenderMode::Point);
+    auto windowFuture = Renderer::GetInstance()->createWindowAsync(static_cast<int>(info.width), static_cast<int>(info.height), "Bmp", RenderMode::Point);
     
     if (auto window = windowFuture.get().lock()) {
-        window->showWindowAsync();
         window->setBufferDataPointsAsync(getPoints());
+        window->showWindowAsync();
     }
     return 0;
 }

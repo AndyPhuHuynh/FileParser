@@ -989,31 +989,31 @@ void Jpg::processQuantizationQueue(const std::vector<ScanHeaderComponentSpecific
             clock_t end = clock();
             totalTime += (end - begin);
             {
-                std::unique_lock lock(idctQuantizationQueue.mutex);
-                idctQuantizationQueue.queue.push(mcu);
-                idctQuantizationQueue.condition.notify_one();
+                std::unique_lock lock(idctQueue.mutex);
+                idctQueue.queue.push(mcu);
+                idctQueue.condition.notify_one();
             }
         }
         if (quantizationQueue.allProductsAdded && quantizationQueue.queue.empty()) {
             std::cout << "Total time on quantization: " << (totalTime) / CLOCKS_PER_SEC << " seconds\n";
-            std::unique_lock lock(idctQuantizationQueue.mutex);
-            idctQuantizationQueue.allProductsAdded = true;
-            idctQuantizationQueue.condition.notify_all();
+            std::unique_lock lock(idctQueue.mutex);
+            idctQueue.allProductsAdded = true;
+            idctQueue.condition.notify_all();
             break;
         }
     }
 }
 
-void Jpg::processIdctQuantizationQueue() {
+void Jpg::processIdctQueue() {
     static double totalTime = 0.0f;
     while (true) {
-        std::unique_lock idctLock(idctQuantizationQueue.mutex);
-        idctQuantizationQueue.condition.wait(idctLock, [&] {
-            return !idctQuantizationQueue.queue.empty() || idctQuantizationQueue.allProductsAdded;
+        std::unique_lock idctLock(idctQueue.mutex);
+        idctQueue.condition.wait(idctLock, [&] {
+            return !idctQueue.queue.empty() || idctQueue.allProductsAdded;
         });
-        if (!idctQuantizationQueue.queue.empty()) {
-            auto mcu = idctQuantizationQueue.queue.front();
-            idctQuantizationQueue.queue.pop();
+        if (!idctQueue.queue.empty()) {
+            auto mcu = idctQueue.queue.front();
+            idctQueue.queue.pop();
             idctLock.unlock();
             clock_t begin = clock();
             mcu->performInverseDCT();
@@ -1025,7 +1025,7 @@ void Jpg::processIdctQuantizationQueue() {
                 colorConversionQueue.condition.notify_one();
             }
         }
-        if (idctQuantizationQueue.allProductsAdded && idctQuantizationQueue.queue.empty()) {
+        if (idctQueue.allProductsAdded && idctQueue.queue.empty()) {
             std::cout << "Total time on idct: " << (totalTime) / CLOCKS_PER_SEC << " seconds\n";
             std::unique_lock lock(colorConversionQueue.mutex);
             colorConversionQueue.allProductsAdded = true;
@@ -1312,7 +1312,7 @@ void Jpg::decodeBaseLine() {
     int prevDc[3] = {};
     
     std::thread quantizationThread = std::thread([&] {processQuantizationQueue(scanHeader->componentSpecifications);});
-    std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
+    std::thread idctThread = std::thread([&] {processIdctQueue();});
     std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
     
     for (int i = 0; i < frameHeader.mcuImageHeight * frameHeader.mcuImageWidth; i++) {
@@ -1350,12 +1350,13 @@ void Jpg::decodeProgressive() {
         for (int j = static_cast<int>(scanHeaders.size()) - 1; j >= 0; j--) {
             if (scanHeaders[j]->containsComponentId(i)) {
                 scanHeaderComponents.push_back(scanHeaders[j]->getComponent(i));
+                break;
             }
         }
     }
                     
     std::thread quantizationThread = std::thread([&] {processQuantizationQueue(scanHeaderComponents);});
-    std::thread idctThread = std::thread([&] {processIdctQuantizationQueue();});
+    std::thread idctThread = std::thread([&] {processIdctQueue();});
     std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
                     
     for (auto &thread : threads) {
@@ -1531,15 +1532,15 @@ void Jpg::writeBmp(const std::string& filename) const {
     std::cout << "Time to write: " << static_cast<double>(end - begin) / CLOCKS_PER_SEC << " seconds\n";
 }
 
-void Jpg::render(Renderer& renderer) const {
-    std::vector<Point> points;
-    points.reserve(static_cast<unsigned int>(frameHeader.width * frameHeader.height));
+void Jpg::render() const {
+    std::shared_ptr<std::vector<Point>> points = std::make_shared<std::vector<Point>>();
+    points->reserve(static_cast<unsigned int>(frameHeader.width * frameHeader.height));
     // For every mcu
     for (int mcuIndex = 0; mcuIndex < static_cast<int>(mcus.size()); mcuIndex++) {
         int mcuX = mcuIndex % frameHeader.mcuImageWidth;
         int mcuY = mcuIndex / frameHeader.mcuImageWidth;
         
-        // // For every color block in the Mcu
+        // For every color block in the Mcu
         for (int blockY = 0; blockY < frameHeader.maxVerticalSample; blockY++) {
             for (int blockX = 0; blockX < frameHeader.maxHorizontalSample; blockX++) {
                 constexpr int blockSideLength = 8;
@@ -1564,17 +1565,17 @@ void Jpg::render(Renderer& renderer) const {
                         float normalX = NormalizeToNdc(static_cast<float>(pointX), frameHeader.width);
                         float normalY = NormalizeToNdc(static_cast<float>(pointY), frameHeader.height) * -1;
                         
-                        points.emplace_back(normalX, normalY, color);
+                        points->emplace_back(normalX, normalY, color);
                     }
                 }
             }
         }
     }
 
-    auto windowFuture = renderer.createWindowAsync(frameHeader.width, frameHeader.height, "Jpeg", RenderMode::Point);
-    
+    auto windowFuture = Renderer::GetInstance()->createWindowAsync(frameHeader.width, frameHeader.height, "Jpeg", RenderMode::Point);
+
     if (auto window = windowFuture.get().lock()) {
-        window->showWindowAsync();
         window->setBufferDataPointsAsync(points);
+        window->showWindowAsync();
     }
 }

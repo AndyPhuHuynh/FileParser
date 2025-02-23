@@ -30,7 +30,7 @@ public:
     std::future<void> windowShouldCloseAsync();
     std::future<void> hideWindowAsync();
     std::future<void> showWindowAsync();
-    std::future<void> setBufferDataPointsAsync(const std::vector<Point>& points);
+    std::future<void> setBufferDataPointsAsync(const std::shared_ptr<std::vector<Point>>& points);
     void renderFrame();
 private:
     friend class Renderer;
@@ -50,7 +50,7 @@ private:
     bool windowShouldClose();
     void hideWindow();
     void showWindow();
-    void setBufferDataPoints(const std::vector<Point>& points);
+    void setBufferDataPoints(const std::shared_ptr<std::vector<Point>>& points);
     
     void (RenderWindow::*m_render)() = nullptr;
     void renderPoints();

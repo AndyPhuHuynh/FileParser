@@ -13,23 +13,24 @@ class RenderWindow;
 
 class Renderer {
 public:
-    Renderer();
+    static void Init();
+    static Renderer* GetInstance();
+    
     Renderer(Renderer const&) = delete;
     Renderer& operator=(Renderer const&) = delete;
     Renderer(Renderer&&) = delete;
     Renderer& operator=(Renderer&&) = delete;
-    ~Renderer();
-
+    
     bool isRunning() const;
     bool onRenderThread() const;
 
     std::future<std::weak_ptr<RenderWindow>> createWindowAsync(int width, int height, const std::string& title, RenderMode renderMode);
     std::future<void> removeWindowAsync(const std::shared_ptr<RenderWindow>& renderWindow);
     std::future<void> removeWindowAsync(const std::weak_ptr<RenderWindow>& renderWindow);
-    // Initializes a separate thread where the renderer can run in the background rendering all windows
-    void run();
-    void stopRendering();
 private:
+    Renderer();
+    ~Renderer();
+    
     friend class RenderWindow;
     bool m_glewInitialized = false;
     std::vector<std::shared_ptr<RenderWindow>> m_renderWindows;
@@ -40,6 +41,9 @@ private:
     std::thread::id m_renderThreadId;
 
     void initializeGlew();
+    // Initializes a separate thread where the renderer can run in the background rendering all windows
+    void run();
+    void stopRendering();
     
     std::weak_ptr<RenderWindow> createWindow(int width, int height, const std::string& title, RenderMode renderMode);
     void removeWindow(const std::shared_ptr<RenderWindow>& renderWindow);
