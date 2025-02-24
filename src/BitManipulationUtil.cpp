@@ -3,22 +3,26 @@
 #include <cstdint>
 #include <sstream>
 
-unsigned char GetBitFromLeft(const unsigned char byte, const int pos) {
-    if (pos < 0 || pos >= 8) {
+template<typename T>
+unsigned char GetBitFromLeft(const T& value, const int pos) {
+    int maxPos = sizeof(T) * 8 - 1;
+    if (pos < 0 || pos > maxPos) {
         std::ostringstream message;
         message << "Error in GetBit: position" << pos << " is out of bounds";
         throw std::invalid_argument(message.str());
     }
-    return (byte >> (7 - pos)) & 1;
+    return (value >> (maxPos - pos)) & 1;
 }
 
-unsigned char GetBitFromRight(const uint16_t word, const int pos) {
-    if (pos < 0 || pos >= 16) {
+template <typename T>
+unsigned char GetBitFromRight(const T& value, int pos) {
+    int maxPos = sizeof(T) * 8 - 1;
+    if (pos < 0 || pos > maxPos) {
         std::ostringstream message;
         message << "Error in GetBit: position" << pos << " is out of bounds";
         throw std::invalid_argument(message.str());
     }
-    return static_cast<uint8_t>(word >> pos) & 1;
+    return static_cast<uint8_t>(value >> pos) & 1;
 }
 
 unsigned char GetNibble(const unsigned char byte, const int pos) {
@@ -39,6 +43,18 @@ uint16_t SwapBytes(const uint16_t value) {
 
 bool AreFloatsEqual(const float a, const float b, const float epsilon) {
     return std::abs(a - b) < epsilon;
+}
+
+void PutInt(uint8_t*& bufferPos, const int value) {
+    *bufferPos++ = static_cast<uint8_t>(value >>  0);
+    *bufferPos++ = static_cast<uint8_t>(value >>  8);
+    *bufferPos++ = static_cast<uint8_t>(value >> 16);
+    *bufferPos++ = static_cast<uint8_t>(value >> 24);
+}
+
+void PutShort(uint8_t*& bufferPos, const int value) {
+    *bufferPos++ = static_cast<unsigned char>(value >> 0);
+    *bufferPos++ = static_cast<unsigned char>(value >> 8);
 }
 
 BitReader::BitReader(const std::vector<uint8_t>& bytes) {
@@ -117,7 +133,7 @@ uint16_t BitReader::getWordConstant() const {
 }
 
 void BitReader::skipBits(const int numBits) {
-    bitPosition += numBits;
+    bitPosition += static_cast<uint8_t>(numBits);
     byteIndex += bitPosition / 8;
     bitPosition %= 8;
 }

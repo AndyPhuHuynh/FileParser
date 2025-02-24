@@ -22,7 +22,7 @@ fileUtils::FileType fileUtils::GetFileType(const std::string& filePath) {
         return FileType::Bmp;
     }
     if (CheckSignature(file, jpegSig, 3)) {
-        return FileType::Jpg;
+        return FileType::Jpeg;
     }
 
     file.close();

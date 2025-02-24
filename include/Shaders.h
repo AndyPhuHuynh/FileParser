@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include <string>
 
-namespace shaders {
+namespace Shaders {
     inline std::string PointVertexShader = R"(
         #version 330 core
 

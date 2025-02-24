@@ -1,14 +1,16 @@
 ﻿#include "ShaderUtil.h"
+
 #include <iostream>
 #include <fstream>
 #include <vector>
+
 #include <GL/glew.h>
 
-float NormalizeToNdc(const float value, const int span) {
+float Shaders::Util::NormalizeToNdc(const float value, const int span) {
     return (value / static_cast<float>(span)) * 2 - 1;
 }
 
-unsigned int CompileShader(const unsigned int shaderType, const std::string& source) {
+unsigned int Shaders::Util::CompileShader(const unsigned int shaderType, const std::string& source) {
     unsigned int id = glCreateShader(shaderType);
     const char* src = source.c_str();
     glShaderSource(id, 1, &src, nullptr);
@@ -30,7 +32,7 @@ unsigned int CompileShader(const unsigned int shaderType, const std::string& sou
     return id;
 }
 
-unsigned int CreateShader(const std::string& vertexShader, const std::string& fragmentShader) {
+unsigned int Shaders::Util::CreateShader(const std::string& vertexShader, const std::string& fragmentShader) {
     unsigned int program = glCreateProgram();
     unsigned int vs = CompileShader(GL_VERTEX_SHADER, vertexShader);
     unsigned int fs = CompileShader(GL_FRAGMENT_SHADER, fragmentShader);

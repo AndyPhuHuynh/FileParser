@@ -6,8 +6,8 @@
 
 #include "BitManipulationUtil.h"
 #include "Bmp.h"
-#include "Renderer.h"
-#include "RenderWindow.h"
+#include "Gui/Renderer.h"
+#include "Gui/RenderWindow.h"
 #include "ShaderUtil.h"
 
 BmpHeader BmpHeader::getHeaderFromFile(std::ifstream& file) {
@@ -106,7 +106,7 @@ std::shared_ptr<std::vector<Point>> Bmp::getPoints() {
     file.seekg(header.dataOffset, std::ios::beg);
     
     for (uint32_t y = 0; y < info.height; y++) {
-        float normalizedY = NormalizeToNdc(static_cast<float>(y), static_cast<int>(info.height));
+        float normalizedY = Shaders::Util::NormalizeToNdc(static_cast<float>(y), static_cast<int>(info.height));
         if (rasterEncoding == BmpRasterEncoding::TwentyFourBitNoCompression) {
             ParseRow24BitNoCompression(points, normalizedY);
         }
@@ -137,7 +137,7 @@ void Bmp::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Poin
             }
                 
             int x = static_cast<int>(byteInRow) * pixelsPerByte + i;
-            float normalizedX = NormalizeToNdc(static_cast<float>(x), static_cast<int>(info.width));
+            float normalizedX = Shaders::Util::NormalizeToNdc(static_cast<float>(x), static_cast<int>(info.width));
 
             unsigned char index;
             if (rasterEncoding == BmpRasterEncoding::Monochrome) {
@@ -159,7 +159,7 @@ void Bmp::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Poin
 void Bmp::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, float normalizedY) {
     for (uint32_t x = 0; x < rowSize / 3; x++) {
         unsigned char byte;
-        float normalizedX = NormalizeToNdc(static_cast<float>(x), static_cast<int>(info.width));
+        float normalizedX = Shaders::Util::NormalizeToNdc(static_cast<float>(x), static_cast<int>(info.width));
         Color color;
         file.read(reinterpret_cast<char*>(&byte), 1);
         color.b = byte;
@@ -187,7 +187,7 @@ int Bmp::render() {
         return -1;
     }
     
-    auto windowFuture = Renderer::GetInstance()->createWindowAsync(static_cast<int>(info.width), static_cast<int>(info.height), "Bmp", RenderMode::Point);
+    auto windowFuture = Gui::Renderer::GetInstance()->createWindowAsync(static_cast<int>(info.width), static_cast<int>(info.height), "Bmp", Gui::RenderMode::Point);
     
     if (auto window = windowFuture.get().lock()) {
         window->setBufferDataPointsAsync(getPoints());

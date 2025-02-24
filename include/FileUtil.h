@@ -10,7 +10,7 @@ namespace fileUtils {
     enum class FileType : uint8_t {
         None = 0,
         Bmp,
-        Jpg,
+        Jpeg,
     };
 
     FileType GetFileType(const std::string& filePath);

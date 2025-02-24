@@ -8,7 +8,9 @@
 
 #include "Bmp.h"
 #include "FileUtil.h"
-#include "Jpg.h"
+#include "Jpeg/JpegBmpConverter.h"
+#include "Jpeg/JpegImage.h"
+#include "Jpeg/JpegRenderer.h"
 
 /**
  * @brief Tokenizes a string based on a delimiter
@@ -50,6 +52,7 @@ static std::vector<std::string> SplitString(const std::string& str, const char d
  */
 static void Render(const std::vector<std::string>& args) {
     using namespace fileUtils;
+    using namespace ImageProcessing;
     if (args.size() != 2) {
         std::cerr << "Usage: render <filename>\n";
         return;
@@ -70,9 +73,9 @@ static void Render(const std::vector<std::string>& args) {
         bmp.render();
         break;
     }
-    case FileType::Jpg: {
-        Jpg jpg(filepath);
-        jpg.render();
+    case FileType::Jpeg: {
+        Jpeg::JpegImage jpeg(filepath);
+        Jpeg::Renderer::RenderJpeg(jpeg);
         break;
     }
     case FileType::None:
@@ -89,6 +92,7 @@ static void Render(const std::vector<std::string>& args) {
  */
 static void Convert(const std::vector<std::string>& args) {
     using namespace fileUtils;
+    using namespace ImageProcessing;
 
     if (args.size() != 3 && args.size() != 4) {
         std::cerr << "Usage: convert <filename> <new format> [<new filepath>] (default: <filename>.<new format>)\n";
@@ -104,10 +108,11 @@ static void Convert(const std::vector<std::string>& args) {
         std::cout << "Bmp conversion to other files not supported yet\n";
         break;
     }
-    case FileType::Jpg: {
-        Jpg jpg(filepath);
+    case FileType::Jpeg: {
+        Jpeg::JpegImage jpeg(filepath);
         if (format == "bmp") {
-            jpg.writeBmp(newFilepath);
+            Jpeg::Converter::WriteJpegAsBmp(jpeg, newFilepath);
+            // jpeg.writeBmp(newFilepath);
         } else {
             std::cout << "Only conversion from jpg to bmp is supported\n";
         }
@@ -124,7 +129,7 @@ static std::unordered_map<std::string, std::function<void(const std::vector<std:
     {"convert", Convert}
 };
 
-void cli::RunCli() {
+void Cli::RunCli() {
     while (true) {
         std::string input;
         std::cout << "Enter command: ";
@@ -138,7 +143,7 @@ void cli::RunCli() {
         if (commands.contains(tokens[0])) {
             auto cmd = commands[tokens[0]];
             cmd(tokens);
-        } else if (tokens[0] == "exit") {
+        } else if (tokens[0] == "exit" || tokens[0] == "quit") {
             break;
         }
         else {

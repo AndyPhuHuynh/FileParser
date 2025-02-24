@@ -6,7 +6,7 @@
 #include <fstream>
 #include <vector>
 
-#include "Renderer.h"
+#include "Gui/Renderer.h"
 
 enum class BmpRasterEncoding : std::uint8_t {
     None,

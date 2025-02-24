@@ -1,5 +1,5 @@
 ﻿#pragma once
 
-namespace cli {
+namespace Cli {
     void RunCli();
 }

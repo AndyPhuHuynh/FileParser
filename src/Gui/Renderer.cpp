@@ -5,41 +5,41 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
-#include "Renderer.h"
-#include "RenderWindow.h"
+#include "Gui/Renderer.h"
+#include "Gui/RenderWindow.h"
 
-static Renderer *s_renderer = nullptr;
+static Gui::Renderer *s_renderer = nullptr;
 
-Renderer::Renderer() {
+Gui::Renderer::Renderer() {
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW\n";
     }
 }
 
-Renderer::~Renderer() {
+Gui::Renderer::~Renderer() {
     stopRendering();
     m_renderWindows.clear();
     glfwTerminate();
 }
 
-void Renderer::Init() {
+void Gui::Renderer::Init() {
     s_renderer = new Renderer();
     s_renderer->run();
 }
 
-Renderer* Renderer::GetInstance() {
+Gui::Renderer* Gui::Renderer::GetInstance() {
     return s_renderer;
 }
 
-bool Renderer::isRunning() const {
+bool Gui::Renderer::isRunning() const {
     return m_running;
 }
 
-bool Renderer::onRenderThread() const {
+bool Gui::Renderer::onRenderThread() const {
     return std::this_thread::get_id() == m_renderThreadId;
 }
 
-void Renderer::initializeGlew() {
+void Gui::Renderer::initializeGlew() {
     if (glewInit() != GLEW_OK) {
         std::cerr << "Failed to initialize GLEW" << '\n';
         std::terminate();
@@ -49,7 +49,7 @@ void Renderer::initializeGlew() {
     }
 }
 
-std::future<std::weak_ptr<RenderWindow>> Renderer::createWindowAsync(
+std::future<std::weak_ptr<Gui::RenderWindow>> Gui::Renderer::createWindowAsync(
     const int width, const int height, const std::string& title, const RenderMode renderMode) {
     auto promise = std::make_shared<std::promise<std::weak_ptr<RenderWindow>>>();
 
@@ -64,7 +64,7 @@ std::future<std::weak_ptr<RenderWindow>> Renderer::createWindowAsync(
     return promise->get_future();
 }
 
-std::future<void> Renderer::removeWindowAsync(const std::shared_ptr<RenderWindow>& renderWindow) {
+std::future<void> Gui::Renderer::removeWindowAsync(const std::shared_ptr<RenderWindow>& renderWindow) {
     auto promise = std::make_shared<std::promise<void>>();
 
     if (std::this_thread::get_id() == m_renderThreadId) {
@@ -80,7 +80,7 @@ std::future<void> Renderer::removeWindowAsync(const std::shared_ptr<RenderWindow
     return promise->get_future();
 }
 
-std::future<void> Renderer::removeWindowAsync(const std::weak_ptr<RenderWindow>& renderWindow) {
+std::future<void> Gui::Renderer::removeWindowAsync(const std::weak_ptr<RenderWindow>& renderWindow) {
     auto promise = std::make_shared<std::promise<void>>();
 
     if (std::this_thread::get_id() == m_renderThreadId) {
@@ -96,22 +96,22 @@ std::future<void> Renderer::removeWindowAsync(const std::weak_ptr<RenderWindow>&
     return promise->get_future();
 }
 
-std::weak_ptr<RenderWindow> Renderer::createWindow(const int width, const int height, const std::string& title, const RenderMode renderMode) {
+std::weak_ptr<Gui::RenderWindow> Gui::Renderer::createWindow(const int width, const int height, const std::string& title, const RenderMode renderMode) {
     m_renderWindows.emplace_back(std::make_shared<RenderWindow>(this, width, height, title, renderMode));
     return m_renderWindows.back();
 }
 
-void Renderer::removeWindow(const std::shared_ptr<RenderWindow>& renderWindow) {
+void Gui::Renderer::removeWindow(const std::shared_ptr<RenderWindow>& renderWindow) {
     std::erase(m_renderWindows, renderWindow);
 }
 
-void Renderer::removeWindow(const std::weak_ptr<RenderWindow>& renderWindow) {
+void Gui::Renderer::removeWindow(const std::weak_ptr<RenderWindow>& renderWindow) {
     if (auto renderWindowShared = renderWindow.lock()) {
         std::erase(m_renderWindows, renderWindowShared);
     }
 }
 
-void Renderer::run() {
+void Gui::Renderer::run() {
     m_running = true;
     m_renderThread = std::thread([&] {
         processEventLoop();
@@ -120,11 +120,11 @@ void Renderer::run() {
     m_renderThread.detach();
 }
 
-void Renderer::stopRendering() {
+void Gui::Renderer::stopRendering() {
     m_running = false;
 }
 
-void Renderer::processEventLoop() {
+void Gui::Renderer::processEventLoop() {
     while (m_running) {
         // Handle functions queue
         std::queue<std::function<void()>> functions;
@@ -151,7 +151,7 @@ void Renderer::processEventLoop() {
     }
 }
 
-void Renderer::queueFunction(const std::function<void()>& function) {
+void Gui::Renderer::queueFunction(const std::function<void()>& function) {
     std::unique_lock lock(m_functionQueueMutex);
     m_functionQueue.push(function);
 }

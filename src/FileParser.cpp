@@ -1,12 +1,12 @@
 #include <iostream>
 
 #include "Cli.h"
-#include "Renderer.h"
+#include "Gui/Renderer.h"
 
 // TODO: Separate renderer and conversion functions into separate modules
-int main(const int argc, char* argv[]) {
-    Renderer::Init();
-    cli::RunCli();
+int main() {
+    Gui::Renderer::Init();
+    Cli::RunCli();
     std::cout << "End main\n";
     return 0;
 }
