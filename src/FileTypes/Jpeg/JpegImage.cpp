@@ -1441,6 +1441,7 @@ void ImageProcessing::Jpeg::JpegImage::printInfo() const {
     }
 }
 
+// TODO: Make progressive jpegs progressively display
 ImageProcessing::Jpeg::JpegImage::JpegImage(const std::string& path) {
     file = std::ifstream(path, std::ifstream::binary);
     readFile();

@@ -97,7 +97,7 @@ std::future<void> Gui::Renderer::removeWindowAsync(const std::weak_ptr<RenderWin
 }
 
 std::weak_ptr<Gui::RenderWindow> Gui::Renderer::createWindow(const int width, const int height, const std::string& title, const RenderMode renderMode) {
-    m_renderWindows.emplace_back(std::make_shared<RenderWindow>(this, width, height, title, renderMode));
+    m_renderWindows.emplace_back(std::make_shared<RenderWindow>(width, height, title, renderMode));
     return m_renderWindows.back();
 }
 
