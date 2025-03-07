@@ -8,7 +8,6 @@
 #include "Bmp.h"
 #include "Gui/Renderer.h"
 #include "Gui/RenderWindow.h"
-#include "ShaderUtil.h"
 
 BmpHeader BmpHeader::getHeaderFromFile(std::ifstream& file) {
     BmpHeader header;
@@ -105,19 +104,18 @@ std::shared_ptr<std::vector<Point>> Bmp::getPoints() {
     points->reserve(static_cast<int>(info.width * info.height));
     file.seekg(header.dataOffset, std::ios::beg);
     
-    for (uint32_t y = 0; y < info.height; y++) {
-        float normalizedY = Shaders::Util::NormalizeToNdc(static_cast<float>(y), static_cast<int>(info.height));
+    for (int y = static_cast<int>(info.height) - 1; y >= 0; y--) {
         if (rasterEncoding == BmpRasterEncoding::TwentyFourBitNoCompression) {
-            ParseRow24BitNoCompression(points, normalizedY);
+            ParseRow24BitNoCompression(points, static_cast<float>(y));
         }
         else {
-            ParseRowByteOrLessNoCompression(points, normalizedY);
+            ParseRowByteOrLessNoCompression(points, static_cast<float>(y));
         }
     }
     return points;
 }
 
-void Bmp::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, float normalizedY) {
+void Bmp::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, float y) {
     uint32_t pixelsInRowRead = 0;
     bool allNonPaddingBitsRead = false;
     for (uint32_t byteInRow = 0; byteInRow < rowSize; byteInRow++) {
@@ -137,8 +135,6 @@ void Bmp::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Poin
             }
                 
             int x = static_cast<int>(byteInRow) * pixelsPerByte + i;
-            float normalizedX = Shaders::Util::NormalizeToNdc(static_cast<float>(x), static_cast<int>(info.width));
-
             unsigned char index;
             if (rasterEncoding == BmpRasterEncoding::Monochrome) {
                 index = GetBitFromLeft(byte, i);
@@ -149,17 +145,16 @@ void Bmp::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Poin
             }
             Color color = colorTable[index];
 
-            points->emplace_back(normalizedX, normalizedY, color);
+            points->emplace_back(x, y, color);
                 
             pixelsInRowRead++;
         }
     }
 }
 
-void Bmp::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, float normalizedY) {
+void Bmp::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, float y) {
     for (uint32_t x = 0; x < rowSize / 3; x++) {
         unsigned char byte;
-        float normalizedX = Shaders::Util::NormalizeToNdc(static_cast<float>(x), static_cast<int>(info.width));
         Color color;
         file.read(reinterpret_cast<char*>(&byte), 1);
         color.b = byte;
@@ -170,7 +165,7 @@ void Bmp::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& 
         color.a = 255.0f;
         color.normalizeColor();
         
-        points->emplace_back(normalizedX, normalizedY, color);
+        points->emplace_back(x, y, color);
     }
     uint32_t padding = rowSize % 3;
     file.seekg(padding, std::ios::cur);

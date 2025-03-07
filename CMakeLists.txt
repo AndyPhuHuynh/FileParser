@@ -23,6 +23,7 @@ target_include_directories(FileParser PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/dependencies/glew-2.1.0/include
     ${CMAKE_SOURCE_DIR}/dependencies/GLFW/include
+    ${CMAKE_SOURCE_DIR}/dependencies/glm/include
     ${CMAKE_SOURCE_DIR}/dependencies/simde/include)
 
 add_compile_definitions(GLEW_STATIC)

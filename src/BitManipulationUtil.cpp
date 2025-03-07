@@ -3,28 +3,6 @@
 #include <cstdint>
 #include <sstream>
 
-template<typename T>
-unsigned char GetBitFromLeft(const T& value, const int pos) {
-    int maxPos = sizeof(T) * 8 - 1;
-    if (pos < 0 || pos > maxPos) {
-        std::ostringstream message;
-        message << "Error in GetBit: position" << pos << " is out of bounds";
-        throw std::invalid_argument(message.str());
-    }
-    return (value >> (maxPos - pos)) & 1;
-}
-
-template <typename T>
-unsigned char GetBitFromRight(const T& value, int pos) {
-    int maxPos = sizeof(T) * 8 - 1;
-    if (pos < 0 || pos > maxPos) {
-        std::ostringstream message;
-        message << "Error in GetBit: position" << pos << " is out of bounds";
-        throw std::invalid_argument(message.str());
-    }
-    return static_cast<uint8_t>(value >> pos) & 1;
-}
-
 unsigned char GetNibble(const unsigned char byte, const int pos) {
     if (pos < 0 || pos > 1) {
         std::ostringstream message;

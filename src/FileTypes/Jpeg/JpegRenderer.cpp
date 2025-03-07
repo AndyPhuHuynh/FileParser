@@ -6,7 +6,6 @@
 #include "Gui/RenderWindow.h"
 #include "Jpeg/JpegImage.h"
 #include "Point.h"
-#include "ShaderUtil.h"
 
 void ImageProcessing::Jpeg::Renderer::RenderJpeg(const JpegImage& jpeg) {
     std::shared_ptr<std::vector<Point>> points = std::make_shared<std::vector<Point>>();
@@ -38,10 +37,7 @@ void ImageProcessing::Jpeg::Renderer::RenderJpeg(const JpegImage& jpeg) {
                             B[colorY * blockSideLength + colorX]);
                         color.normalizeColor();
                         
-                        float normalX = Shaders::Util::NormalizeToNdc(static_cast<float>(pointX), jpeg.info.width);
-                        float normalY = Shaders::Util::NormalizeToNdc(static_cast<float>(pointY), jpeg.info.height) * -1;
-                        
-                        points->emplace_back(normalX, normalY, color);
+                        points->emplace_back(static_cast<float>(pointX), static_cast<float>(pointY), color);
                     }
                 }
             }

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <sstream>
 #include <vector>
 
 /**
@@ -10,15 +11,31 @@
  * @return The bit located pos bits from the left
  */
 template<typename T>
-unsigned char GetBitFromLeft(const T& value, int pos);
+unsigned char GetBitFromLeft(const T& value, const int pos) {
+    int maxPos = sizeof(T) * 8 - 1;
+    if (pos < 0 || pos > maxPos) {
+        std::ostringstream message;
+        message << "Error in GetBit: position" << pos << " is out of bounds";
+        throw std::invalid_argument(message.str());
+    }
+    return (value >> (maxPos - pos)) & 1;
+}
 
 /**
  * @param value The value from which to extract a bit
  * @param pos Position from the leftmost bit
  * @return The bit located pos bits from the right
  */
-template<typename T>
-unsigned char GetBitFromRight(const T& value, int pos);
+template <typename T>
+unsigned char GetBitFromRight(const T& value, int pos) {
+    int maxPos = sizeof(T) * 8 - 1;
+    if (pos < 0 || pos > maxPos) {
+        std::ostringstream message;
+        message << "Error in GetBit: position" << pos << " is out of bounds";
+        throw std::invalid_argument(message.str());
+    }
+    return static_cast<uint8_t>(value >> pos) & 1;
+}
 
 /**
  * @brief Extracts a nibble from a byte.

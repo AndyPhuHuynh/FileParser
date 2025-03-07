@@ -5,6 +5,7 @@
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 
 #include "Renderer.h"
 #include "Point.h"
@@ -13,12 +14,15 @@ namespace Gui {
     class Renderer;
 
     struct PanSettings {
-        float startPanX = 0;            
-        float startPanY = 0;            
+        float lastMouseY = 0;            
+        float lastMouseX = 0;            
         float xOffset = 0;              
         float yOffset = 0;              
-        GLint xOffsetUniform = -1;      
-        GLint yOffsetUniform = -1;      
+    };
+
+    struct ZoomSettings {
+        float xScale = 1;
+        float yScale = 1;
     };
     
     class RenderWindow {
@@ -49,11 +53,17 @@ namespace Gui {
 
         bool m_isDraggingMouse = false;
         PanSettings m_panSettings;
+        ZoomSettings m_zoomSettings;
+
+        glm::mat4 m_projectionMatrix = glm::mat4(1.0f);
+        glm::mat4 m_viewMatrix = glm::mat4(1.0f);
+        glm::mat4 m_modelMatrix = glm::mat4(1.0f);
         
         RenderMode m_renderMode = RenderMode::Point;
         unsigned int m_shaderProgram = 0;
         unsigned int m_vertexBuffer = 0;
         int m_vertexCount = 0;
+        GLint m_mvpUniform = -1;
 
         void makeCurrentContext();
         bool windowShouldClose();
@@ -63,6 +73,11 @@ namespace Gui {
         static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
         static void cursorPositionCallback(GLFWwindow* window, double xPos, double yPos);
         void setMouseCallbacksForPanning();
+
+        static void keyboardCallbacks(GLFWwindow* window, int key, int scancode, int action, int mods);
+        void setKeyboardCallback();
+
+        void updateMVP();
         
         void setBufferDataPoints(const std::shared_ptr<std::vector<Point>>& points);
         

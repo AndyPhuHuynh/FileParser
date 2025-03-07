@@ -43,7 +43,7 @@ namespace Gui {
         std::queue<std::function<void()>> m_functionQueue;
         std::thread m_renderThread;
         std::thread::id m_renderThreadId;
-        RenderWindow *m_currentWindow;
+        RenderWindow *m_currentWindow = nullptr;
         
         void initializeGlew();
         // Initializes a separate thread where the renderer can run in the background rendering all windows

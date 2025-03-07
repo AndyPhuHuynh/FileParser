@@ -5,8 +5,7 @@ namespace Shaders {
     inline std::string PointVertexShader = R"(
         #version 330 core
 
-        uniform float xOffset;
-        uniform float yOffset;
+        uniform mat4 u_mvp;
 
         layout(location = 0) in vec2 position;
         layout(location = 1) in vec4 colorToDraw;
@@ -14,9 +13,7 @@ namespace Shaders {
         out vec4 colorToSend;
 
         void main() {
-            float x = position.x + float(xOffset);
-            float y = position.y + float(yOffset);
-            gl_Position = vec4(x, y, 0.0, 1.0);
+            gl_Position = u_mvp * vec4(position, 0.0, 1.0);
             colorToSend = colorToDraw;
         }
     )";

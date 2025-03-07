@@ -1,12 +1,16 @@
 ﻿#include "Gui/RenderWindow.h"
 
+#include <iostream>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
-#include "ShaderUtil.h"
 #include "Gui/Renderer.h"
 #include "Point.h"
 #include "Shaders.h"
+#include "ShaderUtil.h"
 
 Gui::RenderWindow::RenderWindow(const int width, const int height, std::string title, const RenderMode renderMode)
     : m_title(std::move(title)), m_width(width), m_height(height) {
@@ -27,11 +31,21 @@ Gui::RenderWindow::RenderWindow(const int width, const int height, std::string t
     glViewport(0, 0, width, height);
     setRenderMode(renderMode);
     setMouseCallbacksForPanning();
+    setKeyboardCallback();
+
+    // Disable VSync
+    glfwSwapInterval(0);
+    
+    m_projectionMatrix = glm::ortho(0.0f, static_cast<float>(m_width), static_cast<float>(m_height), 0.0f);
 }
 
 Gui::RenderWindow::RenderWindow(RenderWindow&& other) noexcept
     : m_title(std::move(other.m_title)), m_width(other.m_width), m_height(other.m_height),
-    m_window(other.m_window), m_visible(other.m_visible), m_renderMode(other.m_renderMode), m_shaderProgram(other.m_shaderProgram) {
+    m_window(other.m_window), m_visible(other.m_visible), m_isDraggingMouse(other.m_isDraggingMouse),
+    m_panSettings(other.m_panSettings), m_zoomSettings(other.m_zoomSettings),
+    m_renderMode(other.m_renderMode), m_shaderProgram(other.m_shaderProgram),
+    m_vertexBuffer(other.m_vertexBuffer),
+    m_vertexCount(other.m_vertexCount) {
     other.m_window = nullptr;
     other.m_shaderProgram = 0;
 }
@@ -45,7 +59,16 @@ Gui::RenderWindow& Gui::RenderWindow::operator=(RenderWindow&& other) noexcept {
         m_width = other.m_width;
         m_height = other.m_height;
         m_window = other.m_window;
+        m_visible = other.m_visible;
+
+        m_isDraggingMouse = other.m_isDraggingMouse;
+        m_panSettings = other.m_panSettings;
+        m_zoomSettings = other.m_zoomSettings;
+
+        m_renderMode = other.m_renderMode;
         m_shaderProgram = other.m_shaderProgram;
+        m_vertexBuffer = other.m_vertexBuffer;
+        m_vertexCount = other.m_vertexCount;
         
         other.m_window = nullptr;
         other.m_shaderProgram = 0;
@@ -65,17 +88,18 @@ void Gui::RenderWindow::setRenderMode(const RenderMode mode) {
     }
     switch (mode) {
     case RenderMode::Point:
-        m_shaderProgram = Shaders::Util::CreateShader(Shaders::PointVertexShader, Shaders::PointFragmentShader);
+        m_shaderProgram = Shaders::Util::CreateShader(Shaders::PointVertexShader, Shaders::PointFragmentShader);\
+        glUseProgram(m_shaderProgram);
+        
         glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Point), nullptr);
         glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Point), reinterpret_cast<void*>(2 * sizeof(float)));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
-        m_render = &Gui::RenderWindow::renderPoints;
-        m_panSettings.xOffsetUniform = glGetUniformLocation(m_shaderProgram, "xOffset");
-        m_panSettings.yOffsetUniform = glGetUniformLocation(m_shaderProgram, "yOffset");
+        m_render = &RenderWindow::renderPoints;
+
+        m_mvpUniform = glGetUniformLocation(m_shaderProgram, "u_mvp");
     }
-    glUseProgram(m_shaderProgram);
 }
 
 bool Gui::RenderWindow::isVisible() {
@@ -86,11 +110,11 @@ std::future<void> Gui::RenderWindow::windowShouldCloseAsync() {
     auto promise = std::make_shared<std::promise<void>>();
 
     if (Renderer::GetInstance()->onRenderThread()) {
-        windowShouldCloseAsync();
+        windowShouldClose();
         promise->set_value();
     } else {
         Renderer::GetInstance()->queueFunction([this, promise] {
-            windowShouldCloseAsync();
+            windowShouldClose();
             promise->set_value();
         });
     }
@@ -147,6 +171,7 @@ std::future<void> Gui::RenderWindow::setBufferDataPointsAsync(const std::shared_
 }
 
 void Gui::RenderWindow::renderFrame() {
+    updateMVP();
     (this->*m_render)();
 }
 
@@ -159,7 +184,6 @@ bool Gui::RenderWindow::windowShouldClose() {
     return glfwWindowShouldClose(m_window);
 }
 
-
 void Gui::RenderWindow::hideWindow() {
     m_visible = false;
     glfwHideWindow(m_window);
@@ -170,6 +194,16 @@ void Gui::RenderWindow::showWindow() {
     glfwShowWindow(m_window);
 }
 
+static void WorldToScreen(const float worldX, const float worldY, float& screenX, float& screenY, const Gui::PanSettings& pan, const Gui::ZoomSettings& zoom) {
+    screenX = worldX * zoom.xScale + pan.xOffset;
+    screenY = worldY * zoom.yScale + pan.yOffset;
+}
+
+static void ScreenToWorld(const double screenX, const double screenY, float& worldX, float& worldY, const Gui::PanSettings& pan, const Gui::ZoomSettings& zoom) {
+    worldX = static_cast<float>(screenX - pan.xOffset) / zoom.xScale;
+    worldY = static_cast<float>(screenY - pan.yOffset) / zoom.yScale; 
+}
+
 void Gui::RenderWindow::mouseButtonCallback(GLFWwindow* window, const int button, const int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         auto renderWindow = Renderer::GetInstance()->m_currentWindow;
@@ -177,9 +211,8 @@ void Gui::RenderWindow::mouseButtonCallback(GLFWwindow* window, const int button
 
         double xPosDouble, yPosDouble;
         glfwGetCursorPos(window, &xPosDouble, &yPosDouble);
-        renderWindow->m_panSettings.startPanX = Shaders::Util::NormalizeToNdc(static_cast<float>(xPosDouble), renderWindow->m_width);
-        renderWindow->m_panSettings.startPanY = Shaders::Util::NormalizeToNdc(static_cast<float>(yPosDouble), renderWindow->m_height) * -1;
-        
+        renderWindow->m_panSettings.lastMouseX = static_cast<float>(xPosDouble);
+        renderWindow->m_panSettings.lastMouseY = static_cast<float>(yPosDouble);
     } else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
         auto renderWindow = Renderer::GetInstance()->m_currentWindow;
         renderWindow->m_isDraggingMouse = false;
@@ -192,23 +225,75 @@ void Gui::RenderWindow::cursorPositionCallback(GLFWwindow* window, const double 
     
     bool outOfBounds = xPos < 0 || xPos >= renderWindow->m_width || yPos < 0 || yPos >= renderWindow->m_height;
     if (outOfBounds) return;
-    
-    float xPosNormalized = Shaders::Util::NormalizeToNdc(static_cast<float>(xPos), renderWindow->m_width);
-    float yPosNormalized = Shaders::Util::NormalizeToNdc(static_cast<float>(yPos), renderWindow->m_height) * -1.0f;
 
-    renderWindow->m_panSettings.xOffset += xPosNormalized - renderWindow->m_panSettings.startPanX;
-    renderWindow->m_panSettings.yOffset += yPosNormalized - renderWindow->m_panSettings.startPanY;
-
-    renderWindow->m_panSettings.startPanX = xPosNormalized;
-    renderWindow->m_panSettings.startPanY = yPosNormalized;
+    float deltaX = static_cast<float>(xPos) - renderWindow->m_panSettings.lastMouseX;
+    float deltaY = static_cast<float>(yPos) - renderWindow->m_panSettings.lastMouseY;
     
-    glUniform1f(renderWindow->m_panSettings.xOffsetUniform, renderWindow->m_panSettings.xOffset);
-    glUniform1f(renderWindow->m_panSettings.yOffsetUniform, renderWindow->m_panSettings.yOffset);
+    renderWindow->m_panSettings.xOffset += deltaX;
+    renderWindow->m_panSettings.yOffset += deltaY;
+
+    renderWindow->m_panSettings.lastMouseX = static_cast<float>(xPos); 
+    renderWindow->m_panSettings.lastMouseY = static_cast<float>(yPos);
+
+    float xOffset = renderWindow->m_panSettings.xOffset / renderWindow->m_zoomSettings.xScale;
+    float yOffset = renderWindow->m_panSettings.yOffset / renderWindow->m_zoomSettings.yScale;
+    
+    renderWindow->m_viewMatrix = translate(glm::mat4(1.0f),
+        glm::vec3(xOffset, yOffset, 0.0f));
+    renderWindow->updateMVP();
 }
 
 void Gui::RenderWindow::setMouseCallbacksForPanning() {
     glfwSetMouseButtonCallback(m_window, mouseButtonCallback);
     glfwSetCursorPosCallback(m_window, cursorPositionCallback);
+}
+
+void Gui::RenderWindow::keyboardCallbacks(GLFWwindow* window, const int key, int scancode, const int action, int mods) {
+    auto renderWindow = Renderer::GetInstance()->m_currentWindow;
+    if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+        if (key != GLFW_KEY_Q && key != GLFW_KEY_W) return;
+
+        double xPos, yPos;
+        glfwGetCursorPos(window, &xPos, &yPos);
+
+        float worldBeforeMouseX, worldBeforeMouseY;
+        ScreenToWorld(xPos, yPos, worldBeforeMouseX, worldBeforeMouseY, renderWindow->m_panSettings, renderWindow->m_zoomSettings);
+        
+        const float zoomFactor =  key == GLFW_KEY_Q ? 1.1f : (1 / 1.1f);
+        renderWindow->m_zoomSettings.xScale *= zoomFactor;
+        renderWindow->m_zoomSettings.yScale *= zoomFactor;
+        
+        renderWindow->m_projectionMatrix = glm::ortho(0.0f,
+            static_cast<float>(renderWindow->m_width) / renderWindow->m_zoomSettings.xScale,
+            static_cast<float>(renderWindow->m_height) / renderWindow->m_zoomSettings.yScale,
+            0.0f, -1.0f, 1.0f);
+
+        float newScreenX, newScreenY;
+        WorldToScreen(worldBeforeMouseX, worldBeforeMouseY, newScreenX, newScreenY, renderWindow->m_panSettings, renderWindow->m_zoomSettings);
+
+        float deltaX = newScreenX - static_cast<float>(xPos);
+        float deltaY = newScreenY - static_cast<float>(yPos);
+        
+        renderWindow->m_panSettings.xOffset -= deltaX;
+        renderWindow->m_panSettings.yOffset -= deltaY;
+        
+        float xOffset = renderWindow->m_panSettings.xOffset / renderWindow->m_zoomSettings.xScale;
+        float yOffset = renderWindow->m_panSettings.yOffset / renderWindow->m_zoomSettings.yScale;
+        renderWindow->m_viewMatrix = translate(glm::mat4(1.0f),
+            glm::vec3(xOffset, yOffset, 0.0f));
+        
+        renderWindow->updateMVP();
+    }
+}
+
+
+void Gui::RenderWindow::setKeyboardCallback() {
+    glfwSetKeyCallback(m_window, keyboardCallbacks);
+}
+
+void Gui::RenderWindow::updateMVP() {
+    glm::mat4 mvp = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
+    glUniformMatrix4fv(m_mvpUniform, 1, GL_FALSE, value_ptr(mvp));
 }
 
 void Gui::RenderWindow::setBufferDataPoints(const std::shared_ptr<std::vector<Point>>& points) {
