@@ -77,6 +77,8 @@ namespace Gui {
         static void keyboardCallbacks(GLFWwindow* window, int key, int scancode, int action, int mods);
         void setKeyboardCallback();
 
+        void updateProjectionMatrix();
+        void updateViewMatrix();
         void updateMVP();
         
         void setBufferDataPoints(const std::shared_ptr<std::vector<Point>>& points);

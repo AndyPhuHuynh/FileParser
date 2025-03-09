@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <optional>
 #include <vector>
 
 #include <GL/glew.h>
@@ -23,8 +24,15 @@ unsigned int Shaders::Util::CompileShader(const unsigned int shaderType, const s
         glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length);
         std::vector<char> message(length);
         glGetShaderInfoLog(id, length, &length, message.data());
-        std::cout << "Failed to compile " << (shaderType == GL_VERTEX_SHADER ? "vertex" : "fragment") <<" shader!\n";
-        std::cout << message.data() << '\n';
+        std::string shaderTypeString;
+        if (shaderType == GL_VERTEX_SHADER) {
+            shaderTypeString = "Vertex";
+        } else if (shaderType == GL_FRAGMENT_SHADER) {
+            shaderTypeString = "Fragment";
+        } else if (shaderType == GL_GEOMETRY_SHADER) {
+            shaderTypeString = "Geometry";
+        }
+        std::cout << "Error compiling " << shaderTypeString << "shader: " << message.data() << "\n";
         glDeleteShader(id);
         return 0;
     }
@@ -32,18 +40,44 @@ unsigned int Shaders::Util::CompileShader(const unsigned int shaderType, const s
     return id;
 }
 
-unsigned int Shaders::Util::CreateShader(const std::string& vertexShader, const std::string& fragmentShader) {
+unsigned int Shaders::Util::CreateShader(const std::string& vertexShader, const std::optional<std::string>& geometryShader, const std::string& fragmentShader) {
     unsigned int program = glCreateProgram();
     unsigned int vs = CompileShader(GL_VERTEX_SHADER, vertexShader);
     unsigned int fs = CompileShader(GL_FRAGMENT_SHADER, fragmentShader);
-
+    unsigned int gs = 0;
+    
     glAttachShader(program, vs);
     glAttachShader(program, fs);
-    glLinkProgram(program);
-    glValidateProgram(program);
 
+    if (geometryShader.has_value()) {
+        gs = CompileShader(GL_GEOMETRY_SHADER, geometryShader.value());
+        glAttachShader(program, gs);
+    }
+    
+    glLinkProgram(program);
+    GLint success;
+    glGetProgramiv(program, GL_LINK_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetProgramInfoLog(program, 512, nullptr, infoLog);
+        std::cerr << "Error linking shader:\n" << infoLog << '\n';
+        return 0;
+    }
+    
+    glValidateProgram(program);
+    glGetProgramiv(program, GL_LINK_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetProgramInfoLog(program, 512, nullptr, infoLog);
+        std::cerr << "Error validating shader:\n" << infoLog << '\n';
+        return 0;
+    }
+    
     glDeleteShader(vs);
     glDeleteShader(fs);
-
+    if (geometryShader.has_value()) {
+        glDeleteShader(gs);
+    }
+    
     return program;
 }

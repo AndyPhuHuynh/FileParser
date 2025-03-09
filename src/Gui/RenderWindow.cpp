@@ -88,7 +88,7 @@ void Gui::RenderWindow::setRenderMode(const RenderMode mode) {
     }
     switch (mode) {
     case RenderMode::Point:
-        m_shaderProgram = Shaders::Util::CreateShader(Shaders::PointVertexShader, Shaders::PointFragmentShader);\
+        m_shaderProgram = Shaders::Util::CreateShader(Shaders::PointVertexShader, Shaders::PointGeometryShader, Shaders::PointFragmentShader);
         glUseProgram(m_shaderProgram);
         
         glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
@@ -235,11 +235,7 @@ void Gui::RenderWindow::cursorPositionCallback(GLFWwindow* window, const double 
     renderWindow->m_panSettings.lastMouseX = static_cast<float>(xPos); 
     renderWindow->m_panSettings.lastMouseY = static_cast<float>(yPos);
 
-    float xOffset = renderWindow->m_panSettings.xOffset / renderWindow->m_zoomSettings.xScale;
-    float yOffset = renderWindow->m_panSettings.yOffset / renderWindow->m_zoomSettings.yScale;
-    
-    renderWindow->m_viewMatrix = translate(glm::mat4(1.0f),
-        glm::vec3(xOffset, yOffset, 0.0f));
+    renderWindow->updateViewMatrix();
     renderWindow->updateMVP();
 }
 
@@ -262,12 +258,8 @@ void Gui::RenderWindow::keyboardCallbacks(GLFWwindow* window, const int key, int
         const float zoomFactor =  key == GLFW_KEY_Q ? 1.1f : (1 / 1.1f);
         renderWindow->m_zoomSettings.xScale *= zoomFactor;
         renderWindow->m_zoomSettings.yScale *= zoomFactor;
+        renderWindow->updateProjectionMatrix();
         
-        renderWindow->m_projectionMatrix = glm::ortho(0.0f,
-            static_cast<float>(renderWindow->m_width) / renderWindow->m_zoomSettings.xScale,
-            static_cast<float>(renderWindow->m_height) / renderWindow->m_zoomSettings.yScale,
-            0.0f, -1.0f, 1.0f);
-
         float newScreenX, newScreenY;
         WorldToScreen(worldBeforeMouseX, worldBeforeMouseY, newScreenX, newScreenY, renderWindow->m_panSettings, renderWindow->m_zoomSettings);
 
@@ -286,9 +278,22 @@ void Gui::RenderWindow::keyboardCallbacks(GLFWwindow* window, const int key, int
     }
 }
 
-
 void Gui::RenderWindow::setKeyboardCallback() {
     glfwSetKeyCallback(m_window, keyboardCallbacks);
+}
+
+void Gui::RenderWindow::updateProjectionMatrix() {
+    m_projectionMatrix = glm::ortho(0.0f,
+            static_cast<float>(m_width) / m_zoomSettings.xScale,
+            static_cast<float>(m_height) / m_zoomSettings.yScale,
+            0.0f, -1.0f, 1.0f);
+}
+
+void Gui::RenderWindow::updateViewMatrix() {
+    float xOffset = m_panSettings.xOffset / m_zoomSettings.xScale;
+    float yOffset = m_panSettings.yOffset / m_zoomSettings.yScale;
+    m_viewMatrix = translate(glm::mat4(1.0f),
+        glm::vec3(xOffset, yOffset, 0.0f));
 }
 
 void Gui::RenderWindow::updateMVP() {
