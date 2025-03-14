@@ -29,20 +29,21 @@ namespace Shaders {
 
         void main() {
             vec4 pos = gl_in[0].gl_Position;
+            float offset = 1;
 
             gl_Position = u_mvp * vec4(pos.x, pos.y, pos.zw);
             geoColor = vertColor[0];
             EmitVertex();
 
-            gl_Position = u_mvp * vec4(pos.x + 1, pos.y , pos.zw);
+            gl_Position = u_mvp * vec4(pos.x + offset, pos.y , pos.zw);
             geoColor = vertColor[0];
             EmitVertex();
 
-            gl_Position = u_mvp * vec4(pos.x, pos.y + 1, pos.zw);
+            gl_Position = u_mvp * vec4(pos.x, pos.y + offset, pos.zw);
             geoColor = vertColor[0];
             EmitVertex();
 
-            gl_Position = u_mvp * vec4(pos.x + 1, pos.y + 1, pos.zw);
+            gl_Position = u_mvp * vec4(pos.x + offset, pos.y + offset, pos.zw);
             geoColor = vertColor[0];
             EmitVertex();
 

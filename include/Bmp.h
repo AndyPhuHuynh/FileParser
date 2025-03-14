@@ -68,7 +68,7 @@ public:
     
 private:
     std::shared_ptr<std::vector<Point>> getPoints();
-    void ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, float normalizedY);
-    void ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, float normalizedY);
+    void ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, int y);
+    void ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, int y);
     void initColorTable();
 };

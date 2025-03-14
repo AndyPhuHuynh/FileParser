@@ -39,7 +39,7 @@ void ImageProcessing::Jpeg::Converter::WriteJpegAsBmp(const JpegImage& jpeg, con
     PutShort(bufferPos, 1);
     PutShort(bufferPos, 24);
     
-    for (int y = jpeg.info.height - 1; y>= 0; y--) {
+    for (int y = jpeg.info.height - 1; y >= 0; y--) {
         const int blockRow = y / jpeg.info.mcuPixelHeight;
         const int pixelRow = y % jpeg.info.mcuPixelHeight;
         for (int x = 0; x < jpeg.info.width; x++) {

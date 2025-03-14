@@ -9,6 +9,7 @@
 #include "Bmp.h"
 #include "FileUtil.h"
 #include "Jpeg/JpegBmpConverter.h"
+#include "Jpeg/JpegEncoder.h"
 #include "Jpeg/JpegImage.h"
 #include "Jpeg/JpegRenderer.h"
 
@@ -112,7 +113,6 @@ static void Convert(const std::vector<std::string>& args) {
         Jpeg::JpegImage jpeg(filepath);
         if (format == "bmp") {
             Jpeg::Converter::WriteJpegAsBmp(jpeg, newFilepath);
-            // jpeg.writeBmp(newFilepath);
         } else {
             std::cout << "Only conversion from jpg to bmp is supported\n";
         }
@@ -124,9 +124,50 @@ static void Convert(const std::vector<std::string>& args) {
     }
 }
 
+static void Test(const std::vector<std::string>& args) {
+    using namespace ImageProcessing;
+    std::ofstream outfile("test.jpeg", std::ios::binary);
+
+    BitWriter b("bitWriters.test");
+    b.flushByte();
+    
+    b.writeZero();
+    b.writeOne();
+    b.writeZero();
+    b.writeOne();
+    b.writeZero();
+    b.writeOne();
+    b.writeZero();
+    b.writeOne();
+
+    b.writeBit(false);
+    b.writeBit(true);
+    b.writeBit(false);
+    b.writeBit(true);
+    b.writeBit(false);
+    b.writeBit(true);
+    b.writeBit(false);
+    b.writeBit(true);
+
+    int v = 255;
+    b.writeValue(v);
+    b.writeZero();
+    b.writeBit(true);
+    b.writeBit(false);
+    b.flushByte();
+
+    int w = 14;
+    b.writeBits(w, 4);
+    b.flushByte();
+    b.flushBuffer();
+    
+    outfile.close();
+}
+
 static std::unordered_map<std::string, std::function<void(const std::vector<std::string>&)>> commands = {
     {"render", Render},
-    {"convert", Convert}
+    {"convert", Convert},
+    {"test", Test}
 };
 
 void Cli::RunCli() {

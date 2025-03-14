@@ -204,7 +204,7 @@ static void ScreenToWorld(const double screenX, const double screenY, float& wor
     worldY = static_cast<float>(screenY - pan.yOffset) / zoom.yScale; 
 }
 
-void Gui::RenderWindow::mouseButtonCallback(GLFWwindow* window, const int button, const int action, int mods) {
+void Gui::RenderWindow::mouseButtonCallback(GLFWwindow* window, const int button, const int action, [[maybe_unused]] int mods) {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         auto renderWindow = Renderer::GetInstance()->m_currentWindow;
         renderWindow->m_isDraggingMouse = true;
@@ -219,7 +219,7 @@ void Gui::RenderWindow::mouseButtonCallback(GLFWwindow* window, const int button
     }
 }
 
-void Gui::RenderWindow::cursorPositionCallback(GLFWwindow* window, const double xPos, const double yPos) {
+void Gui::RenderWindow::cursorPositionCallback([[maybe_unused]] GLFWwindow* window, const double xPos, const double yPos) {
     auto renderWindow = Renderer::GetInstance()->m_currentWindow;
     if (!renderWindow->m_isDraggingMouse) return;
     
@@ -244,7 +244,7 @@ void Gui::RenderWindow::setMouseCallbacksForPanning() {
     glfwSetCursorPosCallback(m_window, cursorPositionCallback);
 }
 
-void Gui::RenderWindow::keyboardCallbacks(GLFWwindow* window, const int key, int scancode, const int action, int mods) {
+void Gui::RenderWindow::keyboardCallbacks(GLFWwindow* window, const int key, [[maybe_unused]] int scancode, const int action, [[maybe_unused]] int mods) {
     auto renderWindow = Renderer::GetInstance()->m_currentWindow;
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
         if (key != GLFW_KEY_Q && key != GLFW_KEY_W) return;

@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <cstdint>
+#include <fstream>
 #include <limits>
 #include <sstream>
 #include <vector>
@@ -23,7 +24,7 @@ unsigned char GetBitFromLeft(const T& value, const int pos) {
 
 /**
  * @param value The value from which to extract a bit
- * @param pos Position from the leftmost bit
+ * @param pos Position from the rightmost bit
  * @return The bit located pos bits from the right
  */
 template <typename T>
@@ -77,6 +78,11 @@ void PutInt(uint8_t*& bufferPos, int value);
  */
 void PutShort(uint8_t*& bufferPos, int value);
 
+/**
+ * @brief Calculates the minimum number of bits needed to store an integer
+ */
+int GetMinNumBits(int value);
+
 class BitReader {
 public:
     BitReader() = default;
@@ -91,7 +97,63 @@ public:
     bool reachedEnd() const;
     void addByte(uint8_t byte);
 private:
-    std::vector<uint8_t> bytes;
-    int byteIndex = 0;
-    uint8_t bitPosition = 0;
+    std::vector<uint8_t> m_bytes;
+    int m_byteIndex = 0;
+    uint8_t m_bitPosition = 0;
 };
+
+class BitWriter {
+public:
+    explicit BitWriter(const std::string& filepath, int bufferSize = 16);
+    ~BitWriter();
+    void writeZero();
+    void writeOne();
+    void writeBit(bool isOne);
+    void flushByte(bool padWithOnes = false);
+    void flushBuffer();
+    
+    /**
+     * @brief Takes numBits rightmost bits from value and writes them to the bitstream stream
+     * @param value The value whose bits will be written to the output stream
+     * @param numBits The amount of rightmost bits to read from value
+     */
+    template<typename T>
+    void writeBits(T value, int numBits);
+
+    /**
+     * @brief Writes all the bits from value into the bitstream
+     */
+    template<typename T>
+    void writeValue(T value);
+private:
+    uint8_t m_byte = 0;
+    int m_bitPosition = 0;
+    
+    int m_bufferPos = 0;
+    const int m_bufferSize;
+    std::vector<uint8_t> m_buffer;
+
+    std::string m_filepath;
+    std::ofstream m_file;
+    
+    void incrementBitPosition();
+};
+
+template <typename T>
+void BitWriter::writeBits(T value, const int numBits) {
+    int maxBits = sizeof(T) * 8;
+    if (numBits < 0 || numBits > maxBits) {
+        std::ostringstream message;
+        message << "Error in BitWriter::writeBits: numBits" << numBits << " is out of bounds";
+        throw std::invalid_argument(message.str());
+    }
+    for (int i = numBits - 1; i >= 0; i--) {
+        int bit = GetBitFromRight(value, i);
+        writeBit(bit);
+    }
+}
+
+template <typename T>
+void BitWriter::writeValue(T value) {
+    writeBits(value, sizeof(T) * 8);
+}

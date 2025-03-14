@@ -106,16 +106,16 @@ std::shared_ptr<std::vector<Point>> Bmp::getPoints() {
     
     for (int y = static_cast<int>(info.height) - 1; y >= 0; y--) {
         if (rasterEncoding == BmpRasterEncoding::TwentyFourBitNoCompression) {
-            ParseRow24BitNoCompression(points, static_cast<float>(y));
-        }
+            ParseRow24BitNoCompression(points, y);
+        } 
         else {
-            ParseRowByteOrLessNoCompression(points, static_cast<float>(y));
+            ParseRowByteOrLessNoCompression(points, y);
         }
     }
     return points;
 }
 
-void Bmp::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, float y) {
+void Bmp::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, const int y) {
     uint32_t pixelsInRowRead = 0;
     bool allNonPaddingBitsRead = false;
     for (uint32_t byteInRow = 0; byteInRow < rowSize; byteInRow++) {
@@ -145,14 +145,14 @@ void Bmp::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Poin
             }
             Color color = colorTable[index];
 
-            points->emplace_back(x, y, color);
+            points->emplace_back(static_cast<float>(x), static_cast<float>(y), color);
                 
             pixelsInRowRead++;
         }
     }
 }
 
-void Bmp::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, float y) {
+void Bmp::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, const int y) {
     for (uint32_t x = 0; x < rowSize / 3; x++) {
         unsigned char byte;
         Color color;
@@ -165,7 +165,7 @@ void Bmp::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& 
         color.a = 255.0f;
         color.normalizeColor();
         
-        points->emplace_back(x, y, color);
+        points->emplace_back(static_cast<float>(x), static_cast<float>(y), color);
     }
     uint32_t padding = rowSize % 3;
     file.seekg(padding, std::ios::cur);

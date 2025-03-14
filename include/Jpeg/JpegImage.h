@@ -14,6 +14,7 @@
 #include "Gui/Renderer.h"
 
 namespace ImageProcessing::Jpeg {
+    constexpr uint8_t MarkerHeader = 0xFF;
     // Start of Frame markers, non-differential, Huffman coding
     constexpr uint8_t SOF0 = 0xC0; // Baseline DCT
     constexpr uint8_t SOF1 = 0xC1; // Extended sequential DCT
@@ -130,8 +131,7 @@ namespace ImageProcessing::Jpeg {
 
     class JpegImage;
 
-    class FrameHeaderComponentSpecification {
-    public:
+    struct FrameHeaderComponentSpecification {
         uint8_t identifier;
         uint8_t horizontalSamplingFactor;
         uint8_t verticalSamplingFactor;
@@ -143,8 +143,7 @@ namespace ImageProcessing::Jpeg {
         void print() const;
     };
 
-    class FrameHeader {
-    public:
+    struct FrameHeader {
         uint8_t encodingProcess;
         uint8_t precision;
         uint16_t height;
@@ -161,17 +160,24 @@ namespace ImageProcessing::Jpeg {
 
         FrameHeader() = default;
         FrameHeader(uint8_t encodingProcess, std::ifstream& file, const std::streampos& dataStartIndex);
+        FrameHeader(uint8_t SOF, uint8_t precision, uint16_t height, uint16_t width,
+                    const std::vector<FrameHeaderComponentSpecification>& components);
         void print() const;
+    private:
+        void initializeValuesFromComponents();
     };
 
-    class QuantizationTable {
-    public:
-        static constexpr int tableLength = 64;
-        std::array<float, tableLength> table{0};
+    struct QuantizationTable {
+        static constexpr int TableLength = 64;
+        std::array<float, TableLength> table{};
+        bool is8Bit = true;
+        uint8_t tableDestination;
         bool isSet = false;
 
         QuantizationTable() = default;
-        QuantizationTable(std::ifstream& file, const std::streampos& dataStartIndex, bool is8Bit);
+        QuantizationTable(std::ifstream& file, const std::streampos& dataStartIndex, bool is8Bit, uint8_t tableDestination);
+        explicit QuantizationTable(const std::array<float, TableLength>& table, const bool is8Bit, const uint8_t tableDestination)
+        : table(table), is8Bit(is8Bit), tableDestination(tableDestination) {}
         void print() const;
     };
 
@@ -251,19 +257,20 @@ namespace ImageProcessing::Jpeg {
         std::array<float, colorBlockLength> G {0};
         std::array<float, colorBlockLength> B {0};
         void print() const;
+        void rgbToYCbCr();
     };
 
     class Mcu {
     public:
-        static constexpr int dataUnitLength = 64;
+        static constexpr int DataUnitLength = 64;
         // True = After FDCT, IDCT needs to be performed
         bool postDctMode = true; 
         // Component 1
-        std::vector<std::shared_ptr<std::array<float, dataUnitLength>>> Y;
+        std::vector<std::shared_ptr<std::array<float, DataUnitLength>>> Y;
         // Component 2
-        std::shared_ptr<std::array<float, dataUnitLength>> Cb;
+        std::shared_ptr<std::array<float, DataUnitLength>> Cb;
         // Component 3
-        std::shared_ptr<std::array<float, dataUnitLength>> Cr;
+        std::shared_ptr<std::array<float, DataUnitLength>> Cr;
         int horizontalSampleSize = 1;
         int verticalSampleSize = 1;
         std::vector<ColorBlock> colorBlocks;
