@@ -58,7 +58,7 @@ simde_mm512_cmp_epi8_mask (simde__m512i a, simde__m512i b, const int imm8)
       #else
         SIMDE_VECTORIZE
         for (size_t i = 0 ; i < (sizeof(r_.i8) / sizeof(r_.i8[0])) ; i++) {
-          r_.i8[i] = (a_.i8[i] == b_.i8[i]) ? ~UINT32_C(0) : UINT32_C(0);
+          r_.i8[i] = (a_.i8[i] == b_.i8[i]) ? static_cast<int8_t>(-1) : static_cast<int8_t>(0);
         }
       #endif
       break;
@@ -69,7 +69,7 @@ simde_mm512_cmp_epi8_mask (simde__m512i a, simde__m512i b, const int imm8)
       #else
         SIMDE_VECTORIZE
         for (size_t i = 0 ; i < (sizeof(r_.i8) / sizeof(r_.i8[0])) ; i++) {
-          r_.i8[i] = (a_.i8[i] < b_.i8[i]) ? ~UINT32_C(0) : UINT32_C(0);
+          r_.i8[i] = (a_.i8[i] < b_.i8[i]) ? static_cast<int8_t>(-1) : static_cast<int8_t>(0);
         }
       #endif
       break;
@@ -80,7 +80,7 @@ simde_mm512_cmp_epi8_mask (simde__m512i a, simde__m512i b, const int imm8)
       #else
         SIMDE_VECTORIZE
         for (size_t i = 0 ; i < (sizeof(r_.i8) / sizeof(r_.i8[0])) ; i++) {
-          r_.i8[i] = (a_.i8[i] <= b_.i8[i]) ? ~UINT32_C(0) : UINT32_C(0);
+          r_.i8[i] = (a_.i8[i] <= b_.i8[i]) ? static_cast<int8_t>(-1) : static_cast<int8_t>(0);
         }
       #endif
       break;
@@ -96,7 +96,7 @@ simde_mm512_cmp_epi8_mask (simde__m512i a, simde__m512i b, const int imm8)
       #else
         SIMDE_VECTORIZE
         for (size_t i = 0 ; i < (sizeof(r_.i8) / sizeof(r_.i8[0])) ; i++) {
-          r_.i8[i] = (a_.i8[i] != b_.i8[i]) ? ~UINT32_C(0) : UINT32_C(0);
+          r_.i8[i] = (a_.i8[i] != b_.i8[i]) ? static_cast<int8_t>(-1) : static_cast<int8_t>(0);
         }
       #endif
       break;
@@ -107,7 +107,7 @@ simde_mm512_cmp_epi8_mask (simde__m512i a, simde__m512i b, const int imm8)
       #else
         SIMDE_VECTORIZE
         for (size_t i = 0 ; i < (sizeof(r_.i8) / sizeof(r_.i8[0])) ; i++) {
-          r_.i8[i] = !(a_.i8[i] < b_.i8[i]) ? ~UINT32_C(0) : UINT32_C(0);
+          r_.i8[i] = !(a_.i8[i] < b_.i8[i]) ? static_cast<int8_t>(-1) : static_cast<int8_t>(0);
         }
       #endif
       break;
@@ -118,7 +118,7 @@ simde_mm512_cmp_epi8_mask (simde__m512i a, simde__m512i b, const int imm8)
       #else
         SIMDE_VECTORIZE
         for (size_t i = 0 ; i < (sizeof(r_.i8) / sizeof(r_.i8[0])) ; i++) {
-          r_.i8[i] = !(a_.i8[i] <= b_.i8[i]) ? ~UINT32_C(0) : UINT32_C(0);
+          r_.i8[i] = !(a_.i8[i] <= b_.i8[i]) ? static_cast<int8_t>(-1) : static_cast<int8_t>(0);
         }
       #endif
       break;
