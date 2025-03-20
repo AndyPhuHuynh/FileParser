@@ -128,38 +128,81 @@ static void Test(const std::vector<std::string>& args) {
     using namespace ImageProcessing;
     std::ofstream outfile("test.jpeg", std::ios::binary);
 
-    BitWriter b("bitWriters.test");
-    b.flushByte();
+    Bmp bmp("./test-images/cat.bmp");
+    Jpeg::Encoder::getMcus(bmp);
     
-    b.writeZero();
-    b.writeOne();
-    b.writeZero();
-    b.writeOne();
-    b.writeZero();
-    b.writeOne();
-    b.writeZero();
-    b.writeOne();
+    std::array<float, 64> data = {
+        5, 0, 2 ,0 ,4 ,0 ,0 ,0,
+        -1, 0, 0 ,0 ,0 ,0 ,0 ,0,
+        0, 0, 0 ,0 ,6 ,0 ,0 ,0,
+        3, 0, 0 ,0 ,0 ,8 ,0 ,0,
+        0, 5, 0 ,-7 ,0 ,0 ,0 ,0,
+        0, 0, 0 ,0 ,0 ,0 ,0 ,0,
+        0, 0, 0 ,0 ,0 ,0 ,10 ,0,
+        0, 0, 0 ,-9 ,0 ,0 ,0 ,0,
+    };
 
-    b.writeBit(false);
-    b.writeBit(true);
-    b.writeBit(false);
-    b.writeBit(true);
-    b.writeBit(false);
-    b.writeBit(true);
-    b.writeBit(false);
-    b.writeBit(true);
+    std::array<float, 64> data2 = {
+        10, 0, 2 ,0 ,4 ,0 ,0 ,0,
+        -1, 0, 0 ,0 ,0 ,0 ,0 ,0,
+        0, 0, 0 ,0 ,6 ,0 ,0 ,0,
+        3, 3, 0 ,0 ,0 ,8 ,0 ,0,
+        0, 5, 0 ,-7 ,0 ,0 ,0 ,0,
+        0, 0, 0 ,0 ,0 ,-33 ,0 ,0,
+        0, 0, 2 ,0 ,0 ,0 ,0 ,0,
+        0, 0, 0 ,-9 ,0 ,0 ,0 ,0,
+    };
 
-    int v = 255;
-    b.writeValue(v);
-    b.writeZero();
-    b.writeBit(true);
-    b.writeBit(false);
-    b.flushByte();
+    std::array<float, 64> data3 = {
+        -100, 20, 0, 0 ,0 ,0 ,0, 0,
+        0, 0, 0, 0 ,0 ,0 ,0, 0,
+        0, 0, 0, 0 ,0 ,0 ,0, 0,
+        0, 0, 0, 0 ,0 ,0 ,0, 0,
+        0, 0, 0, 0 ,0 ,0 ,0, 0,
+        0, 0, 0, 0 ,0 ,0 ,0, 0,
+        0, 0, 0, 0 ,0 ,0 ,0, 0,
+        0, 0, 0, 0 ,0 ,0 ,0, 0,
+    };
 
-    int w = 14;
-    b.writeBits(w, 4);
-    b.flushByte();
-    b.flushBuffer();
+    std::vector<Jpeg::Encoder::EncodedBlock> encodedBlocks; 
+    std::vector<Jpeg::Encoder::Coefficient> dc;
+    std::vector<Jpeg::Encoder::Coefficient> ac;
+    int prevDc = 0;
+    encodeCoefficients(data, encodedBlocks, dc, ac, prevDc);
+    encodeCoefficients(data2, encodedBlocks, dc, ac, prevDc);
+    encodeCoefficients(data3, encodedBlocks, dc, ac, prevDc);
+    // std::cout << "DC:\n";
+    // for (int i = 0; i < dc.size(); i++) {
+    //     std::cout << std::hex << static_cast<int>(dc.at(i).encoding) << std::dec << ", " << static_cast<int>(dc.at(i).value) << "\n";
+    // }
+    //
+    // std::cout << "AC:\n";
+    // for (int i = 0; i < ac.size(); i++) {
+    //     std::cout << std::hex << static_cast<int>(ac.at(i).encoding) << std::dec << ", " << static_cast<int>(ac.at(i).value) << "\n";
+    // }
+
+
+    std::array<uint32_t, 256> dcFrequencies{};
+    std::array<uint32_t, 256> acFrequencies{};
+    
+    // countFrequencies(dc, ac, dcFrequencies, acFrequencies);
+    dcFrequencies = {2, 3, 4, 5, 6};
+    std::array<uint8_t, 257> dcCodeSizes{};
+    std::array<uint8_t, 257> acCodeSizes{};
+    Jpeg::Encoder::generateCodeSizes(dcFrequencies, dcCodeSizes);
+    Jpeg::Encoder::generateCodeSizes(acFrequencies, acCodeSizes);
+    
+    std::array<uint8_t, 33> dcCodeFrequencies{};
+    std::array<uint8_t, 33> acCodeFrequencies{};
+    Jpeg::Encoder::countCodeSizes(dcCodeSizes, dcCodeFrequencies);
+    Jpeg::Encoder::countCodeSizes(acCodeSizes, acCodeFrequencies);
+    
+    std::vector<uint8_t> dcSortedSymbols;
+    std::vector<uint8_t> acSortedSymbols;
+    Jpeg::Encoder::sortSymbolsByFrequencies(dcFrequencies, dcSortedSymbols);
+    Jpeg::Encoder::sortSymbolsByFrequencies(acFrequencies, acSortedSymbols);
+
+    Jpeg::Encoder::writeHuffmanTableNoMarker(0, 0, dcSortedSymbols, dcCodeFrequencies, outfile);
     
     outfile.close();
 }

@@ -35,15 +35,6 @@ void PutShort(uint8_t*& bufferPos, const int value) {
     *bufferPos++ = static_cast<unsigned char>(value >> 8);
 }
 
-int GetMinNumBits(int value) {
-    int numBits = 0;
-    value = std::abs(value);
-    while (1 << numBits <= value) {
-        numBits++;
-    }
-    return numBits;
-}
-
 BitReader::BitReader(const std::vector<uint8_t>& bytes) {
     this->m_bytes = bytes;
     m_bitPosition = 0;
@@ -137,6 +128,24 @@ BitWriter::BitWriter(const std::string& filepath, int bufferSize) : m_bufferSize
     m_file = std::ofstream(m_filepath, std::ios::out | std::ios::binary);
     if (!m_file.is_open()) {
         throw std::ios_base::failure("Bit writer failed to open file: " + filepath);
+    }
+}
+
+BitWriter::BitWriter(BitWriter&& other) noexcept
+    : m_byte(other.m_byte),
+      m_bitPosition(other.m_bitPosition),
+      m_bufferPos(other.m_bufferPos),
+      m_bufferSize(other.m_bufferSize),
+      m_buffer(std::move(other.m_buffer)),
+      m_filepath(std::move(other.m_filepath)),
+      m_file(std::move(other.m_file)) {
+    other.m_byte = 0;
+    other.m_bitPosition = 0;
+    other.m_bufferPos = 0;
+    other.m_bufferSize = 0;
+    
+    if (other.m_file.is_open()) {
+        other.m_file.close();
     }
 }
 

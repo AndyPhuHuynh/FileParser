@@ -226,8 +226,8 @@ namespace ImageProcessing::Jpeg {
         uint8_t acTableIteration;
 
         ScanHeaderComponentSpecification() = default;
-        ScanHeaderComponentSpecification(uint8_t componentId, uint8_t dcTableSelector, uint8_t acTableSelector,
-            uint8_t quantizationTableIteration, uint8_t dcTableIteration, uint8_t acTableIteration)
+        ScanHeaderComponentSpecification(const uint8_t componentId, const uint8_t dcTableSelector, const uint8_t acTableSelector,
+            const uint8_t quantizationTableIteration, const uint8_t dcTableIteration, const uint8_t acTableIteration)
             : componentId(componentId), dcTableSelector(dcTableSelector), acTableSelector(acTableSelector), quantizationTableIteration(quantizationTableIteration),
             dcTableIteration(dcTableIteration), acTableIteration(acTableIteration) {}
         void print() const;
@@ -241,10 +241,14 @@ namespace ImageProcessing::Jpeg {
         uint8_t successiveApproximationHigh;
         uint8_t successiveApproximationLow;
         BitReader bitReader = BitReader();
-        uint16_t restartInterval;
+        uint16_t restartInterval = 0;
     
         ScanHeader() = default;
         ScanHeader(JpegImage* jpeg, const std::streampos& dataStartIndex);
+        ScanHeader(const std::vector<ScanHeaderComponentSpecification>& components,
+            const uint8_t ss, const uint8_t se, const uint8_t ah, const uint8_t al)
+            : componentSpecifications(components), spectralSelectionStart(ss), spectralSelectionEnd(se),
+            successiveApproximationHigh(ah), successiveApproximationLow(al) {}
         bool containsComponentId(int id);
         ScanHeaderComponentSpecification& getComponent(int id);
         void print() const;
@@ -277,6 +281,7 @@ namespace ImageProcessing::Jpeg {
 
         Mcu();
         Mcu(int luminanceComponents, int horizontalSampleSize, int verticalSampleSize);
+        explicit Mcu(const ColorBlock& colorBlock);
         void print() const;
         static int getColorIndex(int blockIndex, int pixelIndex, int horizontalFactor, int verticalFactor);
         void generateColorBlocks();

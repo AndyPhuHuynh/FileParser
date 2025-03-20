@@ -66,8 +66,8 @@ public:
     explicit Bmp(const std::string& path);
     int render();
     
-private:
     std::shared_ptr<std::vector<Point>> getPoints();
+private:
     void ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, int y);
     void ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, int y);
     void initColorTable();

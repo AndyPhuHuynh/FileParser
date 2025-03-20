@@ -81,7 +81,28 @@ void PutShort(uint8_t*& bufferPos, int value);
 /**
  * @brief Calculates the minimum number of bits needed to store an integer
  */
-int GetMinNumBits(int value);
+template <typename T>
+int GetMinNumBits(T value) {
+    static_assert(std::is_integral_v<T>, "T must be an integral type");
+    if (value == 0) {
+        return 1;
+    }
+    
+    int numBits = 0;
+    value = static_cast<T>(std::abs(value));
+    while ((T(1) << numBits) <= value) {
+        numBits++;
+    }
+    return numBits;
+}
+
+template <typename T>
+struct BitField {
+    T value;
+    int bitCount;
+    BitField() : value(0), bitCount(0) {}
+    BitField(T value, const int bitCount) : value(value), bitCount(bitCount) {}
+};
 
 class BitReader {
 public:
@@ -104,8 +125,13 @@ private:
 
 class BitWriter {
 public:
-    explicit BitWriter(const std::string& filepath, int bufferSize = 16);
+    explicit BitWriter(const std::string& filepath, int bufferSize = 4096);
+    BitWriter(const BitWriter&) = delete;
+    BitWriter& operator=(const BitWriter&) = delete;
+    BitWriter(BitWriter&& other) noexcept;
+    BitWriter& operator=(BitWriter&&) = delete;
     ~BitWriter();
+    
     void writeZero();
     void writeOne();
     void writeBit(bool isOne);
@@ -120,17 +146,26 @@ public:
     template<typename T>
     void writeBits(T value, int numBits);
 
+    template<typename T>
+    void writeBits(const BitField<T>& bitField);
+    
     /**
      * @brief Writes all the bits from value into the bitstream
      */
     template<typename T>
     void writeValue(T value);
+
+    template <typename T>
+    BitWriter& operator<<(const T& value);
+
+    template <typename T>
+    BitWriter& operator<<(const BitField<T>& bitField);
 private:
     uint8_t m_byte = 0;
     int m_bitPosition = 0;
     
     int m_bufferPos = 0;
-    const int m_bufferSize;
+    int m_bufferSize;
     std::vector<uint8_t> m_buffer;
 
     std::string m_filepath;
@@ -141,6 +176,7 @@ private:
 
 template <typename T>
 void BitWriter::writeBits(T value, const int numBits) {
+    static_assert(std::is_integral_v<T>, "T must be an integral type");
     int maxBits = sizeof(T) * 8;
     if (numBits < 0 || numBits > maxBits) {
         std::ostringstream message;
@@ -154,6 +190,25 @@ void BitWriter::writeBits(T value, const int numBits) {
 }
 
 template <typename T>
+void BitWriter::writeBits(const BitField<T>& bitField) {
+    static_assert(std::is_integral_v<T>, "T must be an integral type");
+    writeBits(bitField.value, bitField.bitCount);
+}
+
+template <typename T>
 void BitWriter::writeValue(T value) {
+    static_assert(std::is_integral_v<T>, "T must be an integral type");
     writeBits(value, sizeof(T) * 8);
+}
+
+template <typename T>
+BitWriter& BitWriter::operator<<(const T& value) {
+    writeValue(value);
+    return *this;
+}
+
+template <typename T>
+BitWriter& BitWriter::operator<<(const BitField<T>& bitField) {
+    writeBits(bitField);
+    return *this;
 }

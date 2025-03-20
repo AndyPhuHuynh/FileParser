@@ -903,6 +903,21 @@ ImageProcessing::Jpeg::Mcu::Mcu(const int luminanceComponents, const int horizon
     Cr->fill(0);
 }
 
+ImageProcessing::Jpeg::Mcu::Mcu(const ColorBlock& colorBlock) {
+    postDctMode = false;
+    colorBlocks.push_back(colorBlock);
+    ColorBlock copy = colorBlock;
+    copy.rgbToYCbCr();
+    Y.push_back(std::make_shared<std::array<float, DataUnitLength>>());
+    Cb = std::make_shared<std::array<float, DataUnitLength>>();
+    Cr = std::make_shared<std::array<float, DataUnitLength>>();
+    for (int i = 0; i < DataUnitLength; i++) {
+        (*Y[0])[i] = copy.R[i];
+        (*Cb)[i] = copy.G[i];
+        (*Cr)[i] = copy.B[i];
+    }
+}
+
 uint16_t ImageProcessing::Jpeg::JpegImage::readLengthBytes() {
     uint16_t length;
     file.read(reinterpret_cast<char*>(&length), 2);
