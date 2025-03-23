@@ -1,6 +1,9 @@
 ﻿#pragma once
 
+#include <filesystem>
+
 #include "Bmp.h"
+#include "JpegBitWriter.h"
 #include "JpegImage.h"
 
 namespace ImageProcessing::Jpeg::Encoder {
@@ -26,9 +29,15 @@ namespace ImageProcessing::Jpeg::Encoder {
         99, 99, 99, 99, 99, 99, 99, 99
     };
 
+    constexpr int MaxHuffmanBits = 16;
+    
     void forwardDCT(std::array<float, Mcu::DataUnitLength>& component);
-    void quantize(const QuantizationTable& quantizationTable, std::array<float, Mcu::DataUnitLength>& component);
-
+    void forwardDCT(const Mcu& mcu);
+    void forwardDCT(const std::vector<Mcu>& mcus);
+    void quantize(std::array<float, Mcu::DataUnitLength>& component, const QuantizationTable& quantizationTable);
+    void quantize(const Mcu& mcu, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
+    void quantize(const std::vector<Mcu>& mcus, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
+    
     struct Coefficient {
         uint8_t encoding; // Run-length encoded symbol
         int value; // Actual value of the coefficient
@@ -57,22 +66,27 @@ namespace ImageProcessing::Jpeg::Encoder {
 
     // Writing to file
     
-    void writeMarker(uint8_t marker, std::ofstream& outFile);
-    void writeFrameHeaderComponentSpecification(const FrameHeaderComponentSpecification& component, std::ofstream& outFile);
-    void writeFrameHeader(const FrameHeader& frameHeader, std::ofstream& outFile);
+    void writeMarker(uint8_t marker, JpegBitWriter& bitWriter);
+    void writeFrameHeaderComponentSpecification(const FrameHeaderComponentSpecification& component, JpegBitWriter& bitWriter);
+    void writeFrameHeader(const FrameHeader& frameHeader, JpegBitWriter& bitWriter);
 
     QuantizationTable createQuantizationTable(const std::array<float, 64>& table, int quality, bool is8Bit, uint8_t tableDestination);
-    void writeQuantizationTableNoMarker(const QuantizationTable& quantizationTable, std::ofstream& outFile);
-    void writeQuantizationTable(const QuantizationTable& quantizationTable, std::ofstream& outFile);
+    void writeQuantizationTableNoMarker(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter);
+    void writeQuantizationTable(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter);
 
-    void writeHuffmanTableNoMarker(uint8_t tableClass, uint8_t tableDestination,
-        const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, std::ofstream& outFile);
-    void writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination,
-        const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, std::ofstream& outFile);
-    void writeHuffmanTable(const std::vector<Coefficient>& coefficients, uint8_t tableClass, uint8_t tableDestination, std::ofstream& outFile);
+    HuffmanTable createHuffmanTable(const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizeFrequencies);
+    HuffmanTable writeHuffmanTableNoMarker(uint8_t tableClass, uint8_t tableDestination,
+        const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter);
+    HuffmanTable writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination,
+        const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter);
+    HuffmanTable writeHuffmanTable(const std::vector<Coefficient>& coefficients, uint8_t tableClass, uint8_t tableDestination, JpegBitWriter& bitWriter);
 
-    void writeScanHeaderComponentSpecification(const ScanHeaderComponentSpecification& component, std::ofstream& outFile);
-    void writeScanHeader(const ScanHeader& scanHeader, std::ofstream& outFile);
+    void writeScanHeaderComponentSpecification(const ScanHeaderComponentSpecification& component, JpegBitWriter& bitWriter);
+    void writeScanHeader(const ScanHeader& scanHeader, JpegBitWriter& bitWriter);
+
+    int encodeSSSS(uint8_t SSSS, int value);
+    void writeBlock(const EncodedBlock& block, const HuffmanTable& dcTable, const HuffmanTable& acTable, JpegBitWriter& bitWriter);
+    void writeBlock(const std::vector<EncodedBlock>& blocks, const HuffmanTable& dcTable, const HuffmanTable& acTable, JpegBitWriter& bitWriter);
     
     std::vector<Mcu> getMcus(Bmp& bmp);
     void writeJpeg(Bmp& bmp);

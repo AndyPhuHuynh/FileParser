@@ -6,9 +6,9 @@
 #include <iostream>
 #include <numbers>
 #include <ctime>
+#include <numeric>
 #include <ranges>
 #include <vector>
-#include <GL/glew.h>
 
 #include <simde/x86/avx512.h>
 
@@ -155,24 +155,34 @@ void ImageProcessing::Jpeg::QuantizationTable::print() const {
 
 ImageProcessing::Jpeg::HuffmanTable::HuffmanTable(std::ifstream& file, const std::streampos& dataStartIndex) {
     file.seekg(dataStartIndex, std::ios::beg);
+    // Read num of each encoding
     std::array<uint8_t, maxEncodingLength> numOfEachEncoding;
-    numOfEachEncoding.fill(0);
     for (int i = 0; i < maxEncodingLength; i++) {
         file.read(reinterpret_cast<char*>(&numOfEachEncoding[i]), 1);
     }
-    // Generate encodings
-    uint16_t code = 0;
-    for (int i = 0; i < maxEncodingLength; i++) {
-        for (int j = 0; j < numOfEachEncoding[i]; j++) {
-            uint8_t byte;
-            file.read(reinterpret_cast<char*>(&byte), 1);
-            encodings.emplace_back(code, static_cast<uint8_t>(i + 1), byte);
-            code++;
-        }
-        code = static_cast<uint16_t>(code << 1);
+    
+    // Read symbols
+    int symbolCount = std::accumulate(numOfEachEncoding.begin(), numOfEachEncoding.end(), 0);
+    std::vector<uint8_t> symbols;
+    for (int i = 0; i < symbolCount; i++) {
+        uint8_t byte;
+        file.read(reinterpret_cast<char*>(&byte), 1);
+        symbols.push_back(byte);
     }
+    
+    generateEncodings(symbols, numOfEachEncoding);
     generateLookupTable();
     isInitialized = true;
+}
+
+ImageProcessing::Jpeg::HuffmanTable::HuffmanTable(const std::vector<uint8_t>& symbols, const std::array<uint8_t, maxEncodingLength>& codeSizeFrequencies) {
+    generateEncodings(symbols, codeSizeFrequencies);
+    generateLookupTable();
+    isInitialized = true;
+}
+
+ImageProcessing::Jpeg::HuffmanEncoding ImageProcessing::Jpeg::HuffmanTable::getEncoding(const uint8_t symbol) const {
+    return encodingLookup.at(symbol);
 }
 
 void ImageProcessing::Jpeg::HuffmanTable::generateLookupTable() {
@@ -225,7 +235,26 @@ void ImageProcessing::Jpeg::HuffmanTable::print() const {
             int bit = encoding.encoding >> i & 1;
             code += bit == 0 ? "0" : "1";
         }
-        std::cout << std::setw(17) << code << std::setw(10) << std::hex << static_cast<int>(encoding.value) << std::dec <<  "\n";
+        std::cout << std::setw(17) << code << std::setw(10) << std::hex << "0x" << static_cast<int>(encoding.value) << std::dec <<  "\n";
+    }
+}
+
+void ImageProcessing::Jpeg::HuffmanTable::generateEncodings(const std::vector<uint8_t>& symbols, const std::array<uint8_t, maxEncodingLength>& codeSizeFrequencies) {
+    if (symbols.size() != std::accumulate(codeSizeFrequencies.begin(), codeSizeFrequencies.end(), 0u)) {
+        throw std::invalid_argument("Number of symbols and code sizes do not match");
+    }
+    int symbolIndex = 0;
+    uint16_t code = 0;
+    for (int i = 0; i < maxEncodingLength; i++) {
+        for (int j = 0; j < codeSizeFrequencies[i]; j++) {
+            encodings.emplace_back(code, static_cast<uint8_t>(i + 1), symbols[symbolIndex++]);
+            code++;
+        }
+        code = static_cast<uint16_t>(code << 1);
+    }
+
+    for (auto& encoding : encodings) {
+        encodingLookup.insert(std::make_pair(encoding.value, encoding));
     }
 }
 
@@ -588,7 +617,7 @@ void ImageProcessing::Jpeg::ColorBlock::rgbToYCbCr() {
         float Y =      0.299f * R[i] +    0.587f * G[i] +    0.114f *  B[i];
         float Cb = -0.168736f * R[i] - 0.331264f * G[i] +      0.5f *  B[i];
         float Cr =       0.5f * R[i] - 0.418688f * G[i] - 0.081312f *  B[i];
-        R[i] = Y;
+        R[i] = Y - 128;
         G[i] = Cb;
         B[i] = Cr;
     }
@@ -1347,7 +1376,6 @@ void ImageProcessing::Jpeg::JpegImage::decodeBaseLine() {
     std::thread quantizationThread = std::thread([&] {processQuantizationQueue(scanHeader->componentSpecifications);});
     std::thread idctThread = std::thread([&] {processIdctQueue();});
     std::thread colorConversionThread = std::thread([&] {processColorConversionQueue();});
-    
     for (int i = 0; i < info.mcuImageHeight * info.mcuImageWidth; i++) {
         if (scanHeader->restartInterval != 0 && i % scanHeader->restartInterval == 0) {
             scanHeader->bitReader.alignToByte();

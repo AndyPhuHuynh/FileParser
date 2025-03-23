@@ -159,23 +159,51 @@ void ImageProcessing::Jpeg::Encoder::forwardDCT(std::array<float, Mcu::DataUnitL
     }
 }
 
-void ImageProcessing::Jpeg::Encoder::quantize(const QuantizationTable& quantizationTable, std::array<float, Mcu::DataUnitLength>& component) {
+void ImageProcessing::Jpeg::Encoder::forwardDCT(const Mcu& mcu) {
+    for (auto& y : mcu.Y) {
+        forwardDCT(*y);
+    }
+    forwardDCT(*mcu.Cb);
+    forwardDCT(*mcu.Cr);
+}
+
+void ImageProcessing::Jpeg::Encoder::forwardDCT(const std::vector<Mcu>& mcus) {
+    for (auto& mcu : mcus) {
+        forwardDCT(mcu);
+    }
+}
+
+void ImageProcessing::Jpeg::Encoder::quantize(std::array<float, Mcu::DataUnitLength>& component, const QuantizationTable& quantizationTable) {
     for (int i = 0; i < Mcu::DataUnitLength; i++) {
         component.at(i) = std::floor(component.at(i) / quantizationTable.table.at(i));
     }
 }
 
+void ImageProcessing::Jpeg::Encoder::quantize(const Mcu& mcu, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable) {
+    for (auto& y : mcu.Y) {
+        quantize(*y, luminanceTable);
+    }
+    quantize(*mcu.Cb, chrominanceTable);
+    quantize(*mcu.Cr, chrominanceTable);
+}
+
+void ImageProcessing::Jpeg::Encoder::quantize(const std::vector<Mcu>& mcus, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable) {
+    for (auto& mcu : mcus) {
+        quantize(mcu, luminanceTable, chrominanceTable);
+    }
+}
+
 void ImageProcessing::Jpeg::Encoder::encodeCoefficients(const std::array<float, 64>& component, std::vector<EncodedBlock>& blocks,
     std::vector<Coefficient>& dcCoefficients, std::vector<Coefficient>& acCoefficients, int& prevDc) {
-
+    
     blocks.emplace_back();
-    EncodedBlock& currentBlock = blocks.back();
+    auto& [currentBlock] = blocks.back();
     
     // Encode the dc coefficient
     int dcCoefficient = static_cast<int>(component.at(0)) - prevDc;
     uint8_t dcCode = dcCoefficient == 0 ? 0 : static_cast<uint8_t>(GetMinNumBits(dcCoefficient));
     dcCoefficients.emplace_back(dcCode, dcCoefficient);
-    currentBlock.coefficients.emplace_back(dcCode, dcCoefficient);
+    currentBlock.emplace_back(dcCode, dcCoefficient);
     prevDc = static_cast<int>(component.at(0));
 
     // Find the index of the EOB
@@ -205,7 +233,7 @@ void ImageProcessing::Jpeg::Encoder::encodeCoefficients(const std::array<float, 
             if (r == 15) {
                 r = 0;
                 acCoefficients.emplace_back(static_cast<uint8_t>(0xF0), 0x00);
-                currentBlock.coefficients.emplace_back(static_cast<uint8_t>(0xF0), 0x00);
+                currentBlock.emplace_back(static_cast<uint8_t>(0xF0), 0x00);
             } else {
                 r++;   
             }
@@ -213,7 +241,7 @@ void ImageProcessing::Jpeg::Encoder::encodeCoefficients(const std::array<float, 
             uint8_t s = static_cast<uint8_t>(GetMinNumBits(ac));
             uint8_t code = static_cast<uint8_t>((r << 4) | s);
             acCoefficients.emplace_back(code, ac);
-            currentBlock.coefficients.emplace_back(code, ac);
+            currentBlock.emplace_back(code, ac);
             r = 0;
         }
     }
@@ -221,7 +249,7 @@ void ImageProcessing::Jpeg::Encoder::encodeCoefficients(const std::array<float, 
     if (eob) {
         constexpr uint8_t EOBMarker = 0x00;
         acCoefficients.emplace_back(EOBMarker, 0x00);
-        currentBlock.coefficients.emplace_back(EOBMarker, 0x00);
+        currentBlock.emplace_back(EOBMarker, 0x00);
     }
 }
 
@@ -368,43 +396,29 @@ void ImageProcessing::Jpeg::Encoder::sortSymbolsByFrequencies(const std::array<u
     }
 }
 
-void ImageProcessing::Jpeg::Encoder::writeMarker(const uint8_t marker, std::ofstream& outFile) {
-    outFile.write(reinterpret_cast<const char*>(&MarkerHeader), sizeof(uint8_t));
-    outFile.write(reinterpret_cast<const char*>(&marker), sizeof(uint8_t));
+void ImageProcessing::Jpeg::Encoder::writeMarker(const uint8_t marker, JpegBitWriter& bitWriter) {
+    bitWriter << MarkerHeader << marker;
 }
 
 void ImageProcessing::Jpeg::Encoder::writeFrameHeaderComponentSpecification(
-    const FrameHeaderComponentSpecification& component, std::ofstream& outFile) {
+    const FrameHeaderComponentSpecification& component, JpegBitWriter& bitWriter) {
     
     uint8_t identifier = component.identifier;
     uint8_t samplingFactor = static_cast<uint8_t>((component.horizontalSamplingFactor << 4) | component.verticalSamplingFactor);
     uint8_t quantizationTableSelector = component.quantizationTableSelector;
-    
-    outFile.write(reinterpret_cast<const char*>(&identifier), 1);
-    outFile.write(reinterpret_cast<const char*>(&samplingFactor), 1);
-    outFile.write(reinterpret_cast<const char*>(&quantizationTableSelector), 1);
+
+    bitWriter << identifier << samplingFactor << quantizationTableSelector;
 }
 
-void ImageProcessing::Jpeg::Encoder::writeFrameHeader(const FrameHeader& frameHeader, std::ofstream& outFile) {
+void ImageProcessing::Jpeg::Encoder::writeFrameHeader(const FrameHeader& frameHeader, JpegBitWriter& bitWriter) {
     uint8_t frameType = frameHeader.encodingProcess;
-    
     uint16_t length = 8 + frameHeader.numOfChannels * 3;
-    length = SwapBytes(length);
 
-    outFile.write(reinterpret_cast<const char*>(&MarkerHeader), 1);
-    outFile.write(reinterpret_cast<const char*>(&frameType), 1);
-    
-    outFile.write(reinterpret_cast<const char*>(&length), 2);
-    outFile.write(reinterpret_cast<const char*>(&frameHeader.precision), 1);
-    
-    uint16_t height = SwapBytes(frameHeader.height);
-    uint16_t width = SwapBytes(frameHeader.width);
-    outFile.write(reinterpret_cast<const char*>(&height), 2);
-    outFile.write(reinterpret_cast<const char*>(&width), 2);
-    outFile.write(reinterpret_cast<const char*>(&frameHeader.numOfChannels), 1);
+    writeMarker(frameType, bitWriter);
+    bitWriter << length << frameHeader.precision << frameHeader.height << frameHeader.width << frameHeader.numOfChannels;
     
     for (auto& component : frameHeader.componentSpecifications | std::views::values) {
-        writeFrameHeaderComponentSpecification(component, outFile);
+        writeFrameHeaderComponentSpecification(component, bitWriter);
     }
 }
 
@@ -424,45 +438,37 @@ ImageProcessing::Jpeg::QuantizationTable ImageProcessing::Jpeg::Encoder::createQ
     return QuantizationTable(scaledTable, is8Bit, tableDestination);
 }
 
-void ImageProcessing::Jpeg::Encoder::writeQuantizationTableNoMarker(const QuantizationTable& quantizationTable, std::ofstream& outFile) {
+void ImageProcessing::Jpeg::Encoder::writeQuantizationTableNoMarker(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter) {
     uint8_t precision = quantizationTable.is8Bit ? 0 : 1;
     uint8_t precisionAndTableId = static_cast<uint8_t>((precision << 4) | quantizationTable.tableDestination);
-    outFile.write(reinterpret_cast<const char*>(&precisionAndTableId), 1);
+    bitWriter << precisionAndTableId;
 
     if (quantizationTable.is8Bit) {
         for (unsigned char i : zigZagMap) {
             uint8_t byte = static_cast<uint8_t>(quantizationTable.table.at(i));
-            outFile.write(reinterpret_cast<const char*>(&byte), 1);
+            bitWriter << byte;
         }
     } else {
         for (unsigned char i : zigZagMap) {
             uint16_t word = static_cast<uint16_t>(quantizationTable.table.at(i));
-            word = SwapBytes(word);
-            outFile.write(reinterpret_cast<const char*>(&word), 2);
+            bitWriter << word;
         }
     }
 }
 
-void ImageProcessing::Jpeg::Encoder::writeQuantizationTable(const QuantizationTable& quantizationTable, std::ofstream& outFile) {
-    outFile.write(reinterpret_cast<const char*>(&MarkerHeader), 1);
-    outFile.write(reinterpret_cast<const char*>(&DQT), 1);
+void ImageProcessing::Jpeg::Encoder::writeQuantizationTable(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter) {
+    writeMarker(DQT, bitWriter);
     
     uint8_t bytesPerEntry = quantizationTable.is8Bit ? 1 : 2;
     uint16_t length = 2 + 1 + (64 * bytesPerEntry);
-    length = SwapBytes(length);
-    outFile.write(reinterpret_cast<const char*>(&length), 2);
+    bitWriter << length;
     
-    writeQuantizationTableNoMarker(quantizationTable, outFile);
+    writeQuantizationTableNoMarker(quantizationTable, bitWriter);
 }
 
-// Todo: buffer writing until the end
-// Todo: make a class for buffered file writing
-void ImageProcessing::Jpeg::Encoder::writeHuffmanTableNoMarker(
+ImageProcessing::Jpeg::HuffmanTable ImageProcessing::Jpeg::Encoder::writeHuffmanTableNoMarker(
     const uint8_t tableClass, const uint8_t tableDestination, const std::vector<uint8_t>& sortedSymbols,
-    const std::array<uint8_t, 33>& codeSizesFrequencies, std::ofstream& outFile) {
-    if (!outFile) {
-        throw std::ios_base::failure("Failed to write to output file");
-    }
+    const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter) {
 
     // Validate that symbols and code sizes match, ignoring the frequency of code size 0
     if (sortedSymbols.size() != std::accumulate(codeSizesFrequencies.begin() + 1, codeSizesFrequencies.end(), 0u)) {
@@ -470,8 +476,7 @@ void ImageProcessing::Jpeg::Encoder::writeHuffmanTableNoMarker(
     }
 
     // Validate code size frequencies
-    constexpr int maxHuffmanBits = 16;
-    for (size_t i = maxHuffmanBits + 1; i < codeSizesFrequencies.size(); i++) {
+    for (size_t i = MaxHuffmanBits + 1; i < codeSizesFrequencies.size(); i++) {
         if (codeSizesFrequencies[i] != 0) {
             throw std::invalid_argument("Invalid Huffman code size: " + std::to_string(codeSizesFrequencies[i]));
         }
@@ -479,34 +484,34 @@ void ImageProcessing::Jpeg::Encoder::writeHuffmanTableNoMarker(
 
     // Write table info
     uint8_t tableInfo = static_cast<uint8_t>((tableClass << 4) | tableDestination);
-    outFile.write(reinterpret_cast<const char*>(&tableInfo), 1);
+    bitWriter << tableInfo;
     
     // Write code size frequencies
-    for (size_t i = 1; i <= maxHuffmanBits; i++) {
-        outFile.write(reinterpret_cast<const char*>(&codeSizesFrequencies[i]), 1);
+    for (size_t i = 1; i <= MaxHuffmanBits; i++) {
+        bitWriter << codeSizesFrequencies[i];
     }
 
     // Write codes
     for (auto symbol : sortedSymbols) {
-        outFile.write(reinterpret_cast<const char*>(&symbol), 1);
+        bitWriter << symbol;
     }
+
+    return createHuffmanTable(sortedSymbols, codeSizesFrequencies);
 }
 
-void ImageProcessing::Jpeg::Encoder::writeHuffmanTable(const uint8_t tableClass, const uint8_t tableDestination,
-    const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies,
-    std::ofstream& outFile) {
-    outFile.write(reinterpret_cast<const char*>(&MarkerHeader), 1);
-    outFile.write(reinterpret_cast<const char*>(&DHT), 1);
-    
+ImageProcessing::Jpeg::HuffmanTable ImageProcessing::Jpeg::Encoder::writeHuffmanTable(const uint8_t tableClass, const uint8_t tableDestination,
+    const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter) {
+
     uint16_t length = 2 + 1 + 16 + static_cast<uint16_t>(sortedSymbols.size());
-    length = SwapBytes(length);
-    outFile.write(reinterpret_cast<const char*>(&length), 2);
     
-    writeHuffmanTableNoMarker(tableClass, tableDestination, sortedSymbols, codeSizesFrequencies, outFile);
+    writeMarker(DHT, bitWriter);
+    bitWriter << length;
+    
+    return writeHuffmanTableNoMarker(tableClass, tableDestination, sortedSymbols, codeSizesFrequencies, bitWriter);
 }
 
-void ImageProcessing::Jpeg::Encoder::writeHuffmanTable(const std::vector<Coefficient>& coefficients,
-    const uint8_t tableClass, const uint8_t tableDestination, std::ofstream& outFile) {
+ImageProcessing::Jpeg::HuffmanTable ImageProcessing::Jpeg::Encoder::writeHuffmanTable(const std::vector<Coefficient>& coefficients,
+    const uint8_t tableClass, const uint8_t tableDestination, JpegBitWriter& bitWriter) {
     std::array<uint32_t, 256> frequencies{};
     countFrequencies(coefficients, frequencies);
     
@@ -519,34 +524,89 @@ void ImageProcessing::Jpeg::Encoder::writeHuffmanTable(const std::vector<Coeffic
     std::vector<uint8_t> sortedSymbols;
     sortSymbolsByFrequencies(frequencies, sortedSymbols);
 
-    writeHuffmanTableNoMarker(tableClass, tableDestination, sortedSymbols, codeFrequencies, outFile);
+    return writeHuffmanTable(tableClass, tableDestination, sortedSymbols, codeFrequencies, bitWriter);
 }
 
 void ImageProcessing::Jpeg::Encoder::writeScanHeaderComponentSpecification(
-    const ScanHeaderComponentSpecification& component, std::ofstream& outFile) {
+    const ScanHeaderComponentSpecification& component, JpegBitWriter& bitWriter) {
     uint8_t tableDestination =  static_cast<uint8_t>((component.dcTableSelector << 4) | component.acTableSelector);
-    outFile.write(reinterpret_cast<const char*>(&component.componentId), 1);
-    outFile.write(reinterpret_cast<const char*>(&tableDestination), 1);
+    bitWriter << component.componentId << tableDestination;
 }
 
-void ImageProcessing::Jpeg::Encoder::writeScanHeader(const ScanHeader& scanHeader, std::ofstream& outFile) {
-    writeMarker(SOS, outFile);
+void ImageProcessing::Jpeg::Encoder::writeScanHeader(const ScanHeader& scanHeader, JpegBitWriter& bitWriter) {
+    writeMarker(SOS, bitWriter);
 
     uint8_t numComponents = static_cast<uint8_t>(scanHeader.componentSpecifications.size());
     uint16_t length = 6 + 2 * numComponents;
-
-    outFile.write(reinterpret_cast<const char*>(&length), 2);
-    outFile.write(reinterpret_cast<const char*>(&numComponents), 1);
+    bitWriter << length << numComponents;
 
     for (auto component : scanHeader.componentSpecifications) {
-        writeScanHeaderComponentSpecification(component, outFile);
+        writeScanHeaderComponentSpecification(component, bitWriter);
+    }
+    
+    uint8_t successiveApproximation = static_cast<uint8_t>(scanHeader.successiveApproximationHigh << 4 | scanHeader.successiveApproximationLow);
+    bitWriter << scanHeader.spectralSelectionStart << scanHeader.spectralSelectionEnd << successiveApproximation;
+}
+
+ImageProcessing::Jpeg::HuffmanTable ImageProcessing::Jpeg::Encoder::createHuffmanTable(
+    const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizeFrequencies) {
+    // Validate that symbols and code sizes match, ignoring the frequency of code size 0
+    if (sortedSymbols.size() != std::accumulate(codeSizeFrequencies.begin() + 1, codeSizeFrequencies.end(), 0u)) {
+        throw std::invalid_argument("Number of symbols and code sizes do not match");
     }
 
-    outFile.write(reinterpret_cast<const char*>(&scanHeader.spectralSelectionStart), 1);
-    outFile.write(reinterpret_cast<const char*>(&scanHeader.spectralSelectionEnd), 1);
+    // Validate code size frequencies
+    for (size_t i = MaxHuffmanBits + 1; i < codeSizeFrequencies.size(); i++) {
+        if (codeSizeFrequencies[i] != 0) {
+            throw std::invalid_argument("Invalid Huffman code size: " + std::to_string(codeSizeFrequencies[i]));
+        }
+    }
 
-    uint8_t successiveApproximation = static_cast<uint8_t>(scanHeader.successiveApproximationHigh << 4 | scanHeader.successiveApproximationLow);
-    outFile.write(reinterpret_cast<const char*>(&successiveApproximation), 1);
+    std::array<uint8_t, 16> smallCodeSizes;
+    std::copy(codeSizeFrequencies.begin() + 1, codeSizeFrequencies.begin() + 17, smallCodeSizes.begin());
+
+    HuffmanTable table(sortedSymbols, smallCodeSizes);
+    return table;
+}
+
+int ImageProcessing::Jpeg::Encoder::encodeSSSS(const uint8_t SSSS, const int value) {
+    if (value > 0) return value;
+    return value - 1 + (1 << SSSS);
+}
+
+void ImageProcessing::Jpeg::Encoder::writeBlock(const EncodedBlock& block, const HuffmanTable& dcTable,
+    const HuffmanTable& acTable, JpegBitWriter& bitWriter) {
+    auto& [coefficients] = block;
+
+    // DC coefficient
+    // Write the RLE encoded value
+    HuffmanEncoding dcEncoding = dcTable.getEncoding(coefficients[0].encoding);
+    bitWriter << BitField(dcEncoding.encoding, dcEncoding.bitLength);
+    // Write the SSSS rightmost bits of the symbol
+    uint8_t dcSSSS = coefficients[0].encoding & 0x0F;
+    int dcValue = encodeSSSS(dcSSSS, coefficients[0].value);
+    bitWriter << BitField(dcValue, dcSSSS);
+    
+    // AC coefficient
+    for (size_t i = 1; i < coefficients.size(); i++) {
+        // Write the RLE encoded value
+        HuffmanEncoding acEncoding = acTable.getEncoding(coefficients[i].encoding);
+        bitWriter << BitField(acEncoding.encoding, acEncoding.bitLength);
+        // Write the SSSS rightmost bits of the symbol
+        uint8_t acSSSS = coefficients[i].encoding & 0x0F;
+        int acValue = encodeSSSS(acSSSS, coefficients[i].value);
+        bitWriter << BitField(acValue, acSSSS);
+    }
+}
+
+void ImageProcessing::Jpeg::Encoder::writeBlock(const std::vector<EncodedBlock>& blocks, const HuffmanTable& dcTable,
+    const HuffmanTable& acTable, JpegBitWriter& bitWriter) {
+    bitWriter.setByteStuffing(true);
+    for (const auto& block : blocks) {
+        writeBlock(block, dcTable, acTable, bitWriter);
+    }
+    bitWriter.flushByte(true);
+    bitWriter.setByteStuffing(false);
 }
 
 std::vector<ImageProcessing::Jpeg::Mcu> ImageProcessing::Jpeg::Encoder::getMcus(Bmp& bmp) {
@@ -590,7 +650,7 @@ std::vector<ImageProcessing::Jpeg::Mcu> ImageProcessing::Jpeg::Encoder::getMcus(
     // Pad points outside the width of the image with same color as the last color within the row
     if (width % 8 != 0) {
         for (int y = 0; y < rowCount * 8; y++) {
-            int blockRow = height / 8;
+            int blockRow = y / 8;
             int pixelRow = y % 8;
             for (int x = width; x < columnCount * 8; x++) {
                 int blockCol = x / 8;
@@ -606,8 +666,8 @@ std::vector<ImageProcessing::Jpeg::Mcu> ImageProcessing::Jpeg::Encoder::getMcus(
     }
 
     std::vector<Mcu> mcus;
-    for (auto& row : rows) {
-        for (auto& block : row) {
+    for (const auto& row : rows) {
+        for (const auto& block : row) {
             mcus.emplace_back(block);
         }
     }
@@ -615,24 +675,36 @@ std::vector<ImageProcessing::Jpeg::Mcu> ImageProcessing::Jpeg::Encoder::getMcus(
 }
 
 void ImageProcessing::Jpeg::Encoder::writeJpeg(Bmp& bmp) {
-    std::ofstream outFile("writeJpeg.jpeg");
+    JpegBitWriter bitWriter("shouldwork.jpeg");
     // SOI
-    writeMarker(SOI, outFile);
+    writeMarker(SOI, bitWriter);
     // Tables/Misc
         // Qtable
         QuantizationTable qTableLuminance = createQuantizationTable(LuminanceTable, 100, true, 0);
         QuantizationTable qTableChrominance = createQuantizationTable(ChrominanceTable, 100, true, 1);
-        writeQuantizationTable(qTableLuminance, outFile);
-        writeQuantizationTable(qTableChrominance, outFile);
+        writeQuantizationTable(qTableLuminance, bitWriter);
+        writeQuantizationTable(qTableChrominance, bitWriter);
         // Htable
         std::vector<Mcu> mcus = getMcus(bmp);
+        // std::cout << "RGB:\n";
+        // for (auto& mcu : mcus) {
+        //     for (auto& color: mcu.colorBlocks);
+        // }
+
+        // std::cout << "YCbCr:\n";
+        // for (const auto& mcu : mcus) {
+        //     mcu.print();
+        // }
+        
+        forwardDCT(mcus);
+        quantize(mcus, qTableLuminance, qTableChrominance);
+    
         std::vector<EncodedBlock> encodedBlocks;
         std::vector<Coefficient> dcCoefficients;
         std::vector<Coefficient> acCoefficients;
         encodeCoefficients(mcus, encodedBlocks, dcCoefficients, acCoefficients);
-        writeHuffmanTable(dcCoefficients, 0, 0, outFile);
-        writeHuffmanTable(acCoefficients, 1, 0, outFile);
-    
+        HuffmanTable dcTable = writeHuffmanTable(dcCoefficients, 0, 0, bitWriter);
+        HuffmanTable acTable = writeHuffmanTable(acCoefficients, 1, 0, bitWriter);
         // Restart Interval
         // Comment
         // App data
@@ -643,16 +715,16 @@ void ImageProcessing::Jpeg::Encoder::writeJpeg(Bmp& bmp) {
     FrameHeaderComponentSpecification frameCompCr(3, 1, 1, 1);
     std::vector frameComponents{frameCompY, frameCompCb, frameCompCr};
     FrameHeader frameHeader(SOF0, 8, static_cast<uint16_t>(bmp.info.height), static_cast<uint16_t>(bmp.info.width), frameComponents);
-    writeFrameHeader(frameHeader, outFile);
+    writeFrameHeader(frameHeader, bitWriter);
     // Scan
     ScanHeaderComponentSpecification component1(1, 0, 0, 0, 0, 0);
     ScanHeaderComponentSpecification component2(2, 0, 0, 0, 0, 0);
     ScanHeaderComponentSpecification component3(3, 0, 0, 0, 0, 0);
     std::vector scanComponents{component1, component2, component3};
     ScanHeader scanHeader(scanComponents, 0, 63, 0, 0);
-    writeScanHeader(scanHeader, outFile);
+    writeScanHeader(scanHeader, bitWriter);
     // Entropy Data
-    
+    writeBlock(encodedBlocks, dcTable, acTable, bitWriter);
     //EOI
-    writeMarker(EOI, outFile);
+    writeMarker(EOI, bitWriter);
 }

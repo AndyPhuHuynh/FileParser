@@ -163,7 +163,8 @@ void Bmp::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& 
         file.read(reinterpret_cast<char*>(&byte), 1);
         color.r = byte;
         color.a = 255.0f;
-        color.normalizeColor();
+        // TODO: Fix normalizing colors
+        // color.normalizeColor();
         
         points->emplace_back(static_cast<float>(x), static_cast<float>(y), color);
     }

@@ -124,12 +124,19 @@ static void Convert(const std::vector<std::string>& args) {
     }
 }
 
+void printComponent(const std::array<float, 64>& component) {
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            std::cout << std::round(component[i * 8 + j]) << " ";
+        }
+        std::cout << '\n';
+    }
+}
+
 static void Test(const std::vector<std::string>& args) {
     using namespace ImageProcessing;
-    std::ofstream outfile("test.jpeg", std::ios::binary);
-
-    Bmp bmp("./test-images/cat.bmp");
-    Jpeg::Encoder::getMcus(bmp);
+    using namespace Jpeg;
+    using namespace Jpeg::Encoder;
     
     std::array<float, 64> data = {
         5, 0, 2 ,0 ,4 ,0 ,0 ,0,
@@ -163,6 +170,73 @@ static void Test(const std::vector<std::string>& args) {
         0, 0, 0, 0 ,0 ,0 ,0, 0,
         0, 0, 0, 0 ,0 ,0 ,0, 0,
     };
+
+    JpegBitWriter huffmanTest("huffman.test");
+    
+    std::vector<EncodedBlock> blocks;
+    std::vector<Coefficient> dcCoeff;
+    std::vector<Coefficient> acCoeff;
+    int prevDcHuff = 0;
+    encodeCoefficients(data, blocks, dcCoeff, acCoeff, prevDcHuff);
+    encodeCoefficients(data2, blocks, dcCoeff, acCoeff, prevDcHuff);
+    encodeCoefficients(data3, blocks, dcCoeff, acCoeff, prevDcHuff);
+
+    HuffmanTable dcTable = writeHuffmanTable(dcCoeff, 0, 0, huffmanTest);
+    HuffmanTable acTable = writeHuffmanTable(acCoeff, 1, 0, huffmanTest);
+
+    huffmanTest << 0xFFFFFFFF;
+    writeBlock(blocks, dcTable, acTable, huffmanTest);
+
+    std::cout << "dcTable: \n";
+    dcTable.print();
+    std::cout << "acTable: \n";
+    acTable.print();
+    
+    Bmp bmp("./test-images/flower.bmp");
+    writeJpeg(bmp);
+
+
+
+    // DCT test
+    // std::array<float, 64> data4 = {};
+    // for (int i = 0; i < 64; i++) {
+    //     data4[i] = data[i];
+    // }
+    // std::cout << "Before dct:\n";
+    // printComponent(data4);
+    // forwardDCT(data4);
+    // std::cout << "\nAfter dct:\n";
+    // printComponent(data4);
+    // Mcu::performInverseDCT(data4);
+    // std::cout << "\nAfter inverseDCT:\n";
+    // printComponent(data4);
+
+    
+    return;
+    JpegBitWriter bitWriter("bitWriterJpeg.jpeg");
+    QuantizationTable qTableLuminance = createQuantizationTable(LuminanceTable, 50, true, 0);
+    QuantizationTable qTableChrominance = createQuantizationTable(ChrominanceTable, 50, true, 1);
+    writeQuantizationTable(qTableLuminance, bitWriter);
+    writeQuantizationTable(qTableChrominance, bitWriter);
+
+    FrameHeaderComponentSpecification frameCompY(1, 1, 1, 0);
+    FrameHeaderComponentSpecification frameCompCb(2, 1, 1, 1);
+    FrameHeaderComponentSpecification frameCompCr(3, 1, 1, 1);
+    std::vector frameComponents{frameCompY, frameCompCb, frameCompCr};
+    FrameHeader frameHeader(SOF0, 8, static_cast<uint16_t>(bmp.info.height), static_cast<uint16_t>(bmp.info.width), frameComponents);
+    writeFrameHeader(frameHeader, bitWriter);
+
+    ScanHeaderComponentSpecification component1(1, 0, 0, 0, 0, 0);
+    ScanHeaderComponentSpecification component2(2, 0, 0, 0, 0, 0);
+    ScanHeaderComponentSpecification component3(3, 0, 0, 0, 0, 0);
+    std::vector scanComponents{component1, component2, component3};
+    ScanHeader scanHeader(scanComponents, 0, 63, 0, 0);
+    writeScanHeader(scanHeader, bitWriter);
+    
+    std::ofstream outfile("test.jpeg", std::ios::binary);
+
+    
+    Jpeg::Encoder::getMcus(bmp);
 
     std::vector<Jpeg::Encoder::EncodedBlock> encodedBlocks; 
     std::vector<Jpeg::Encoder::Coefficient> dc;
@@ -202,7 +276,7 @@ static void Test(const std::vector<std::string>& args) {
     Jpeg::Encoder::sortSymbolsByFrequencies(dcFrequencies, dcSortedSymbols);
     Jpeg::Encoder::sortSymbolsByFrequencies(acFrequencies, acSortedSymbols);
 
-    Jpeg::Encoder::writeHuffmanTableNoMarker(0, 0, dcSortedSymbols, dcCodeFrequencies, outfile);
+    Jpeg::Encoder::writeHuffmanTable(0, 0, dcSortedSymbols, dcCodeFrequencies, bitWriter);
     
     outfile.close();
 }

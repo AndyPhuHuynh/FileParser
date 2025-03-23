@@ -186,6 +186,7 @@ namespace ImageProcessing::Jpeg {
         uint16_t encoding;
         uint8_t bitLength;
         uint8_t value;
+        HuffmanEncoding() = default;
         HuffmanEncoding(const uint16_t encoding, const uint8_t bitLength, const uint8_t value)
             : encoding(encoding), bitLength(bitLength), value(value) {}
     };
@@ -206,13 +207,18 @@ namespace ImageProcessing::Jpeg {
         static constexpr int maxEncodingLength = 16;
         std::vector<HuffmanEncoding> encodings;
         std::unique_ptr<std::array<HuffmanTableEntry, 256>> table;
+        std::map<uint8_t, HuffmanEncoding> encodingLookup;
         bool isInitialized = false;
     
         HuffmanTable() = default;
         HuffmanTable(std::ifstream& file, const std::streampos& dataStartIndex);
-        void generateLookupTable();
+        HuffmanTable(const std::vector<uint8_t>& symbols, const std::array<uint8_t, maxEncodingLength>& codeSizeFrequencies);
+        HuffmanEncoding getEncoding(uint8_t symbol) const;
         uint8_t decodeNextValue(BitReader& bitReader) const;
         void print() const;
+    private:
+        void generateEncodings(const std::vector<uint8_t>& symbols, const std::array<uint8_t, maxEncodingLength>& codeSizeFrequencies);
+        void generateLookupTable();
     };
 
     class ScanHeaderComponentSpecification {

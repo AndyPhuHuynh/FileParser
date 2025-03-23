@@ -178,6 +178,7 @@ void BitWriter::flushByte(const bool padWithOnes) {
         m_byte |= (1 << (8 - m_bitPosition)) - 1;
     }
     m_buffer.at(m_bufferPos++) = m_byte;
+    m_prevByte = m_byte;
     m_bitPosition = 0;
     m_byte = 0;
 }

@@ -130,16 +130,16 @@ public:
     BitWriter& operator=(const BitWriter&) = delete;
     BitWriter(BitWriter&& other) noexcept;
     BitWriter& operator=(BitWriter&&) = delete;
-    ~BitWriter();
+    virtual ~BitWriter();
     
     void writeZero();
     void writeOne();
     void writeBit(bool isOne);
-    void flushByte(bool padWithOnes = false);
+    virtual void flushByte(bool padWithOnes = false);
     void flushBuffer();
     
     /**
-     * @brief Takes numBits rightmost bits from value and writes them to the bitstream stream
+     * @brief Takes numBits rightmost bits from value in big endian order and writes them to the bitstream stream
      * @param value The value whose bits will be written to the output stream
      * @param numBits The amount of rightmost bits to read from value
      */
@@ -150,7 +150,7 @@ public:
     void writeBits(const BitField<T>& bitField);
     
     /**
-     * @brief Writes all the bits from value into the bitstream
+     * @brief Writes all the bits from value in big endian order into the bitstream
      */
     template<typename T>
     void writeValue(T value);
@@ -160,7 +160,8 @@ public:
 
     template <typename T>
     BitWriter& operator<<(const BitField<T>& bitField);
-private:
+protected:
+    uint8_t m_prevByte = 0;
     uint8_t m_byte = 0;
     int m_bitPosition = 0;
     
