@@ -2,7 +2,7 @@
 
 #include <filesystem>
 
-#include "Bmp.h"
+#include "Bmp/BmpImage.h"
 #include "JpegBitWriter.h"
 #include "JpegImage.h"
 
@@ -89,6 +89,5 @@ namespace ImageProcessing::Jpeg::Encoder {
     void writeBlock(const EncodedBlock& block, const HuffmanTable& dcTable, const HuffmanTable& acTable, JpegBitWriter& bitWriter);
     void writeBlock(const std::vector<EncodedBlock>& blocks, const HuffmanTable& dcTable, const HuffmanTable& acTable, JpegBitWriter& bitWriter);
     
-    std::vector<Mcu> getMcus(Bmp& bmp);
-    void writeJpeg(Bmp& bmp);
+    void writeJpeg(const std::string& filepath, const std::vector<Mcu>& mcus, uint16_t pixelHeight, uint16_t pixelWidth);
 }

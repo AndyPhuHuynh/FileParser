@@ -4,8 +4,6 @@
 #include <numeric>
 #include <ranges>
 
-#include "Bmp.h"
-
 void ImageProcessing::Jpeg::Encoder::forwardDCT(std::array<float, Mcu::DataUnitLength>& component) {
     for (int i = 0; i < 8; ++i) {
         const float a0 = component.at(0 * 8 + i);
@@ -282,7 +280,7 @@ void ImageProcessing::Jpeg::Encoder::generateCodeSizes(const std::array<uint32_t
     std::ranges::copy(frequencies, freq.begin());
     freq[256] = 1;
     // Initialize codeSize
-    std::ranges::fill(outCodeSizes, 0);
+    std::ranges::fill(outCodeSizes, static_cast<uint8_t>(0));
     // Initialize others
     std::array<uint32_t, 257> others;
     std::ranges::fill(others, std::numeric_limits<uint32_t>::max());
@@ -374,16 +372,16 @@ void ImageProcessing::Jpeg::Encoder::countCodeSizes(const std::array<uint8_t, 25
 
 void ImageProcessing::Jpeg::Encoder::sortSymbolsByFrequencies(const std::array<uint32_t, 256>& frequencies, std::vector<uint8_t>& outSortedSymbols) {
     // Each pair stores a pair of symbol to frequency
-    std::vector<std::pair<uint32_t, int>> freqPairs;
+    std::vector<std::pair<uint8_t, int>> freqPairs;
     for (int i = 0 ; i < 256; i++) {
         if (frequencies.at(i) == 0) {
             continue;
         }
-        freqPairs.emplace_back(i, frequencies.at(i));
+        freqPairs.emplace_back(static_cast<uint8_t>(i), frequencies.at(i));
     }
 
     // Sort by descending frequency; for ties, sort by ascending symbol
-    auto comparePair = [](const std::pair<uint32_t, int>& one, const std::pair<uint32_t, int>& two) -> bool {
+    auto comparePair = [](const std::pair<uint8_t, int>& one, const std::pair<uint8_t, int>& two) -> bool {
         return (one.second > two.second) || (one.second == two.second && one.first < two.first);
     };
     std::ranges::sort(freqPairs, comparePair);
@@ -603,106 +601,19 @@ void ImageProcessing::Jpeg::Encoder::writeBlock(const std::vector<EncodedBlock>&
     bitWriter.setByteStuffing(false);
 }
 
-std::vector<ImageProcessing::Jpeg::Mcu> ImageProcessing::Jpeg::Encoder::getMcus(Bmp& bmp) {
-    auto points = bmp.getPoints();
-    
-    int columnCount = static_cast<int>(bmp.info.width + 7) / 8;
-    int rowCount = static_cast<int>(bmp.info.height + 7) / 8;
-    int height = static_cast<int>(bmp.info.height);
-    int width = static_cast<int>(bmp.info.width);
-    
-    std::vector rows(rowCount, std::vector<ColorBlock>(columnCount));
-    
-    for (auto& point: *points) {
-        int blockRow = (static_cast<int>(point.y) / 8);
-        int pixelRow = (static_cast<int>(point.y) % 8);
-        int blockCol = (static_cast<int>(point.x) / 8);
-        int pixelCol = (static_cast<int>(point.x) % 8);
-        rows[blockRow][blockCol].R[pixelRow * 8 + pixelCol] = point.color.r;
-        rows[blockRow][blockCol].G[pixelRow * 8 + pixelCol] = point.color.g;
-        rows[blockRow][blockCol].B[pixelRow * 8 + pixelCol] = point.color.b;
-    }
-
-    // Pad points outside the height of the image with same color as the last color within the column
-    if (height % 8 != 0) {
-        for (int y = height; y < rowCount * 8; y++) {
-            int blockRow = height / 8;
-            int pixelRow = y % 8;
-            for (int x = 0; x < width; x++) {
-                int blockCol = x / 8;
-                int pixelCol = x % 8;
-                float prevRed = rows[blockRow][blockCol].R[(pixelRow - 1) * 8 + pixelCol];
-                float prevGreen = rows[blockRow][blockCol].G[(pixelRow - 1) * 8 + pixelCol];
-                float prevBlue = rows[blockRow][blockCol].B[(pixelRow - 1) * 8 + pixelCol];
-                rows[blockRow][blockCol].R[pixelRow * 8 + pixelCol] = prevRed;
-                rows[blockRow][blockCol].G[pixelRow * 8 + pixelCol] = prevGreen;
-                rows[blockRow][blockCol].B[pixelRow * 8 + pixelCol] = prevBlue;
-            }
-        }
-    }
-
-    // Pad points outside the width of the image with same color as the last color within the row
-    if (width % 8 != 0) {
-        for (int y = 0; y < rowCount * 8; y++) {
-            int blockRow = y / 8;
-            int pixelRow = y % 8;
-            for (int x = width; x < columnCount * 8; x++) {
-                int blockCol = x / 8;
-                int pixelCol = x % 8;
-                float prevRed = rows[blockRow][blockCol].R[pixelRow * 8 + (pixelCol - 1)];
-                float prevGreen = rows[blockRow][blockCol].G[pixelRow * 8 + (pixelCol - 1)];
-                float prevBlue = rows[blockRow][blockCol].B[pixelRow * 8 + (pixelCol - 1)];
-                rows[blockRow][blockCol].R[pixelRow * 8 + pixelCol] = prevRed;
-                rows[blockRow][blockCol].G[pixelRow * 8 + pixelCol] = prevGreen;
-                rows[blockRow][blockCol].B[pixelRow * 8 + pixelCol] = prevBlue;
-            }
-        }
-    }
-
-    std::vector<Mcu> mcus;
-    for (const auto& row : rows) {
-        for (const auto& block : row) {
-            mcus.emplace_back(block);
-        }
-    }
-    return mcus;
-}
-
-void ImageProcessing::Jpeg::Encoder::writeJpeg(Bmp& bmp) {
-    JpegBitWriter bitWriter("shouldwork.jpeg");
+void ImageProcessing::Jpeg::Encoder::writeJpeg(const std::string& filepath, const std::vector<Mcu>& mcus, uint16_t pixelHeight, uint16_t pixelWidth) {
+    JpegBitWriter bitWriter(filepath);
     // SOI
     writeMarker(SOI, bitWriter);
     // Tables/Misc
         // Qtable
-        QuantizationTable qTableLuminance = createQuantizationTable(LuminanceTable, 50, true, 0);
-        QuantizationTable qTableChrominance = createQuantizationTable(ChrominanceTable, 50, true, 1);
+        QuantizationTable qTableLuminance = createQuantizationTable(LuminanceTable, 100, true, 0);
+        QuantizationTable qTableChrominance = createQuantizationTable(ChrominanceTable, 100, true, 1);
         writeQuantizationTable(qTableLuminance, bitWriter);
         writeQuantizationTable(qTableChrominance, bitWriter);
         // Htable
-        std::vector<Mcu> mcus = getMcus(bmp);
-        // std::cout << "RGB:\n";
-        // for (auto& mcu : mcus) {
-        //     for (auto& color: mcu.colorBlocks);
-        // }
-
-        // std::cout << "YCbCr:\n";
-        // for (const auto& mcu : mcus) {
-        //     mcu.print();
-        // }
-        
         forwardDCT(mcus);
-
-        std::cout << "Before quantize:\n";
-        for (int i = 0; i < 4 && i < mcus.size(); i++) {
-            mcus[i].print();
-        }
-        
         quantize(mcus, qTableLuminance, qTableChrominance);
-
-        std::cout << "After quantize:\n";
-        for (int i = 0; i < 4 && i < mcus.size(); i++) {
-            mcus[i].print();
-        }
     
         std::vector<EncodedBlock> encodedBlocks;
         std::vector<Coefficient> dcCoefficients;
@@ -723,7 +634,7 @@ void ImageProcessing::Jpeg::Encoder::writeJpeg(Bmp& bmp) {
     FrameHeaderComponentSpecification frameCompCb(2, 1, 1, 1);
     FrameHeaderComponentSpecification frameCompCr(3, 1, 1, 1);
     std::vector frameComponents{frameCompY, frameCompCb, frameCompCr};
-    FrameHeader frameHeader(SOF0, 8, static_cast<uint16_t>(bmp.info.height), static_cast<uint16_t>(bmp.info.width), frameComponents);
+    FrameHeader frameHeader(SOF0, 8, pixelHeight, pixelWidth, frameComponents);
     writeFrameHeader(frameHeader, bitWriter);
     // Scan
     ScanHeaderComponentSpecification component1(1, 0, 0, 0, 0, 0);

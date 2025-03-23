@@ -6,7 +6,9 @@
 #include <string>
 #include <unordered_map>
 
-#include "Bmp.h"
+#include "Bmp/BmpImage.h"
+#include "Bmp/BmpJpegConverter.h"
+#include "Bmp/BmpRenderer.h"
 #include "FileUtil.h"
 #include "Jpeg/JpegBmpConverter.h"
 #include "Jpeg/JpegEncoder.h"
@@ -70,13 +72,13 @@ static void Render(const std::vector<std::string>& args) {
 
     switch (GetFileType(filepath)) {
     case FileType::Bmp: {
-        Bmp bmp(filepath);
-        bmp.render();
+        Bmp::BmpImage bmp(filepath);
+        Bmp::Renderer::renderBmp(bmp);
         break;
     }
     case FileType::Jpeg: {
         Jpeg::JpegImage jpeg(filepath);
-        Jpeg::Renderer::RenderJpeg(jpeg);
+        Jpeg::Renderer::renderJpeg(jpeg);
         break;
     }
     case FileType::None:
@@ -112,7 +114,7 @@ static void Convert(const std::vector<std::string>& args) {
     case FileType::Jpeg: {
         Jpeg::JpegImage jpeg(filepath);
         if (format == "bmp") {
-            Jpeg::Converter::WriteJpegAsBmp(jpeg, newFilepath);
+            Jpeg::Converter::writeJpegAsBmp(jpeg, newFilepath);
         } else {
             std::cout << "Only conversion from jpg to bmp is supported\n";
         }
@@ -192,8 +194,8 @@ static void Test(const std::vector<std::string>& args) {
     // std::cout << "acTable: \n";
     // acTable.print();
     
-    Bmp bmp(args[1]);
-    writeJpeg(bmp);
+    Bmp::BmpImage bmp(args[1]);
+    Bmp::Converter::writeBmpAsJpeg(bmp, "shouldwork.jpeg");
 }
 
 static std::unordered_map<std::string, std::function<void(const std::vector<std::string>&)>> commands = {

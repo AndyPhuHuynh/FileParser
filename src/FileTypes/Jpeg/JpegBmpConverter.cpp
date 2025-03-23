@@ -7,7 +7,7 @@
 
 // TODO: Make writing to bmp faster
 
-void ImageProcessing::Jpeg::Converter::WriteJpegAsBmp(const JpegImage& jpeg, const std::string& filename) {
+void ImageProcessing::Jpeg::Converter::writeJpegAsBmp(const JpegImage& jpeg, const std::string& filename) {
     clock_t begin = clock();
     // open file
     std::cout << "Writing " << filename << "...\n";

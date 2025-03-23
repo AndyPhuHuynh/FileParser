@@ -3,5 +3,6 @@
 #include <Jpeg/JpegImage.h>
 
 namespace ImageProcessing::Jpeg::Converter {
-    void WriteJpegAsBmp(const JpegImage& jpeg, const std::string& filename);
+    void writeJpegAsBmp(const JpegImage& jpeg, const std::string& filename);
 }
+ 

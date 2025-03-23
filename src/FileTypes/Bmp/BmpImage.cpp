@@ -5,11 +5,11 @@
 #include <memory>
 
 #include "BitManipulationUtil.h"
-#include "Bmp.h"
+#include "Bmp/BmpImage.h"
 #include "Gui/Renderer.h"
 #include "Gui/RenderWindow.h"
 
-BmpHeader BmpHeader::getHeaderFromFile(std::ifstream& file) {
+ImageProcessing::Bmp::BmpHeader ImageProcessing::Bmp::BmpHeader::getHeaderFromFile(std::ifstream& file) {
     BmpHeader header;
     file.seekg(fileHeaderOffset, std::ios::beg);
     file.read(reinterpret_cast<char*>(&header.signature), 2);
@@ -19,7 +19,7 @@ BmpHeader BmpHeader::getHeaderFromFile(std::ifstream& file) {
     return header;
 }
 
-BmpInfo BmpInfo::getInfoFromFile(std::ifstream& file) {
+ImageProcessing::Bmp::BmpInfo ImageProcessing::Bmp::BmpInfo::getInfoFromFile(std::ifstream& file) {
     BmpInfo info = BmpInfo();
     file.seekg(fileInfoHeaderPos, std::ios::beg);
     file.read(reinterpret_cast<char*>(&info.size), 4);
@@ -50,7 +50,7 @@ BmpInfo BmpInfo::getInfoFromFile(std::ifstream& file) {
     return info;
 }
 
-BmpRasterEncoding BmpInfo::getRasterEncoding() const {
+ImageProcessing::Bmp::BmpRasterEncoding ImageProcessing::Bmp::BmpInfo::getRasterEncoding() const {
     if (bitCount == 1 && compression == 0) { return BmpRasterEncoding::Monochrome; }
     if (bitCount == 4 && compression == 0) { return BmpRasterEncoding::FourBitNoCompression; }
     if (bitCount == 8 && compression == 0) { return BmpRasterEncoding::EightBitNoCompression; }
@@ -61,7 +61,7 @@ BmpRasterEncoding BmpInfo::getRasterEncoding() const {
     return BmpRasterEncoding::None;
 }
 
-void BmpInfo::print() const {
+void ImageProcessing::Bmp::BmpInfo::print() const {
     std::cout << "Size: " << size << '\n';
     std::cout << "Width: " << width << '\n';
     std::cout << "Height: " << height << '\n';
@@ -76,7 +76,7 @@ void BmpInfo::print() const {
     std::cout << "Important colors: " << importantColors << '\n';
 }
 
-int BmpInfo::getNumColors() const {
+int ImageProcessing::Bmp::BmpInfo::getNumColors() const {
     if (bitCount == 1) {
         return 2;
     }
@@ -89,7 +89,7 @@ int BmpInfo::getNumColors() const {
     return -1;
 }
 
-void Bmp::initColorTable() {
+void ImageProcessing::Bmp::BmpImage::initColorTable() {
     int colorCount = info.getNumColors();
     colorTable = std::vector<Color>(colorCount);
     file.seekg(fileColorTableOffset, std::ios::beg);
@@ -99,7 +99,7 @@ void Bmp::initColorTable() {
     }
 }
 
-std::shared_ptr<std::vector<Point>> Bmp::getPoints() {
+std::shared_ptr<std::vector<Point>> ImageProcessing::Bmp::BmpImage::getPoints() {
     std::shared_ptr<std::vector<Point>> points = std::make_shared<std::vector<Point>>();
     points->reserve(static_cast<int>(info.width * info.height));
     file.seekg(header.dataOffset, std::ios::beg);
@@ -115,7 +115,7 @@ std::shared_ptr<std::vector<Point>> Bmp::getPoints() {
     return points;
 }
 
-void Bmp::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, const int y) {
+void ImageProcessing::Bmp::BmpImage::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, const int y) {
     uint32_t pixelsInRowRead = 0;
     bool allNonPaddingBitsRead = false;
     for (uint32_t byteInRow = 0; byteInRow < rowSize; byteInRow++) {
@@ -152,7 +152,7 @@ void Bmp::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Poin
     }
 }
 
-void Bmp::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, const int y) {
+void ImageProcessing::Bmp::BmpImage::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, const int y) {
     for (uint32_t x = 0; x < rowSize / 3; x++) {
         unsigned char byte;
         Color color;
@@ -170,31 +170,7 @@ void Bmp::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& 
     file.seekg(padding, std::ios::cur);
 }
 
-int Bmp::render() {
-    if (rasterEncoding != BmpRasterEncoding::Monochrome &&
-        rasterEncoding != BmpRasterEncoding::FourBitNoCompression &&
-        rasterEncoding != BmpRasterEncoding::EightBitNoCompression &&
-        rasterEncoding != BmpRasterEncoding::TwentyFourBitNoCompression) {
-        std::cout << "Raster encoding not supported: " <<
-            "\n\tBitCount: "<<  info.bitCount <<
-            "\n\tCompression: " << info.compression << '\n';
-        return -1;
-    }
-    
-    auto windowFuture = Gui::Renderer::GetInstance()->createWindowAsync(static_cast<int>(info.width), static_cast<int>(info.height), "Bmp", Gui::RenderMode::Point);
-    
-    if (auto window = windowFuture.get().lock()) {
-        auto points = getPoints();
-        for (auto& point : *points) {
-            point.color.normalizeColor();
-        }
-        window->setBufferDataPointsAsync(points);
-        window->showWindowAsync();
-    }
-    return 0;
-}
-
-Bmp::Bmp(const std::string& path) {
+ImageProcessing::Bmp::BmpImage::BmpImage(const std::string& path) {
     file = std::ifstream(path, std::ios::binary);
     header = BmpHeader::getHeaderFromFile(file);
     info = BmpInfo::getInfoFromFile(file);
