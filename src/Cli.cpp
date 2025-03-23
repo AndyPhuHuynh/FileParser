@@ -181,104 +181,19 @@ static void Test(const std::vector<std::string>& args) {
     encodeCoefficients(data2, blocks, dcCoeff, acCoeff, prevDcHuff);
     encodeCoefficients(data3, blocks, dcCoeff, acCoeff, prevDcHuff);
 
-    HuffmanTable dcTable = writeHuffmanTable(dcCoeff, 0, 0, huffmanTest);
-    HuffmanTable acTable = writeHuffmanTable(acCoeff, 1, 0, huffmanTest);
-
-    huffmanTest << 0xFFFFFFFF;
-    writeBlock(blocks, dcTable, acTable, huffmanTest);
-
-    std::cout << "dcTable: \n";
-    dcTable.print();
-    std::cout << "acTable: \n";
-    acTable.print();
-    
-    Bmp bmp("./test-images/flower.bmp");
-    writeJpeg(bmp);
-
-
-
-    // DCT test
-    // std::array<float, 64> data4 = {};
-    // for (int i = 0; i < 64; i++) {
-    //     data4[i] = data[i];
-    // }
-    // std::cout << "Before dct:\n";
-    // printComponent(data4);
-    // forwardDCT(data4);
-    // std::cout << "\nAfter dct:\n";
-    // printComponent(data4);
-    // Mcu::performInverseDCT(data4);
-    // std::cout << "\nAfter inverseDCT:\n";
-    // printComponent(data4);
-
-    
-    return;
-    JpegBitWriter bitWriter("bitWriterJpeg.jpeg");
-    QuantizationTable qTableLuminance = createQuantizationTable(LuminanceTable, 50, true, 0);
-    QuantizationTable qTableChrominance = createQuantizationTable(ChrominanceTable, 50, true, 1);
-    writeQuantizationTable(qTableLuminance, bitWriter);
-    writeQuantizationTable(qTableChrominance, bitWriter);
-
-    FrameHeaderComponentSpecification frameCompY(1, 1, 1, 0);
-    FrameHeaderComponentSpecification frameCompCb(2, 1, 1, 1);
-    FrameHeaderComponentSpecification frameCompCr(3, 1, 1, 1);
-    std::vector frameComponents{frameCompY, frameCompCb, frameCompCr};
-    FrameHeader frameHeader(SOF0, 8, static_cast<uint16_t>(bmp.info.height), static_cast<uint16_t>(bmp.info.width), frameComponents);
-    writeFrameHeader(frameHeader, bitWriter);
-
-    ScanHeaderComponentSpecification component1(1, 0, 0, 0, 0, 0);
-    ScanHeaderComponentSpecification component2(2, 0, 0, 0, 0, 0);
-    ScanHeaderComponentSpecification component3(3, 0, 0, 0, 0, 0);
-    std::vector scanComponents{component1, component2, component3};
-    ScanHeader scanHeader(scanComponents, 0, 63, 0, 0);
-    writeScanHeader(scanHeader, bitWriter);
-    
-    std::ofstream outfile("test.jpeg", std::ios::binary);
-
-    
-    Jpeg::Encoder::getMcus(bmp);
-
-    std::vector<Jpeg::Encoder::EncodedBlock> encodedBlocks; 
-    std::vector<Jpeg::Encoder::Coefficient> dc;
-    std::vector<Jpeg::Encoder::Coefficient> ac;
-    int prevDc = 0;
-    encodeCoefficients(data, encodedBlocks, dc, ac, prevDc);
-    encodeCoefficients(data2, encodedBlocks, dc, ac, prevDc);
-    encodeCoefficients(data3, encodedBlocks, dc, ac, prevDc);
-    // std::cout << "DC:\n";
-    // for (int i = 0; i < dc.size(); i++) {
-    //     std::cout << std::hex << static_cast<int>(dc.at(i).encoding) << std::dec << ", " << static_cast<int>(dc.at(i).value) << "\n";
-    // }
+    // HuffmanTable dcTable = createHuffmanTable(dcCoeff);
+    // HuffmanTable acTable = createHuffmanTable(acCoeff);
     //
-    // std::cout << "AC:\n";
-    // for (int i = 0; i < ac.size(); i++) {
-    //     std::cout << std::hex << static_cast<int>(ac.at(i).encoding) << std::dec << ", " << static_cast<int>(ac.at(i).value) << "\n";
-    // }
-
-
-    std::array<uint32_t, 256> dcFrequencies{};
-    std::array<uint32_t, 256> acFrequencies{};
+    // huffmanTest << 0xFFFFFFFF;
+    // writeBlock(blocks, dcTable, acTable, huffmanTest);
+    //
+    // std::cout << "dcTable: \n";
+    // dcTable.print();
+    // std::cout << "acTable: \n";
+    // acTable.print();
     
-    // countFrequencies(dc, ac, dcFrequencies, acFrequencies);
-    dcFrequencies = {2, 3, 4, 5, 6};
-    std::array<uint8_t, 257> dcCodeSizes{};
-    std::array<uint8_t, 257> acCodeSizes{};
-    Jpeg::Encoder::generateCodeSizes(dcFrequencies, dcCodeSizes);
-    Jpeg::Encoder::generateCodeSizes(acFrequencies, acCodeSizes);
-    
-    std::array<uint8_t, 33> dcCodeFrequencies{};
-    std::array<uint8_t, 33> acCodeFrequencies{};
-    Jpeg::Encoder::countCodeSizes(dcCodeSizes, dcCodeFrequencies);
-    Jpeg::Encoder::countCodeSizes(acCodeSizes, acCodeFrequencies);
-    
-    std::vector<uint8_t> dcSortedSymbols;
-    std::vector<uint8_t> acSortedSymbols;
-    Jpeg::Encoder::sortSymbolsByFrequencies(dcFrequencies, dcSortedSymbols);
-    Jpeg::Encoder::sortSymbolsByFrequencies(acFrequencies, acSortedSymbols);
-
-    Jpeg::Encoder::writeHuffmanTable(0, 0, dcSortedSymbols, dcCodeFrequencies, bitWriter);
-    
-    outfile.close();
+    Bmp bmp(args[1]);
+    writeJpeg(bmp);
 }
 
 static std::unordered_map<std::string, std::function<void(const std::vector<std::string>&)>> commands = {

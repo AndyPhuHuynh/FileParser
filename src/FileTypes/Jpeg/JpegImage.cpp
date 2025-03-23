@@ -1035,6 +1035,8 @@ void ImageProcessing::Jpeg::JpegImage::readComments() {
 
 void ImageProcessing::Jpeg::JpegImage::processQuantizationQueue(const std::vector<ScanHeaderComponentSpecification>& scanComps) {
     static double totalTime = 0.0f;
+    static int mcusCount = 0;
+    mcusCount = 0;
     while (true) {
         std::unique_lock quantizationLock(quantizationQueue.mutex);
         quantizationQueue.condition.wait(quantizationLock, [&] {
@@ -1045,9 +1047,18 @@ void ImageProcessing::Jpeg::JpegImage::processQuantizationQueue(const std::vecto
             quantizationQueue.queue.pop();
             quantizationLock.unlock();
             clock_t begin = clock();
+            if (mcusCount < 4) {
+                std::cout << "Before dequantize " << mcusCount << std::endl;
+                mcu->print();
+            }
             for (const auto& scanComp : scanComps) {
                 mcu->dequantize(this, scanComp);
             }
+            std::cout << "After dequantize" << mcusCount << std::endl;
+            if (mcusCount < 4) {
+                mcu->print();
+            }
+            mcusCount++;
             clock_t end = clock();
             totalTime += (end - begin);
             {

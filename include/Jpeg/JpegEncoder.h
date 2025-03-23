@@ -73,13 +73,14 @@ namespace ImageProcessing::Jpeg::Encoder {
     QuantizationTable createQuantizationTable(const std::array<float, 64>& table, int quality, bool is8Bit, uint8_t tableDestination);
     void writeQuantizationTableNoMarker(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter);
     void writeQuantizationTable(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter);
-
+    
     HuffmanTable createHuffmanTable(const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizeFrequencies);
-    HuffmanTable writeHuffmanTableNoMarker(uint8_t tableClass, uint8_t tableDestination,
+    HuffmanTable createHuffmanTable(const std::vector<Coefficient>& coefficients,
+        std::vector<uint8_t>& outSortedSymbols, std::array<uint8_t, 33>& outCodeSizeFrequencies);
+    void writeHuffmanTableNoMarker(uint8_t tableClass, uint8_t tableDestination,
         const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter);
-    HuffmanTable writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination,
+    void writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination,
         const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter);
-    HuffmanTable writeHuffmanTable(const std::vector<Coefficient>& coefficients, uint8_t tableClass, uint8_t tableDestination, JpegBitWriter& bitWriter);
 
     void writeScanHeaderComponentSpecification(const ScanHeaderComponentSpecification& component, JpegBitWriter& bitWriter);
     void writeScanHeader(const ScanHeader& scanHeader, JpegBitWriter& bitWriter);

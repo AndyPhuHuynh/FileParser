@@ -163,9 +163,7 @@ void Bmp::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& 
         file.read(reinterpret_cast<char*>(&byte), 1);
         color.r = byte;
         color.a = 255.0f;
-        // TODO: Fix normalizing colors
-        // color.normalizeColor();
-        
+
         points->emplace_back(static_cast<float>(x), static_cast<float>(y), color);
     }
     uint32_t padding = rowSize % 3;
@@ -186,7 +184,11 @@ int Bmp::render() {
     auto windowFuture = Gui::Renderer::GetInstance()->createWindowAsync(static_cast<int>(info.width), static_cast<int>(info.height), "Bmp", Gui::RenderMode::Point);
     
     if (auto window = windowFuture.get().lock()) {
-        window->setBufferDataPointsAsync(getPoints());
+        auto points = getPoints();
+        for (auto& point : *points) {
+            point.color.normalizeColor();
+        }
+        window->setBufferDataPointsAsync(points);
         window->showWindowAsync();
     }
     return 0;

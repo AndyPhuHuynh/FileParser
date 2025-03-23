@@ -175,7 +175,7 @@ void ImageProcessing::Jpeg::Encoder::forwardDCT(const std::vector<Mcu>& mcus) {
 
 void ImageProcessing::Jpeg::Encoder::quantize(std::array<float, Mcu::DataUnitLength>& component, const QuantizationTable& quantizationTable) {
     for (int i = 0; i < Mcu::DataUnitLength; i++) {
-        component.at(i) = std::floor(component.at(i) / quantizationTable.table.at(i));
+        component.at(i) = std::round(component.at(i) / quantizationTable.table.at(i));
     }
 }
 
@@ -361,7 +361,7 @@ void ImageProcessing::Jpeg::Encoder::adjustCodeSizes(std::array<uint8_t, 33>& co
 }
 
 void ImageProcessing::Jpeg::Encoder::countCodeSizes(const std::array<uint8_t, 257>& codeSizes,
-                                                    std::array<uint8_t, 33>& outCodeSizeFrequencies) {
+    std::array<uint8_t, 33>& outCodeSizeFrequencies) {
     for (auto i : codeSizes) {
         if (i > 32) {
             std::cerr << "Invalid code size: " << i << ", clamping to 32\n";
@@ -466,7 +466,42 @@ void ImageProcessing::Jpeg::Encoder::writeQuantizationTable(const QuantizationTa
     writeQuantizationTableNoMarker(quantizationTable, bitWriter);
 }
 
-ImageProcessing::Jpeg::HuffmanTable ImageProcessing::Jpeg::Encoder::writeHuffmanTableNoMarker(
+ImageProcessing::Jpeg::HuffmanTable ImageProcessing::Jpeg::Encoder::createHuffmanTable(
+    const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizeFrequencies) {
+    // Validate that symbols and code sizes match, ignoring the frequency of code size 0
+    if (sortedSymbols.size() != std::accumulate(codeSizeFrequencies.begin() + 1, codeSizeFrequencies.end(), 0u)) {
+        throw std::invalid_argument("Number of symbols and code sizes do not match");
+    }
+
+    // Validate code size frequencies
+    for (size_t i = MaxHuffmanBits + 1; i < codeSizeFrequencies.size(); i++) {
+        if (codeSizeFrequencies[i] != 0) {
+            throw std::invalid_argument("Invalid Huffman code size: " + std::to_string(codeSizeFrequencies[i]));
+        }
+    }
+
+    std::array<uint8_t, 16> smallCodeSizes;
+    std::copy(codeSizeFrequencies.begin() + 1, codeSizeFrequencies.begin() + 17, smallCodeSizes.begin());
+
+    HuffmanTable table(sortedSymbols, smallCodeSizes);
+    return table;
+}
+
+ImageProcessing::Jpeg::HuffmanTable ImageProcessing::Jpeg::Encoder::createHuffmanTable(const std::vector<Coefficient>& coefficients,
+    std::vector<uint8_t>& outSortedSymbols, std::array<uint8_t, 33>& outCodeSizeFrequencies) {
+    std::array<uint32_t, 256> frequencies{};
+    countFrequencies(coefficients, frequencies);
+    
+    std::array<uint8_t, 257> codeSizes{};
+    generateCodeSizes(frequencies, codeSizes);
+    
+    countCodeSizes(codeSizes, outCodeSizeFrequencies);
+    sortSymbolsByFrequencies(frequencies, outSortedSymbols);
+
+    return createHuffmanTable(outSortedSymbols, outCodeSizeFrequencies);
+}
+
+void ImageProcessing::Jpeg::Encoder::writeHuffmanTableNoMarker(
     const uint8_t tableClass, const uint8_t tableDestination, const std::vector<uint8_t>& sortedSymbols,
     const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter) {
 
@@ -495,36 +530,16 @@ ImageProcessing::Jpeg::HuffmanTable ImageProcessing::Jpeg::Encoder::writeHuffman
     for (auto symbol : sortedSymbols) {
         bitWriter << symbol;
     }
-
-    return createHuffmanTable(sortedSymbols, codeSizesFrequencies);
 }
 
-ImageProcessing::Jpeg::HuffmanTable ImageProcessing::Jpeg::Encoder::writeHuffmanTable(const uint8_t tableClass, const uint8_t tableDestination,
+void ImageProcessing::Jpeg::Encoder::writeHuffmanTable(const uint8_t tableClass, const uint8_t tableDestination,
     const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter) {
 
     uint16_t length = 2 + 1 + 16 + static_cast<uint16_t>(sortedSymbols.size());
-    
     writeMarker(DHT, bitWriter);
     bitWriter << length;
     
     return writeHuffmanTableNoMarker(tableClass, tableDestination, sortedSymbols, codeSizesFrequencies, bitWriter);
-}
-
-ImageProcessing::Jpeg::HuffmanTable ImageProcessing::Jpeg::Encoder::writeHuffmanTable(const std::vector<Coefficient>& coefficients,
-    const uint8_t tableClass, const uint8_t tableDestination, JpegBitWriter& bitWriter) {
-    std::array<uint32_t, 256> frequencies{};
-    countFrequencies(coefficients, frequencies);
-    
-    std::array<uint8_t, 257> codeSizes{};
-    generateCodeSizes(frequencies, codeSizes);
-    
-    std::array<uint8_t, 33> codeFrequencies{};
-    countCodeSizes(codeSizes, codeFrequencies);
-    
-    std::vector<uint8_t> sortedSymbols;
-    sortSymbolsByFrequencies(frequencies, sortedSymbols);
-
-    return writeHuffmanTable(tableClass, tableDestination, sortedSymbols, codeFrequencies, bitWriter);
 }
 
 void ImageProcessing::Jpeg::Encoder::writeScanHeaderComponentSpecification(
@@ -546,27 +561,6 @@ void ImageProcessing::Jpeg::Encoder::writeScanHeader(const ScanHeader& scanHeade
     
     uint8_t successiveApproximation = static_cast<uint8_t>(scanHeader.successiveApproximationHigh << 4 | scanHeader.successiveApproximationLow);
     bitWriter << scanHeader.spectralSelectionStart << scanHeader.spectralSelectionEnd << successiveApproximation;
-}
-
-ImageProcessing::Jpeg::HuffmanTable ImageProcessing::Jpeg::Encoder::createHuffmanTable(
-    const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizeFrequencies) {
-    // Validate that symbols and code sizes match, ignoring the frequency of code size 0
-    if (sortedSymbols.size() != std::accumulate(codeSizeFrequencies.begin() + 1, codeSizeFrequencies.end(), 0u)) {
-        throw std::invalid_argument("Number of symbols and code sizes do not match");
-    }
-
-    // Validate code size frequencies
-    for (size_t i = MaxHuffmanBits + 1; i < codeSizeFrequencies.size(); i++) {
-        if (codeSizeFrequencies[i] != 0) {
-            throw std::invalid_argument("Invalid Huffman code size: " + std::to_string(codeSizeFrequencies[i]));
-        }
-    }
-
-    std::array<uint8_t, 16> smallCodeSizes;
-    std::copy(codeSizeFrequencies.begin() + 1, codeSizeFrequencies.begin() + 17, smallCodeSizes.begin());
-
-    HuffmanTable table(sortedSymbols, smallCodeSizes);
-    return table;
 }
 
 int ImageProcessing::Jpeg::Encoder::encodeSSSS(const uint8_t SSSS, const int value) {
@@ -680,8 +674,8 @@ void ImageProcessing::Jpeg::Encoder::writeJpeg(Bmp& bmp) {
     writeMarker(SOI, bitWriter);
     // Tables/Misc
         // Qtable
-        QuantizationTable qTableLuminance = createQuantizationTable(LuminanceTable, 100, true, 0);
-        QuantizationTable qTableChrominance = createQuantizationTable(ChrominanceTable, 100, true, 1);
+        QuantizationTable qTableLuminance = createQuantizationTable(LuminanceTable, 50, true, 0);
+        QuantizationTable qTableChrominance = createQuantizationTable(ChrominanceTable, 50, true, 1);
         writeQuantizationTable(qTableLuminance, bitWriter);
         writeQuantizationTable(qTableChrominance, bitWriter);
         // Htable
@@ -697,14 +691,29 @@ void ImageProcessing::Jpeg::Encoder::writeJpeg(Bmp& bmp) {
         // }
         
         forwardDCT(mcus);
+
+        std::cout << "Before quantize:\n";
+        for (int i = 0; i < 4 && i < mcus.size(); i++) {
+            mcus[i].print();
+        }
+        
         quantize(mcus, qTableLuminance, qTableChrominance);
+
+        std::cout << "After quantize:\n";
+        for (int i = 0; i < 4 && i < mcus.size(); i++) {
+            mcus[i].print();
+        }
     
         std::vector<EncodedBlock> encodedBlocks;
         std::vector<Coefficient> dcCoefficients;
         std::vector<Coefficient> acCoefficients;
         encodeCoefficients(mcus, encodedBlocks, dcCoefficients, acCoefficients);
-        HuffmanTable dcTable = writeHuffmanTable(dcCoefficients, 0, 0, bitWriter);
-        HuffmanTable acTable = writeHuffmanTable(acCoefficients, 1, 0, bitWriter);
+        std::vector<uint8_t> dcSortedSymbols, acSortedSymbols;
+        std::array<uint8_t, 33> dcCodeSizeFrequencies{}, acCodeSizeFrequencies{};
+        HuffmanTable dcTable = createHuffmanTable(dcCoefficients, dcSortedSymbols, dcCodeSizeFrequencies);
+        HuffmanTable acTable = createHuffmanTable(acCoefficients, acSortedSymbols, acCodeSizeFrequencies);
+        writeHuffmanTable(0, 0, dcSortedSymbols, dcCodeSizeFrequencies, bitWriter);
+        writeHuffmanTable(1, 0, acSortedSymbols, acCodeSizeFrequencies, bitWriter);
         // Restart Interval
         // Comment
         // App data
