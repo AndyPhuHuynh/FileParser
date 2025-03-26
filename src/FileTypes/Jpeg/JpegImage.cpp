@@ -1456,7 +1456,7 @@ void ImageProcessing::Jpeg::JpegImage::readFile() {
             uint8_t marker;
             file.read(reinterpret_cast<char*>(&marker), 1);
             if (marker == 0x00) continue;
-            if (marker == DHT ) {
+            if (marker == DHT) {
                 readHuffmanTables();
             } else if (marker == DQT) {
                 readQuantizationTables();

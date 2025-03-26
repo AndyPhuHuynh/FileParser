@@ -607,8 +607,8 @@ void ImageProcessing::Jpeg::Encoder::writeJpeg(const std::string& filepath, cons
     writeMarker(SOI, bitWriter);
     // Tables/Misc
         // Qtable
-        QuantizationTable qTableLuminance = createQuantizationTable(LuminanceTable, 100, true, 0);
-        QuantizationTable qTableChrominance = createQuantizationTable(ChrominanceTable, 100, true, 1);
+        QuantizationTable qTableLuminance = createQuantizationTable(LuminanceTable, 50, true, 0);
+        QuantizationTable qTableChrominance = createQuantizationTable(ChrominanceTable, 50, true, 1);
         writeQuantizationTable(qTableLuminance, bitWriter);
         writeQuantizationTable(qTableChrominance, bitWriter);
         // Htable

@@ -15,7 +15,14 @@ static bool CheckSignature(std::ifstream& file, const uint8_t* signature, const 
     return true;
 }
 
-fileUtils::FileType fileUtils::GetFileType(const std::string& filePath) {
+static std::string ToLower(const std::string& str) {
+    std::string result = str; // Copy original string
+    std::ranges::transform(result, result.begin(), 
+                           [](const unsigned char c) { return std::tolower(c); });
+    return result;
+}
+
+FileUtils::FileType FileUtils::getFileType(const std::string& filePath) {
     std::ifstream file = std::ifstream(filePath, std::ios::binary);
 
     if (CheckSignature(file, bmpSig, 2)) {
@@ -26,5 +33,16 @@ fileUtils::FileType fileUtils::GetFileType(const std::string& filePath) {
     }
 
     file.close();
+    return FileType::None;
+}
+
+FileUtils::FileType FileUtils::stringToFileType(const std::string& str) {
+    std::string copy = ToLower(str);
+    if (copy == "jpeg" || copy == "jpg") {
+        return FileType::Jpeg;
+    }
+    if (copy == "bmp") {
+        return FileType::Bmp;
+    }
     return FileType::None;
 }

@@ -31,6 +31,13 @@ Gui::Renderer* Gui::Renderer::GetInstance() {
     return s_renderer;
 }
 
+std::shared_ptr<Gui::RenderWindow> Gui::Renderer::getRenderWindow(GLFWwindow* window) {
+    if (m_renderWindows.contains(window)) {
+        return m_renderWindows.at(window);
+    }
+    return nullptr;
+}
+
 bool Gui::Renderer::isRunning() const {
     return m_running;
 }
@@ -97,17 +104,18 @@ std::future<void> Gui::Renderer::removeWindowAsync(const std::weak_ptr<RenderWin
 }
 
 std::weak_ptr<Gui::RenderWindow> Gui::Renderer::createWindow(const int width, const int height, const std::string& title, const RenderMode renderMode) {
-    m_renderWindows.emplace_back(std::make_shared<RenderWindow>(width, height, title, renderMode));
-    return m_renderWindows.back();
+    std::shared_ptr<RenderWindow> renderWindow = std::make_shared<RenderWindow>(width, height, title, renderMode);
+    m_renderWindows.emplace(renderWindow->m_window, renderWindow);
+    return renderWindow;
 }
 
 void Gui::Renderer::removeWindow(const std::shared_ptr<RenderWindow>& renderWindow) {
-    std::erase(m_renderWindows, renderWindow);
+    m_renderWindows.erase(renderWindow->m_window);
 }
 
 void Gui::Renderer::removeWindow(const std::weak_ptr<RenderWindow>& renderWindow) {
     if (auto renderWindowShared = renderWindow.lock()) {
-        std::erase(m_renderWindows, renderWindowShared);
+        m_renderWindows.erase(renderWindowShared->m_window);
     }
 }
 
@@ -138,15 +146,20 @@ void Gui::Renderer::processEventLoop() {
         }
         
         // Render windows
-        for (int i = static_cast<int>(m_renderWindows.size()) - 1; i >= 0; i--) {
-            auto& window = m_renderWindows[i];
+        for (auto it = m_renderWindows.begin(); it != m_renderWindows.end(); ) {
+            auto& window = it->second;
+
             window->makeCurrentContext();
+    
             if (window->windowShouldClose()) {
-                removeWindow(window);
+                it = m_renderWindows.erase(it); 
                 continue;
             }
+
             window->renderFrame();
             glfwPollEvents();
+
+            it++;
         }
     }
 }

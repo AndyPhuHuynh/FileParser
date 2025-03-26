@@ -1,12 +1,14 @@
 ﻿#pragma once
 #include <functional>
 #include <string>
-#include <vector>
 #include <memory>
 #include <mutex>
 #include <queue>
 #include <thread>
 #include <future>
+
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
 
 namespace Gui {
     class RenderWindow;
@@ -24,7 +26,8 @@ namespace Gui {
         Renderer& operator=(Renderer const&) = delete;
         Renderer(Renderer&&) = delete;
         Renderer& operator=(Renderer&&) = delete;
-    
+
+        std::shared_ptr<RenderWindow> getRenderWindow(GLFWwindow* window);
         bool isRunning() const;
         bool onRenderThread() const;
 
@@ -37,7 +40,7 @@ namespace Gui {
     
         friend class RenderWindow;
         bool m_glewInitialized = false;
-        std::vector<std::shared_ptr<RenderWindow>> m_renderWindows;
+        std::unordered_map<GLFWwindow*, std::shared_ptr<RenderWindow>> m_renderWindows;
         std::atomic<bool> m_running = false;
         std::mutex m_functionQueueMutex;
         std::queue<std::function<void()>> m_functionQueue;

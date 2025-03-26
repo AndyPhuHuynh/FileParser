@@ -205,26 +205,29 @@ static void ScreenToWorld(const double screenX, const double screenY, float& wor
 }
 
 void Gui::RenderWindow::mouseButtonCallback(GLFWwindow* window, const int button, const int action, [[maybe_unused]] int mods) {
+    auto renderWindow = Renderer::GetInstance()->getRenderWindow(window);
+    if (renderWindow == nullptr) return;
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        auto renderWindow = Renderer::GetInstance()->m_currentWindow;
         renderWindow->m_isDraggingMouse = true;
-
         double xPosDouble, yPosDouble;
         glfwGetCursorPos(window, &xPosDouble, &yPosDouble);
         renderWindow->m_panSettings.lastMouseX = static_cast<float>(xPosDouble);
         renderWindow->m_panSettings.lastMouseY = static_cast<float>(yPosDouble);
     } else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
-        auto renderWindow = Renderer::GetInstance()->m_currentWindow;
         renderWindow->m_isDraggingMouse = false;
     }
 }
 
 void Gui::RenderWindow::cursorPositionCallback([[maybe_unused]] GLFWwindow* window, const double xPos, const double yPos) {
-    auto renderWindow = Renderer::GetInstance()->m_currentWindow;
+    auto renderWindow = Renderer::GetInstance()->getRenderWindow(window);
+    if (renderWindow == nullptr) return;
     if (!renderWindow->m_isDraggingMouse) return;
     
     bool outOfBounds = xPos < 0 || xPos >= renderWindow->m_width || yPos < 0 || yPos >= renderWindow->m_height;
-    if (outOfBounds) return;
+    if (outOfBounds) {
+        renderWindow->m_isDraggingMouse = false;
+        return;
+    }
 
     float deltaX = static_cast<float>(xPos) - renderWindow->m_panSettings.lastMouseX;
     float deltaY = static_cast<float>(yPos) - renderWindow->m_panSettings.lastMouseY;
@@ -245,12 +248,16 @@ void Gui::RenderWindow::setMouseCallbacksForPanning() {
 }
 
 void Gui::RenderWindow::keyboardCallbacks(GLFWwindow* window, const int key, [[maybe_unused]] int scancode, const int action, [[maybe_unused]] int mods) {
-    auto renderWindow = Renderer::GetInstance()->m_currentWindow;
+    auto renderWindow = Renderer::GetInstance()->getRenderWindow(window);
+    if (renderWindow == nullptr) return;
+    
+    double xPos, yPos;
+    glfwGetCursorPos(window, &xPos, &yPos);
+    bool outOfBounds = xPos < 0 || xPos >= renderWindow->m_width || yPos < 0 || yPos >= renderWindow->m_height;
+    if (outOfBounds) return;
+    
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
         if (key != GLFW_KEY_Q && key != GLFW_KEY_W) return;
-
-        double xPos, yPos;
-        glfwGetCursorPos(window, &xPos, &yPos);
 
         float worldBeforeMouseX, worldBeforeMouseY;
         ScreenToWorld(xPos, yPos, worldBeforeMouseX, worldBeforeMouseY, renderWindow->m_panSettings, renderWindow->m_zoomSettings);

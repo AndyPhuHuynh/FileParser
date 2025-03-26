@@ -54,7 +54,7 @@ static std::vector<std::string> SplitString(const std::string& str, const char d
  *  - args[1] is the filepath to the image file.
  */
 static void Render(const std::vector<std::string>& args) {
-    using namespace fileUtils;
+    using namespace FileUtils;
     using namespace ImageProcessing;
     if (args.size() != 2) {
         std::cerr << "Usage: render <filename>\n";
@@ -70,19 +70,19 @@ static void Render(const std::vector<std::string>& args) {
         return;
     }
 
-    switch (GetFileType(filepath)) {
-    case FileType::Bmp: {
-        Bmp::BmpImage bmp(filepath);
-        Bmp::Renderer::renderBmp(bmp);
-        break;
-    }
-    case FileType::Jpeg: {
-        Jpeg::JpegImage jpeg(filepath);
-        Jpeg::Renderer::renderJpeg(jpeg);
-        break;
-    }
-    case FileType::None:
-        break;
+    switch (getFileType(filepath)) {
+        case FileType::Bmp: {
+            Bmp::BmpImage bmp(filepath);
+            Bmp::Renderer::renderBmp(bmp);
+            break;
+        }
+        case FileType::Jpeg: {
+            Jpeg::JpegImage jpeg(filepath);
+            Jpeg::Renderer::renderJpeg(jpeg);
+            break;
+        }
+        case FileType::None:
+            break;
     }
 }
 
@@ -94,7 +94,7 @@ static void Render(const std::vector<std::string>& args) {
  *  - args[2] is the new file format
  */
 static void Convert(const std::vector<std::string>& args) {
-    using namespace fileUtils;
+    using namespace FileUtils;
     using namespace ImageProcessing;
 
     if (args.size() != 3 && args.size() != 4) {
@@ -103,26 +103,48 @@ static void Convert(const std::vector<std::string>& args) {
     }
 
     const std::string& filepath = args[1];
-    const std::string& format = args[2];
-    const std::string& newFilepath = args.size() < 4? filepath + "." + format : args[3];
+    const std::string& formatStr = args[2];
+    const FileType newFormat = stringToFileType(formatStr);
+    const std::string& newFilepath = args.size() < 4? filepath + "." + formatStr : args[3];
     
-    switch (GetFileType(filepath)) {
-    case FileType::Bmp: {
-        std::cout << "Bmp conversion to other files not supported yet\n";
-        break;
-    }
-    case FileType::Jpeg: {
-        Jpeg::JpegImage jpeg(filepath);
-        if (format == "bmp") {
-            Jpeg::Converter::writeJpegAsBmp(jpeg, newFilepath);
-        } else {
-            std::cout << "Only conversion from jpg to bmp is supported\n";
+    switch (getFileType(filepath)) {
+        case FileType::Bmp: {
+            Bmp::BmpImage bmp(filepath);
+            switch (newFormat) {
+                case FileType::Bmp: {
+                    break;
+                }
+                case FileType::Jpeg: {
+                    Bmp::Converter::writeBmpAsJpeg(bmp, newFilepath);
+                    break;
+                }
+                case FileType::None: {
+                    std::cout << "Unknown file type: " << newFilepath << '\n';
+                    break;
+                }
+            }
+            break;
         }
-        break;
-    }
-    case FileType::None:
-        std::cout << "Original file type not supported\n";
-        break;
+        case FileType::Jpeg: {
+            Jpeg::JpegImage jpeg(filepath);
+            switch (newFormat) {
+                case FileType::Bmp: {
+                    Jpeg::Converter::writeJpegAsBmp(jpeg, newFilepath);
+                    break;
+                }
+                case FileType::Jpeg: {
+                    break;
+                }
+                case FileType::None: {
+                    std::cout << "Unknown file type: " << newFilepath << '\n';
+                    break;
+                }
+            }
+            break;
+        }
+        case FileType::None:
+            std::cout << "Original file type not supported\n";
+            break;
     }
 }
 
