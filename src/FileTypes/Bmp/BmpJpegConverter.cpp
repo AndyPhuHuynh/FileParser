@@ -67,7 +67,8 @@ std::vector<ImageProcessing::Jpeg::Mcu> ImageProcessing::Bmp::Converter::getMcus
     return mcus;
 }
 
-void ImageProcessing::Bmp::Converter::writeBmpAsJpeg(BmpImage& bmp, const std::string& filename) {
+void ImageProcessing::Bmp::Converter::writeBmpAsJpeg(BmpImage& bmp, const std::string& filename,
+    const Jpeg::Encoder::EncodingSettings& encodingSettings) {
     std::vector<Jpeg::Mcu> mcus = getMcus(bmp);
-    Jpeg::Encoder::writeJpeg(filename, mcus, static_cast<uint16_t>(bmp.info.height), static_cast<uint16_t>(bmp.info.width));
+    writeJpeg(filename, mcus, encodingSettings, static_cast<uint16_t>(bmp.info.height), static_cast<uint16_t>(bmp.info.width));
 }

@@ -213,6 +213,7 @@ namespace ImageProcessing::Jpeg {
         HuffmanTable() = default;
         HuffmanTable(std::ifstream& file, const std::streampos& dataStartIndex);
         HuffmanTable(const std::vector<uint8_t>& symbols, const std::array<uint8_t, maxEncodingLength>& codeSizeFrequencies);
+        explicit HuffmanTable(const std::vector<HuffmanEncoding>& encodings);
         HuffmanEncoding getEncoding(uint8_t symbol) const;
         uint8_t decodeNextValue(BitReader& bitReader) const;
         void print() const;

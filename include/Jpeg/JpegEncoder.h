@@ -29,7 +29,17 @@ namespace ImageProcessing::Jpeg::Encoder {
         99, 99, 99, 99, 99, 99, 99, 99
     };
 
+    struct EncodingSettings {
+        int luminanceQuality;
+        int chrominanceQuality;
+        bool optimizeHuffmanTables;
+    };
+    
     constexpr int MaxHuffmanBits = 16;
+    const HuffmanTable& getDefaultLuminanceDcTable();
+    const HuffmanTable& getDefaultLuminanceAcTable();
+    const HuffmanTable& getDefaultChrominanceDcTable();
+    const HuffmanTable& getDefaultChrominanceAcTable();
     
     void forwardDCT(std::array<float, Mcu::DataUnitLength>& component);
     void forwardDCT(const Mcu& mcu);
@@ -44,17 +54,21 @@ namespace ImageProcessing::Jpeg::Encoder {
         Coefficient() = default;
         Coefficient(const uint8_t encoding, const int value) : encoding(encoding), value(value) {}
     };
-
-    struct EncodedBlock {
-        std::vector<Coefficient> coefficients;
+    
+    struct EncodedMcu {
+        std::vector<std::vector<Coefficient>> Y;
+        std::vector<Coefficient> Cb;
+        std::vector<Coefficient> Cr;
     };
     
-    void encodeCoefficients(const std::array<float, Mcu::DataUnitLength>& component, std::vector<EncodedBlock>& blocks,
+    void encodeCoefficients(const std::array<float, Mcu::DataUnitLength>& component, std::vector<Coefficient>& outCoefficients,
         std::vector<Coefficient>& dcCoefficients, std::vector<Coefficient>& acCoefficients, int& prevDc);
-    void encodeCoefficients(const Mcu& mcu, std::vector<EncodedBlock>& blocks,
-        std::vector<Coefficient>& dcCoefficients, std::vector<Coefficient>& acCoefficients, std::array<int, 3>& prevDc);
-    void encodeCoefficients(const std::vector<Mcu>& mcus, std::vector<EncodedBlock>& blocks,
-        std::vector<Coefficient>& dcCoefficients, std::vector<Coefficient>& acCoefficients);
+    void encodeCoefficients(const Mcu& mcu, std::vector<EncodedMcu>& outEncodedMcus, std::array<int, 3>& prevDc,
+        std::vector<Coefficient>& outLuminanceDcCoefficients, std::vector<Coefficient>& outLuminanceAcCoefficients,
+        std::vector<Coefficient>& outChromaDcCoefficients, std::vector<Coefficient>& outChromaAcCoefficients);
+    void encodeCoefficients(const std::vector<Mcu>& mcus, std::vector<EncodedMcu>& outEncodedMcus,
+        std::vector<Coefficient>& outLuminanceDcCoefficients, std::vector<Coefficient>& outLuminanceAcCoefficients,
+        std::vector<Coefficient>& outChromaDcCoefficients, std::vector<Coefficient>& outChromaAcCoefficients);
 
     // Huffman encoding
     
@@ -62,8 +76,10 @@ namespace ImageProcessing::Jpeg::Encoder {
     void generateCodeSizes(const std::array<uint32_t, 256>& frequencies, std::array<uint8_t, 257>& outCodeSizes);
     void adjustCodeSizes(std::array<uint8_t, 33>& codeSizeFrequencies);
     void countCodeSizes(const std::array<uint8_t, 257>& codeSizes, std::array<uint8_t, 33>& outCodeSizeFrequencies);
+    void countCodeSizes(const std::vector<HuffmanEncoding>& encodings, std::array<uint8_t, 33>& outCodeSizeFrequencies);
     void sortSymbolsByFrequencies(const std::array<uint32_t, 256>& frequencies, std::vector<uint8_t>& outSortedSymbols);
-
+    void sortEncodingsByLength(const std::vector<HuffmanEncoding>& encodings, std::vector<uint8_t>& outSortedSymbols);
+    
     // Writing to file
     
     void writeMarker(uint8_t marker, JpegBitWriter& bitWriter);
@@ -81,13 +97,18 @@ namespace ImageProcessing::Jpeg::Encoder {
         const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter);
     void writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination,
         const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter);
+    void writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination, const HuffmanTable& huffmanTable, JpegBitWriter& bitWriter);
 
     void writeScanHeaderComponentSpecification(const ScanHeaderComponentSpecification& component, JpegBitWriter& bitWriter);
     void writeScanHeader(const ScanHeader& scanHeader, JpegBitWriter& bitWriter);
 
     int encodeSSSS(uint8_t SSSS, int value);
-    void writeBlock(const EncodedBlock& block, const HuffmanTable& dcTable, const HuffmanTable& acTable, JpegBitWriter& bitWriter);
-    void writeBlock(const std::vector<EncodedBlock>& blocks, const HuffmanTable& dcTable, const HuffmanTable& acTable, JpegBitWriter& bitWriter);
+    void writeCoefficients(const std::vector<Coefficient>& coefficients,
+        const HuffmanTable& dcTable, const HuffmanTable& acTable, JpegBitWriter& bitWriter);
+    void writeEncodedMcu(const EncodedMcu& mcu, const HuffmanTable& luminanceDcTable, const HuffmanTable& luminanceAcTable,
+        const HuffmanTable& chrominanceDcTable, const HuffmanTable& chrominanceAcTable, JpegBitWriter& bitWriter);
+    void writeEncodedMcu(const std::vector<EncodedMcu>& mcus, const HuffmanTable& luminanceDcTable, const HuffmanTable& luminanceAcTable,
+        const HuffmanTable& chrominanceDcTable, const HuffmanTable& chrominanceAcTable, JpegBitWriter& bitWriter);
     
-    void writeJpeg(const std::string& filepath, const std::vector<Mcu>& mcus, uint16_t pixelHeight, uint16_t pixelWidth);
+    void writeJpeg(const std::string& filepath, const std::vector<Mcu>& mcus, const EncodingSettings& settings, uint16_t pixelHeight, uint16_t pixelWidth);
 }

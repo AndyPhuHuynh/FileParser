@@ -115,7 +115,11 @@ static void Convert(const std::vector<std::string>& args) {
                     break;
                 }
                 case FileType::Jpeg: {
-                    Bmp::Converter::writeBmpAsJpeg(bmp, newFilepath);
+                    Jpeg::Encoder::EncodingSettings settings;
+                    settings.luminanceQuality = 100;
+                    settings.chrominanceQuality = 100;
+                    settings.optimizeHuffmanTables = true;
+                    Bmp::Converter::writeBmpAsJpeg(bmp, newFilepath, settings);
                     break;
                 }
                 case FileType::None: {
@@ -197,13 +201,13 @@ static void Test(const std::vector<std::string>& args) {
 
     JpegBitWriter huffmanTest("huffman.test");
     
-    std::vector<EncodedBlock> blocks;
+    std::vector<EncodedMcu> blocks;
     std::vector<Coefficient> dcCoeff;
     std::vector<Coefficient> acCoeff;
-    int prevDcHuff = 0;
-    encodeCoefficients(data, blocks, dcCoeff, acCoeff, prevDcHuff);
-    encodeCoefficients(data2, blocks, dcCoeff, acCoeff, prevDcHuff);
-    encodeCoefficients(data3, blocks, dcCoeff, acCoeff, prevDcHuff);
+    // int prevDcHuff = 0;
+    // encodeCoefficients(data, blocks, dcCoeff, acCoeff, prevDcHuff);
+    // encodeCoefficients(data2, blocks, dcCoeff, acCoeff, prevDcHuff);
+    // encodeCoefficients(data3, blocks, dcCoeff, acCoeff, prevDcHuff);
 
     // HuffmanTable dcTable = createHuffmanTable(dcCoeff);
     // HuffmanTable acTable = createHuffmanTable(acCoeff);
@@ -216,8 +220,8 @@ static void Test(const std::vector<std::string>& args) {
     // std::cout << "acTable: \n";
     // acTable.print();
     
-    Bmp::BmpImage bmp(args[1]);
-    Bmp::Converter::writeBmpAsJpeg(bmp, "shouldwork.jpeg");
+    // Bmp::BmpImage bmp(args[1]);
+    // Bmp::Converter::writeBmpAsJpeg(bmp, "shouldwork.jpeg", );
 }
 
 static std::unordered_map<std::string, std::function<void(const std::vector<std::string>&)>> commands = {
@@ -229,7 +233,8 @@ static std::unordered_map<std::string, std::function<void(const std::vector<std:
 void Cli::RunCli() {
     while (true) {
         std::string input;
-        std::cout << "Enter command: ";
+        std::filesystem::path cwd = std::filesystem::current_path();
+        std::cout << "[" << cwd.string() << "]" << " FileParser> ";
         std::getline(std::cin, input);
         std::vector<std::string> tokens = SplitString(input, ' ');
         if (tokens.empty()) {

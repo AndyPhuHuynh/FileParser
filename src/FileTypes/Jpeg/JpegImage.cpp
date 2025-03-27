@@ -181,6 +181,15 @@ ImageProcessing::Jpeg::HuffmanTable::HuffmanTable(const std::vector<uint8_t>& sy
     isInitialized = true;
 }
 
+ImageProcessing::Jpeg::HuffmanTable::HuffmanTable(const std::vector<HuffmanEncoding>& encodings) {
+    this->encodings = encodings;
+    for (auto& encoding : encodings) {
+        encodingLookup.insert(std::make_pair(encoding.value, encoding));
+    }
+    generateLookupTable();
+    isInitialized = true;
+}
+
 ImageProcessing::Jpeg::HuffmanEncoding ImageProcessing::Jpeg::HuffmanTable::getEncoding(const uint8_t symbol) const {
     return encodingLookup.at(symbol);
 }
