@@ -104,7 +104,7 @@ std::future<void> Gui::Renderer::removeWindowAsync(const std::weak_ptr<RenderWin
 }
 
 std::weak_ptr<Gui::RenderWindow> Gui::Renderer::createWindow(const int width, const int height, const std::string& title, const RenderMode renderMode) {
-    std::shared_ptr<RenderWindow> renderWindow = std::make_shared<RenderWindow>(width, height, title, renderMode);
+    auto renderWindow = std::make_shared<RenderWindow>(width, height, title, renderMode);
     m_renderWindows.emplace(renderWindow->m_window, renderWindow);
     return renderWindow;
 }
@@ -114,7 +114,7 @@ void Gui::Renderer::removeWindow(const std::shared_ptr<RenderWindow>& renderWind
 }
 
 void Gui::Renderer::removeWindow(const std::weak_ptr<RenderWindow>& renderWindow) {
-    if (auto renderWindowShared = renderWindow.lock()) {
+    if (const auto renderWindowShared = renderWindow.lock()) {
         m_renderWindows.erase(renderWindowShared->m_window);
     }
 }
@@ -147,7 +147,7 @@ void Gui::Renderer::processEventLoop() {
         
         // Render windows
         for (auto it = m_renderWindows.begin(); it != m_renderWindows.end(); ) {
-            auto& window = it->second;
+            const auto& window = it->second;
 
             window->makeCurrentContext();
     

@@ -132,10 +132,10 @@ namespace ImageProcessing::Jpeg {
     class JpegImage;
 
     struct FrameHeaderComponentSpecification {
-        uint8_t identifier;
-        uint8_t horizontalSamplingFactor;
-        uint8_t verticalSamplingFactor;
-        uint8_t quantizationTableSelector;
+        uint8_t identifier = 0;
+        uint8_t horizontalSamplingFactor = 0;
+        uint8_t verticalSamplingFactor = 0;
+        uint8_t quantizationTableSelector = 0;
 
         FrameHeaderComponentSpecification() = default;
         FrameHeaderComponentSpecification(const uint8_t identifier, const uint8_t horizontalSamplingFactor, const uint8_t verticalSamplingFactor, const uint8_t quantizationTableSelector)
@@ -144,19 +144,19 @@ namespace ImageProcessing::Jpeg {
     };
 
     struct FrameHeader {
-        uint8_t encodingProcess;
-        uint8_t precision;
-        uint16_t height;
-        uint16_t width;
-        uint8_t numOfChannels;
+        uint8_t encodingProcess = 0;
+        uint8_t precision = 0;
+        uint16_t height = 0;
+        uint16_t width = 0;
+        uint8_t numOfChannels = 0;
         std::map<uint8_t, FrameHeaderComponentSpecification> componentSpecifications;
         int luminanceComponentsPerMcu = 1;
         int maxHorizontalSample = 1;
         int maxVerticalSample = 1;
-        int mcuPixelWidth;
-        int mcuPixelHeight;
-        int mcuImageWidth;
-        int mcuImageHeight;
+        int mcuPixelWidth = 0;
+        int mcuPixelHeight =0;
+        int mcuImageWidth = 0;
+        int mcuImageHeight = 0;
 
         FrameHeader() = default;
         FrameHeader(uint8_t encodingProcess, std::ifstream& file, const std::streampos& dataStartIndex);
@@ -171,7 +171,7 @@ namespace ImageProcessing::Jpeg {
         static constexpr int TableLength = 64;
         std::array<float, TableLength> table{};
         bool is8Bit = true;
-        uint8_t tableDestination;
+        uint8_t tableDestination = 0;
         bool isSet = false;
 
         QuantizationTable() = default;
@@ -214,7 +214,7 @@ namespace ImageProcessing::Jpeg {
         HuffmanTable(std::ifstream& file, const std::streampos& dataStartIndex);
         HuffmanTable(const std::vector<uint8_t>& symbols, const std::array<uint8_t, maxEncodingLength>& codeSizeFrequencies);
         explicit HuffmanTable(const std::vector<HuffmanEncoding>& encodings);
-        HuffmanEncoding getEncoding(uint8_t symbol) const;
+        [[nodiscard]] HuffmanEncoding getEncoding(uint8_t symbol) const;
         uint8_t decodeNextValue(BitReader& bitReader) const;
         void print() const;
     private:
@@ -243,10 +243,10 @@ namespace ImageProcessing::Jpeg {
     class ScanHeader {
     public:
         std::vector<ScanHeaderComponentSpecification> componentSpecifications;
-        uint8_t spectralSelectionStart;
-        uint8_t spectralSelectionEnd;
-        uint8_t successiveApproximationHigh;
-        uint8_t successiveApproximationLow;
+        uint8_t spectralSelectionStart = 0;
+        uint8_t spectralSelectionEnd = 0;
+        uint8_t successiveApproximationHigh = 0;
+        uint8_t successiveApproximationLow = 0;
         BitReader bitReader = BitReader();
         uint16_t restartInterval = 0;
     
@@ -292,11 +292,11 @@ namespace ImageProcessing::Jpeg {
         void print() const;
         static int getColorIndex(int blockIndex, int pixelIndex, int horizontalFactor, int verticalFactor);
         void generateColorBlocks();
-        std::tuple<uint8_t, uint8_t, uint8_t> getColor(int index);
+        std::tuple<uint8_t, uint8_t, uint8_t> getColor(int index) const;
         static void performInverseDCT(std::array<float, 64>& array);
         void performInverseDCT();
         static void dequantize(std::array<float, 64>& array, const QuantizationTable& quantizationTable);
-        void dequantize(JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp);
+        void dequantize(JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp) const;
     };
 
     struct ConsumerQueue {
@@ -329,7 +329,7 @@ namespace ImageProcessing::Jpeg {
         ConsumerQueue idctQueue;
         ConsumerQueue colorConversionQueue;
     
-        // The value of scanIndices[i] indicates the mcuIndex that scan #i can read up to
+        // The value of scanIndices[i] indicates the mcuIndex that scan the index can read up to
         std::mutex scanIndicesMutex;
         std::vector<std::shared_ptr<AtomicCondition>> scanIndices;
         std::vector<std::shared_ptr<ScanHeader>> scanHeaders;
@@ -338,7 +338,7 @@ namespace ImageProcessing::Jpeg {
         explicit JpegImage(const std::string& path);
         // Methods to decode entropy encoded data.
     private:
-        static int decodeSSSS(BitReader& bitReader, const int SSSS);
+        static int decodeSSSS(BitReader& bitReader, int SSSS);
         static int decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
         static std::pair<int, int> decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
         std::array<float, 64>* decodeComponent(BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp, int (&prevDc)[3]);

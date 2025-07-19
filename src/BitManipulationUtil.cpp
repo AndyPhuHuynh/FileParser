@@ -42,7 +42,7 @@ BitReader::BitReader(const std::vector<uint8_t>& bytes) {
 }
 
 uint8_t BitReader::getBit() {
-    uint8_t bit = GetBitFromLeft(m_bytes[m_byteIndex], m_bitPosition++);
+    const uint8_t bit = GetBitFromLeft(m_bytes[m_byteIndex], m_bitPosition++);
     if (m_bitPosition >= 8) {
         m_bitPosition = 0;
         m_byteIndex++;
@@ -62,7 +62,7 @@ uint32_t BitReader::getNBits(const int numBits) {
     int result = 0;
 
     if (m_bitPosition > 0) {
-        int bitsToReadFromCurrentByte = std::min(bitsLeftToRead, 8 - m_bitPosition);
+        const int bitsToReadFromCurrentByte = std::min(bitsLeftToRead, 8 - m_bitPosition);
         result |= (m_bytes[m_byteIndex] >> (8 - m_bitPosition - bitsToReadFromCurrentByte)) & ((1 << bitsToReadFromCurrentByte) - 1);
         bitsLeftToRead -= bitsToReadFromCurrentByte;
         skipBits(bitsToReadFromCurrentByte);
@@ -93,19 +93,19 @@ void BitReader::alignToByte() {
 }
 
 uint8_t BitReader::getByteConstant() const {
-    int bitsLeftInCurrentByte = 8 - m_bitPosition;
+    const int bitsLeftInCurrentByte = 8 - m_bitPosition;
 
-    uint8_t bitsInCurrent = static_cast<uint8_t>(m_bytes[m_byteIndex] << (8 + m_bitPosition));
-    uint8_t nextByte = m_byteIndex + 1 < static_cast<int>(m_bytes.size()) ? (m_bytes[m_byteIndex + 1] >> bitsLeftInCurrentByte) : 0;
+    const auto bitsInCurrent = static_cast<uint8_t>(m_bytes[m_byteIndex] << (8 + m_bitPosition));
+    const uint8_t nextByte = m_byteIndex + 1 < static_cast<int>(m_bytes.size()) ? (m_bytes[m_byteIndex + 1] >> bitsLeftInCurrentByte) : 0;
     return bitsInCurrent | nextByte;
 }
 
 uint16_t BitReader::getWordConstant() const {
-    int bitsLeftInCurrentByte = 8 - m_bitPosition;
+    const int bitsLeftInCurrentByte = 8 - m_bitPosition;
 
-    uint16_t bitsInCurrent = static_cast<uint16_t>(m_bytes[m_byteIndex] << (8 + m_bitPosition));
-    uint16_t nextByte = m_byteIndex + 1 < static_cast<int>(m_bytes.size()) ? static_cast<uint16_t>(m_bytes[m_byteIndex + 1] << m_bitPosition) : 0;
-    uint16_t lastBits = m_byteIndex + 2 < static_cast<int>(m_bytes.size()) ? m_bytes[m_byteIndex + 2] >> bitsLeftInCurrentByte : 0;
+    const auto bitsInCurrent = static_cast<uint16_t>(m_bytes[m_byteIndex] << (8 + m_bitPosition));
+    const uint16_t nextByte = m_byteIndex + 1 < static_cast<int>(m_bytes.size()) ? static_cast<uint16_t>(m_bytes[m_byteIndex + 1] << m_bitPosition) : 0;
+    const uint16_t lastBits = m_byteIndex + 2 < static_cast<int>(m_bytes.size()) ? m_bytes[m_byteIndex + 2] >> bitsLeftInCurrentByte : 0;
 
     return bitsInCurrent | nextByte | lastBits;
 }
@@ -150,7 +150,6 @@ BitWriter::BitWriter(BitWriter&& other) noexcept
 }
 
 BitWriter::~BitWriter() {
-    if (m_bitPosition != 0) flushByte();
     if (m_bufferPos != 0) flushBuffer();
     if (m_file.is_open()) {
         m_file.close();
@@ -198,6 +197,6 @@ void BitWriter::flushBuffer() {
 void BitWriter::incrementBitPosition() {
     m_bitPosition += 1;
     if (m_bitPosition >= 8) {
-        flushByte();
+        flushByte(false);
     }
 }

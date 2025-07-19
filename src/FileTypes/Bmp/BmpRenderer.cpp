@@ -14,14 +14,14 @@ void ImageProcessing::Bmp::Renderer::renderBmp(BmpImage& bmp) {
         msg << "Raster encoding not supported: " <<
             "\n\tBitCount: "<<  bmp.info.bitCount <<
             "\n\tCompression: " << bmp.info.compression << '\n';
-        throw std::exception(msg.str().c_str());
+        throw std::runtime_error(msg.str());
     }
     
     auto windowFuture = Gui::Renderer::GetInstance()->
         createWindowAsync(static_cast<int>(bmp.info.width), static_cast<int>(bmp.info.height), "Bmp", Gui::RenderMode::Point);
     
-    if (auto window = windowFuture.get().lock()) {
-        auto points = bmp.getPoints();
+    if (const auto window = windowFuture.get().lock()) {
+        const auto points = bmp.getPoints();
         for (auto& point : *points) {
             point.color.normalizeColor();
         }

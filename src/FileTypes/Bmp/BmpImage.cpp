@@ -1,7 +1,6 @@
 ﻿#include <fstream>
 #include <iostream>
 #include <cmath>
-#include <future>
 #include <memory>
 
 #include "BitManipulationUtil.h"
@@ -20,7 +19,7 @@ ImageProcessing::Bmp::BmpHeader ImageProcessing::Bmp::BmpHeader::getHeaderFromFi
 }
 
 ImageProcessing::Bmp::BmpInfo ImageProcessing::Bmp::BmpInfo::getInfoFromFile(std::ifstream& file) {
-    BmpInfo info = BmpInfo();
+    auto info = BmpInfo();
     file.seekg(fileInfoHeaderPos, std::ios::beg);
     file.read(reinterpret_cast<char*>(&info.size), 4);
     if (info.size == 12) {
@@ -90,7 +89,7 @@ int ImageProcessing::Bmp::BmpInfo::getNumColors() const {
 }
 
 void ImageProcessing::Bmp::BmpImage::initColorTable() {
-    int colorCount = info.getNumColors();
+    const int colorCount = info.getNumColors();
     colorTable = std::vector<Color>(colorCount);
     file.seekg(fileColorTableOffset, std::ios::beg);
 
@@ -100,7 +99,7 @@ void ImageProcessing::Bmp::BmpImage::initColorTable() {
 }
 
 std::shared_ptr<std::vector<Point>> ImageProcessing::Bmp::BmpImage::getPoints() {
-    std::shared_ptr<std::vector<Point>> points = std::make_shared<std::vector<Point>>();
+    auto points = std::make_shared<std::vector<Point>>();
     points->reserve(static_cast<int>(info.width * info.height));
     file.seekg(header.dataOffset, std::ios::beg);
     
@@ -126,15 +125,15 @@ void ImageProcessing::Bmp::BmpImage::ParseRowByteOrLessNoCompression(const std::
             continue;
         }
 
-        int pixelsPerByte = 8 / info.bitCount;
+        const int pixelsPerByte = 8 / info.bitCount;
         // Process bits
         for (int i = 0; i < pixelsPerByte; i++) {
             if (pixelsInRowRead >= info.width) {
                 allNonPaddingBitsRead = true;
                 break;
             }
-                
-            int x = static_cast<int>(byteInRow) * pixelsPerByte + i;
+
+            const int x = static_cast<int>(byteInRow) * pixelsPerByte + i;
             unsigned char index;
             if (rasterEncoding == BmpRasterEncoding::Monochrome) {
                 index = GetBitFromLeft(byte, i);
@@ -166,7 +165,7 @@ void ImageProcessing::Bmp::BmpImage::ParseRow24BitNoCompression(const std::share
 
         points->emplace_back(static_cast<float>(x), static_cast<float>(y), color);
     }
-    uint32_t padding = rowSize % 3;
+    const uint32_t padding = rowSize % 3;
     file.seekg(padding, std::ios::cur);
 }
 

@@ -1,5 +1,6 @@
 ﻿#include "FileUtil.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 
@@ -16,14 +17,14 @@ static bool CheckSignature(std::ifstream& file, const uint8_t* signature, const 
 }
 
 static std::string ToLower(const std::string& str) {
-    std::string result = str; // Copy original string
+    std::string result = str;
     std::ranges::transform(result, result.begin(), 
                            [](const unsigned char c) { return std::tolower(c); });
     return result;
 }
 
 FileUtils::FileType FileUtils::getFileType(const std::string& filePath) {
-    std::ifstream file = std::ifstream(filePath, std::ios::binary);
+    auto file = std::ifstream(filePath, std::ios::binary);
 
     if (CheckSignature(file, bmpSig, 2)) {
         return FileType::Bmp;
@@ -37,7 +38,7 @@ FileUtils::FileType FileUtils::getFileType(const std::string& filePath) {
 }
 
 FileUtils::FileType FileUtils::stringToFileType(const std::string& str) {
-    std::string copy = ToLower(str);
+    const std::string copy = ToLower(str);
     if (copy == "jpeg" || copy == "jpg") {
         return FileType::Jpeg;
     }

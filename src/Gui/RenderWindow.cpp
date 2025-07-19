@@ -1,6 +1,5 @@
 ﻿#include "Gui/RenderWindow.h"
 
-#include <iostream>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -102,20 +101,18 @@ void Gui::RenderWindow::setRenderMode(const RenderMode mode) {
     }
 }
 
-bool Gui::RenderWindow::isVisible() {
+bool Gui::RenderWindow::isVisible() const {
     return m_visible;
 }
 
-std::future<void> Gui::RenderWindow::windowShouldCloseAsync() {
-    auto promise = std::make_shared<std::promise<void>>();
+std::future<bool> Gui::RenderWindow::windowShouldCloseAsync() const {
+    auto promise = std::make_shared<std::promise<bool>>();
 
     if (Renderer::GetInstance()->onRenderThread()) {
-        windowShouldClose();
-        promise->set_value();
+        promise->set_value(windowShouldClose());
     } else {
         Renderer::GetInstance()->queueFunction([this, promise] {
-            windowShouldClose();
-            promise->set_value();
+            promise->set_value(windowShouldClose());
         });
     }
 
@@ -180,7 +177,7 @@ void Gui::RenderWindow::makeCurrentContext() {
     Renderer::GetInstance()->m_currentWindow = this;
 }
 
-bool Gui::RenderWindow::windowShouldClose() {
+bool Gui::RenderWindow::windowShouldClose() const {
     return glfwWindowShouldClose(m_window);
 }
 
@@ -205,7 +202,7 @@ static void ScreenToWorld(const double screenX, const double screenY, float& wor
 }
 
 void Gui::RenderWindow::mouseButtonCallback(GLFWwindow* window, const int button, const int action, [[maybe_unused]] int mods) {
-    auto renderWindow = Renderer::GetInstance()->getRenderWindow(window);
+    const auto renderWindow = Renderer::GetInstance()->getRenderWindow(window);
     if (renderWindow == nullptr) return;
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         renderWindow->m_isDraggingMouse = true;
@@ -219,18 +216,18 @@ void Gui::RenderWindow::mouseButtonCallback(GLFWwindow* window, const int button
 }
 
 void Gui::RenderWindow::cursorPositionCallback([[maybe_unused]] GLFWwindow* window, const double xPos, const double yPos) {
-    auto renderWindow = Renderer::GetInstance()->getRenderWindow(window);
+    const auto renderWindow = Renderer::GetInstance()->getRenderWindow(window);
     if (renderWindow == nullptr) return;
     if (!renderWindow->m_isDraggingMouse) return;
-    
-    bool outOfBounds = xPos < 0 || xPos >= renderWindow->m_width || yPos < 0 || yPos >= renderWindow->m_height;
+
+    const bool outOfBounds = xPos < 0 || xPos >= renderWindow->m_width || yPos < 0 || yPos >= renderWindow->m_height;
     if (outOfBounds) {
         renderWindow->m_isDraggingMouse = false;
         return;
     }
 
-    float deltaX = static_cast<float>(xPos) - renderWindow->m_panSettings.lastMouseX;
-    float deltaY = static_cast<float>(yPos) - renderWindow->m_panSettings.lastMouseY;
+    const float deltaX = static_cast<float>(xPos) - renderWindow->m_panSettings.lastMouseX;
+    const float deltaY = static_cast<float>(yPos) - renderWindow->m_panSettings.lastMouseY;
     
     renderWindow->m_panSettings.xOffset += deltaX;
     renderWindow->m_panSettings.yOffset += deltaY;
@@ -242,18 +239,18 @@ void Gui::RenderWindow::cursorPositionCallback([[maybe_unused]] GLFWwindow* wind
     renderWindow->updateMVP();
 }
 
-void Gui::RenderWindow::setMouseCallbacksForPanning() {
+void Gui::RenderWindow::setMouseCallbacksForPanning() const {
     glfwSetMouseButtonCallback(m_window, mouseButtonCallback);
     glfwSetCursorPosCallback(m_window, cursorPositionCallback);
 }
 
 void Gui::RenderWindow::keyboardCallbacks(GLFWwindow* window, const int key, [[maybe_unused]] int scancode, const int action, [[maybe_unused]] int mods) {
-    auto renderWindow = Renderer::GetInstance()->getRenderWindow(window);
+    const auto renderWindow = Renderer::GetInstance()->getRenderWindow(window);
     if (renderWindow == nullptr) return;
     
     double xPos, yPos;
     glfwGetCursorPos(window, &xPos, &yPos);
-    bool outOfBounds = xPos < 0 || xPos >= renderWindow->m_width || yPos < 0 || yPos >= renderWindow->m_height;
+    const bool outOfBounds = xPos < 0 || xPos >= renderWindow->m_width || yPos < 0 || yPos >= renderWindow->m_height;
     if (outOfBounds) return;
     
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
@@ -270,14 +267,14 @@ void Gui::RenderWindow::keyboardCallbacks(GLFWwindow* window, const int key, [[m
         float newScreenX, newScreenY;
         WorldToScreen(worldBeforeMouseX, worldBeforeMouseY, newScreenX, newScreenY, renderWindow->m_panSettings, renderWindow->m_zoomSettings);
 
-        float deltaX = newScreenX - static_cast<float>(xPos);
-        float deltaY = newScreenY - static_cast<float>(yPos);
+        const float deltaX = newScreenX - static_cast<float>(xPos);
+        const float deltaY = newScreenY - static_cast<float>(yPos);
         
         renderWindow->m_panSettings.xOffset -= deltaX;
         renderWindow->m_panSettings.yOffset -= deltaY;
         
-        float xOffset = renderWindow->m_panSettings.xOffset / renderWindow->m_zoomSettings.xScale;
-        float yOffset = renderWindow->m_panSettings.yOffset / renderWindow->m_zoomSettings.yScale;
+        const float xOffset = renderWindow->m_panSettings.xOffset / renderWindow->m_zoomSettings.xScale;
+        const float yOffset = renderWindow->m_panSettings.yOffset / renderWindow->m_zoomSettings.yScale;
         renderWindow->m_viewMatrix = translate(glm::mat4(1.0f),
             glm::vec3(xOffset, yOffset, 0.0f));
         
@@ -285,7 +282,7 @@ void Gui::RenderWindow::keyboardCallbacks(GLFWwindow* window, const int key, [[m
     }
 }
 
-void Gui::RenderWindow::setKeyboardCallback() {
+void Gui::RenderWindow::setKeyboardCallback() const {
     glfwSetKeyCallback(m_window, keyboardCallbacks);
 }
 
@@ -297,20 +294,20 @@ void Gui::RenderWindow::updateProjectionMatrix() {
 }
 
 void Gui::RenderWindow::updateViewMatrix() {
-    float xOffset = m_panSettings.xOffset / m_zoomSettings.xScale;
-    float yOffset = m_panSettings.yOffset / m_zoomSettings.yScale;
+    const float xOffset = m_panSettings.xOffset / m_zoomSettings.xScale;
+    const float yOffset = m_panSettings.yOffset / m_zoomSettings.yScale;
     m_viewMatrix = translate(glm::mat4(1.0f),
         glm::vec3(xOffset, yOffset, 0.0f));
 }
 
-void Gui::RenderWindow::updateMVP() {
+void Gui::RenderWindow::updateMVP() const {
     glm::mat4 mvp = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
     glUniformMatrix4fv(m_mvpUniform, 1, GL_FALSE, value_ptr(mvp));
 }
 
 void Gui::RenderWindow::setBufferDataPoints(const std::shared_ptr<std::vector<Point>>& points) {
     makeCurrentContext();
-    int pointsByteSize = static_cast<int>(sizeof(Point) * points->size());
+    const int pointsByteSize = static_cast<int>(sizeof(Point) * points->size());
     glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
     glBufferData(GL_ARRAY_BUFFER, pointsByteSize, points->data(), GL_STATIC_DRAW);
     m_vertexCount = static_cast<int>(points->size());

@@ -23,10 +23,10 @@ namespace ImageProcessing::Bmp {
     struct BmpHeader {
         static constexpr int fileHeaderOffset = 0x0;
         static constexpr int fileHeaderSize = 14;
-        uint16_t signature;
-        uint32_t fileSize;
-        uint32_t reserved;
-        uint32_t dataOffset;
+        uint16_t signature = 0;
+        uint32_t fileSize = 0;
+        uint32_t reserved = 0;
+        uint32_t dataOffset = 0;
 
         static BmpHeader getHeaderFromFile(std::ifstream& file);
     };
@@ -48,9 +48,9 @@ namespace ImageProcessing::Bmp {
 
         BmpInfo() = default;
         static BmpInfo getInfoFromFile(std::ifstream& file);
-        BmpRasterEncoding getRasterEncoding() const;
+        [[nodiscard]] BmpRasterEncoding getRasterEncoding() const;
         void print() const;
-        int getNumColors() const;
+        [[nodiscard]] int getNumColors() const;
     };
 
     class BmpImage {
@@ -59,7 +59,7 @@ namespace ImageProcessing::Bmp {
     public:
         std::ifstream file;
         BmpHeader header;
-        BmpInfo info;
+        BmpInfo info{};
         BmpRasterEncoding rasterEncoding;
         std::vector<Color> colorTable;
         uint32_t rowSize;

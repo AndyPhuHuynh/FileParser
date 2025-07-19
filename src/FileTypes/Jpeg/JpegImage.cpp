@@ -156,7 +156,7 @@ void ImageProcessing::Jpeg::QuantizationTable::print() const {
 ImageProcessing::Jpeg::HuffmanTable::HuffmanTable(std::ifstream& file, const std::streampos& dataStartIndex) {
     file.seekg(dataStartIndex, std::ios::beg);
     // Read num of each encoding
-    std::array<uint8_t, maxEncodingLength> numOfEachEncoding;
+    std::array<uint8_t, maxEncodingLength> numOfEachEncoding{};
     for (int i = 0; i < maxEncodingLength; i++) {
         file.read(reinterpret_cast<char*>(&numOfEachEncoding[i]), 1);
     }
@@ -196,16 +196,16 @@ ImageProcessing::Jpeg::HuffmanEncoding ImageProcessing::Jpeg::HuffmanTable::getE
 
 void ImageProcessing::Jpeg::HuffmanTable::generateLookupTable() {
     table = std::make_unique<std::array<HuffmanTableEntry, 256>>();
-    for (auto& encoding : encodings) {
+    for (const auto& encoding : encodings) {
         if (encoding.bitLength <= 8) {
-            uint8_t leftShifted = static_cast<uint8_t>(encoding.encoding << (8 - encoding.bitLength));
+            const auto leftShifted = static_cast<uint8_t>(encoding.encoding << (8 - encoding.bitLength));
             for (uint8_t i = 0; i < static_cast<uint8_t>(1 << (8 - encoding.bitLength)); i++) {
                 uint8_t index = i | leftShifted;
                 (*table)[index] = HuffmanTableEntry(encoding.bitLength, encoding.value, nullptr);
             }
         } else {
-            uint8_t partOne = static_cast<uint8_t>(encoding.encoding >> (encoding.bitLength - 8) & 0xFF);
-            uint8_t partTwo = static_cast<uint8_t>(encoding.encoding << (maxEncodingLength - encoding.bitLength) & 0xFF);
+            auto partOne = static_cast<uint8_t>(encoding.encoding >> (encoding.bitLength - 8) & 0xFF);
+            auto partTwo = static_cast<uint8_t>(encoding.encoding << (maxEncodingLength - encoding.bitLength) & 0xFF);
             if ((*table)[partOne].table == nullptr) {
                 (*table)[partOne].table = std::make_unique<std::array<HuffmanTableEntry, 256>>();
             }
@@ -289,7 +289,7 @@ std::pair<int, int> ImageProcessing::Jpeg::JpegImage::decodeAcCoefficient(BitRea
 }
 
 std::array<float, 64>* ImageProcessing::Jpeg::JpegImage::decodeComponent(BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp, int (&prevDc)[3]) {
-    std::array<float, 64>* result = new std::array<float, 64>();
+    const auto result = new std::array<float, 64>();
     result->fill(0);
     // DC Coefficient
     HuffmanTable &dcTable = dcHuffmanTables[scanComp.dcTableIteration][scanComp.dcTableSelector];
@@ -493,9 +493,9 @@ void ImageProcessing::Jpeg::JpegImage::decodeProgressiveComponent(std::array<flo
             }
             break;
         }
-        int coeff = scanHeader.bitReader.getBit() == 1 ? numToAdd : numToAdd * -1;
+        const int coefficient = scanHeader.bitReader.getBit() == 1 ? numToAdd : numToAdd * -1;
         skipZeros(scanHeader.bitReader, component, r, index, approximationLow);
-        (*component)[zigZagMap[index]] += static_cast<float>(coeff);
+        (*component)[zigZagMap[index]] += static_cast<float>(coefficient);
         index++;
     }
 }
@@ -727,7 +727,7 @@ void ImageProcessing::Jpeg::Mcu::generateColorBlocks() {
     }
 }
 
-std::tuple<uint8_t, uint8_t, uint8_t> ImageProcessing::Jpeg::Mcu::getColor(const int index) {
+std::tuple<uint8_t, uint8_t, uint8_t> ImageProcessing::Jpeg::Mcu::getColor(const int index) const {
     int blockRow = index / (horizontalSampleSize * 8) / 8;
     int blockCol = index % (horizontalSampleSize * 8) / 8;
 
@@ -905,7 +905,7 @@ void ImageProcessing::Jpeg::Mcu::dequantize(std::array<float, DataUnitLength>& a
     }
 }
 
-void ImageProcessing::Jpeg::Mcu::dequantize(JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp) {
+void ImageProcessing::Jpeg::Mcu::dequantize(JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp) const {
     if (scanComp.componentId == 1) {
         for (auto& y : Y) {
             dequantize(*y, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[1].quantizationTableSelector]);

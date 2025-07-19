@@ -12,7 +12,7 @@ float Shaders::Util::NormalizeToNdc(const float value, const int span) {
 }
 
 unsigned int Shaders::Util::CompileShader(const unsigned int shaderType, const std::string& source) {
-    unsigned int id = glCreateShader(shaderType);
+    const unsigned int id = glCreateShader(shaderType);
     const char* src = source.c_str();
     glShaderSource(id, 1, &src, nullptr);
     glCompileShader(id);
@@ -41,9 +41,9 @@ unsigned int Shaders::Util::CompileShader(const unsigned int shaderType, const s
 }
 
 unsigned int Shaders::Util::CreateShader(const std::string& vertexShader, const std::optional<std::string>& geometryShader, const std::string& fragmentShader) {
-    unsigned int program = glCreateProgram();
-    unsigned int vs = CompileShader(GL_VERTEX_SHADER, vertexShader);
-    unsigned int fs = CompileShader(GL_FRAGMENT_SHADER, fragmentShader);
+    const unsigned int program = glCreateProgram();
+    const unsigned int vs = CompileShader(GL_VERTEX_SHADER, vertexShader);
+    const unsigned int fs = CompileShader(GL_FRAGMENT_SHADER, fragmentShader);
     unsigned int gs = 0;
     
     glAttachShader(program, vs);

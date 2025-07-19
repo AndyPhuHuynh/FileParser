@@ -13,7 +13,7 @@
  */
 template<typename T>
 unsigned char GetBitFromLeft(const T& value, const int pos) {
-    int maxPos = sizeof(T) * 8 - 1;
+    const int maxPos = sizeof(T) * 8 - 1;
     if (pos < 0 || pos > maxPos) {
         std::ostringstream message;
         message << "Error in GetBit: position" << pos << " is out of bounds";
@@ -29,7 +29,7 @@ unsigned char GetBitFromLeft(const T& value, const int pos) {
  */
 template <typename T>
 unsigned char GetBitFromRight(const T& value, int pos) {
-    int maxPos = sizeof(T) * 8 - 1;
+    const int maxPos = sizeof(T) * 8 - 1;
     if (pos < 0 || pos > maxPos) {
         std::ostringstream message;
         message << "Error in GetBit: position" << pos << " is out of bounds";
@@ -110,12 +110,12 @@ public:
     explicit BitReader(const std::vector<uint8_t>& bytes);
     uint8_t getBit();
     uint32_t getNBits(int numBits);
-    uint8_t getLastByteRead() const;
+    [[nodiscard]] uint8_t getLastByteRead() const;
     void alignToByte();
-    uint8_t getByteConstant() const;
-    uint16_t getWordConstant() const;
+    [[nodiscard]] uint8_t getByteConstant() const;
+    [[nodiscard]] uint16_t getWordConstant() const;
     void skipBits(int numBits);
-    bool reachedEnd() const;
+    [[nodiscard]] bool reachedEnd() const;
     void addByte(uint8_t byte);
 private:
     std::vector<uint8_t> m_bytes;
@@ -135,7 +135,7 @@ public:
     void writeZero();
     void writeOne();
     void writeBit(bool isOne);
-    virtual void flushByte(bool padWithOnes = false);
+    virtual void flushByte(bool padWithOnes);
     void flushBuffer();
     
     /**
@@ -178,14 +178,14 @@ protected:
 template <typename T>
 void BitWriter::writeBits(T value, const int numBits) {
     static_assert(std::is_integral_v<T>, "T must be an integral type");
-    int maxBits = sizeof(T) * 8;
+    const int maxBits = sizeof(T) * 8;
     if (numBits < 0 || numBits > maxBits) {
         std::ostringstream message;
         message << "Error in BitWriter::writeBits: numBits" << numBits << " is out of bounds";
         throw std::invalid_argument(message.str());
     }
     for (int i = numBits - 1; i >= 0; i--) {
-        int bit = GetBitFromRight(value, i);
+        const int bit = GetBitFromRight(value, i);
         writeBit(bit);
     }
 }

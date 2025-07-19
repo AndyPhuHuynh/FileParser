@@ -8,7 +8,7 @@
 // TODO: Make writing to bmp faster
 
 void ImageProcessing::Jpeg::Converter::writeJpegAsBmp(const JpegImage& jpeg, const std::string& filename) {
-    clock_t begin = clock();
+    const clock_t begin = clock();
     // open file
     std::cout << "Writing " << filename << "...\n";
     std::ofstream outFile(filename, std::ios::out | std::ios::binary);
@@ -20,7 +20,7 @@ void ImageProcessing::Jpeg::Converter::writeJpegAsBmp(const JpegImage& jpeg, con
     const int paddingSize = jpeg.info.width % 4;
     const int size = 14 + 12 + jpeg.info.height * jpeg.info.width * 3 + paddingSize * jpeg.info.height;
 
-    uint8_t *buffer = new (std::nothrow) uint8_t[size];
+    const auto buffer = new (std::nothrow) uint8_t[size];
     if (buffer == nullptr) {
         std::cout << "Error - Memory error\n";
         outFile.close();
@@ -61,6 +61,6 @@ void ImageProcessing::Jpeg::Converter::writeJpegAsBmp(const JpegImage& jpeg, con
     outFile.write(reinterpret_cast<char*>(buffer), size);
     outFile.close();
     delete[] buffer;
-    clock_t end = clock();
+    const clock_t end = clock();
     std::cout << "Time to write: " << static_cast<double>(end - begin) / CLOCKS_PER_SEC << " seconds\n";
 }

@@ -8,12 +8,12 @@
 #include "Point.h"
 
 void ImageProcessing::Jpeg::Renderer::renderJpeg(const JpegImage& jpeg) {
-    std::shared_ptr<std::vector<Point>> points = std::make_shared<std::vector<Point>>();
+    const auto points = std::make_shared<std::vector<Point>>();
     points->reserve(static_cast<unsigned int>(jpeg.info.width * jpeg.info.height));
     // For every mcu
     for (int mcuIndex = 0; mcuIndex < static_cast<int>(jpeg.mcus.size()); mcuIndex++) {
-        int mcuX = mcuIndex % jpeg.info.mcuImageWidth;
-        int mcuY = mcuIndex / jpeg.info.mcuImageWidth;
+        const int mcuX = mcuIndex % jpeg.info.mcuImageWidth;
+        const int mcuY = mcuIndex / jpeg.info.mcuImageWidth;
         
         // For every color block in the Mcu
         for (int blockY = 0; blockY < jpeg.info.maxVerticalSample; blockY++) {
@@ -23,16 +23,16 @@ void ImageProcessing::Jpeg::Renderer::renderJpeg(const JpegImage& jpeg) {
         
                 // For every color in the color block
                 for (int colorY = 0; colorY < blockSideLength; colorY++) {
-                    int pointY = (mcuY * jpeg.info.mcuPixelHeight) + (blockY * blockSideLength) + colorY;
+                    const int pointY = (mcuY * jpeg.info.mcuPixelHeight) + (blockY * blockSideLength) + colorY;
                     if (pointY >= jpeg.info.height) {
                         break;
                     }
                     for (int colorX = 0; colorX < blockSideLength; colorX++) {
-                        int pointX = (mcuX * jpeg.info.mcuPixelWidth) + (blockX * blockSideLength) + colorX;
+                        const int pointX = (mcuX * jpeg.info.mcuPixelWidth) + (blockX * blockSideLength) + colorX;
                         if (pointX >= jpeg.info.width) {
                             break;
                         }
-                        Color color = Color(R[colorY * blockSideLength + colorX],
+                        auto color = Color(R[colorY * blockSideLength + colorX],
                             G[colorY * blockSideLength + colorX],
                             B[colorY * blockSideLength + colorX]);
                         color.normalizeColor();
@@ -46,7 +46,7 @@ void ImageProcessing::Jpeg::Renderer::renderJpeg(const JpegImage& jpeg) {
 
     auto windowFuture = Gui::Renderer::GetInstance()->createWindowAsync(jpeg.info.width, jpeg.info.height, "Jpeg", Gui::RenderMode::Point);
 
-    if (auto window = windowFuture.get().lock()) {
+    if (const auto window = windowFuture.get().lock()) {
         window->setBufferDataPointsAsync(points);
         window->showWindowAsync();
     }

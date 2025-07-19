@@ -1,5 +1,6 @@
 ﻿#include "Jpeg/JpegEncoder.h"
 
+#include <algorithm>
 #include <iostream>
 #include <numeric>
 #include <ranges>
@@ -601,7 +602,7 @@ void ImageProcessing::Jpeg::Encoder::encodeCoefficients(const std::array<float, 
     bool eob = true;
     int eobIndex = Mcu::DataUnitLength - 1;
     while (eobIndex >= 1) {
-        int coefficient = static_cast<int>(std::round(component.at(zigZagMap[eobIndex])));
+        const int coefficient = static_cast<int>(std::round(component.at(zigZagMap[eobIndex])));
         if (coefficient != 0) {
             // If the last coefficient is non-zero, there is no eob
             if (eobIndex == Mcu::DataUnitLength - 1) {
@@ -629,8 +630,8 @@ void ImageProcessing::Jpeg::Encoder::encodeCoefficients(const std::array<float, 
                 r++;   
             }
         } else {
-            uint8_t s = static_cast<uint8_t>(GetMinNumBits(ac));
-            uint8_t code = static_cast<uint8_t>((r << 4) | s);
+            const auto s = static_cast<uint8_t>(GetMinNumBits(ac));
+            auto code = static_cast<uint8_t>((r << 4) | s);
             acCoefficients.emplace_back(code, ac);
             outCoefficients.emplace_back(code, ac);
             r = 0;
@@ -670,21 +671,21 @@ void ImageProcessing::Jpeg::Encoder::encodeCoefficients(const std::vector<Mcu>& 
     }
 }
 
-void ImageProcessing::Jpeg::Encoder::countFrequencies(const std::vector<Coefficient>& Coefficients, std::array<uint32_t, 256>& outFrequencies) {
-    for (auto& coeff : Coefficients) {
-        outFrequencies[coeff.encoding]++;
+void ImageProcessing::Jpeg::Encoder::countFrequencies(const std::vector<Coefficient>& coefficients, std::array<uint32_t, 256>& outFrequencies) {
+    for (auto& coefficient : coefficients) {
+        outFrequencies[coefficient.encoding]++;
     }
 }
 
 void ImageProcessing::Jpeg::Encoder::generateCodeSizes(const std::array<uint32_t, 256>& frequencies, std::array<uint8_t, 257>& outCodeSizes) {
     // Initialize frequencies
-    std::array<uint32_t, 257> freq;
+    std::array<uint32_t, 257> freq{};
     std::ranges::copy(frequencies, freq.begin());
     freq[256] = 1;
     // Initialize codeSize
     std::ranges::fill(outCodeSizes, static_cast<uint8_t>(0));
     // Initialize others
-    std::array<uint32_t, 257> others;
+    std::array<uint32_t, 257> others{};
     std::ranges::fill(others, std::numeric_limits<uint32_t>::max());
     
     while (true) {
@@ -701,7 +702,7 @@ void ImageProcessing::Jpeg::Encoder::generateCodeSizes(const std::array<uint32_t
                 v2 = i;
             }
         }
-        bool oneFound = v1 == std::numeric_limits<uint32_t>::max() || v2 == std::numeric_limits<uint32_t>::max();
+        const bool oneFound = v1 == std::numeric_limits<uint32_t>::max() || v2 == std::numeric_limits<uint32_t>::max();
         if (oneFound) break; // If there is only one item with non-zero frequency, the algorithm is finished
 
         // Combine the nodes
@@ -776,7 +777,7 @@ void ImageProcessing::Jpeg::Encoder::countCodeSizes(const std::array<uint8_t, 25
 void ImageProcessing::Jpeg::Encoder::countCodeSizes(const std::vector<HuffmanEncoding>& encodings,
     std::array<uint8_t, 33>& outCodeSizeFrequencies) {
     outCodeSizeFrequencies.fill(0);
-    for (auto encoding : encodings) {
+    for (const auto encoding : encodings) {
         outCodeSizeFrequencies[encoding.bitLength]++;
     }
 }
@@ -808,7 +809,7 @@ void ImageProcessing::Jpeg::Encoder::sortSymbolsByFrequencies(const std::array<u
 void ImageProcessing::Jpeg::Encoder::sortEncodingsByLength(const std::vector<HuffmanEncoding>& encodings,
     std::vector<uint8_t>& outSortedSymbols) {
     std::vector<HuffmanEncoding> sortedEncodings = encodings;
-    // Sort by ascending bit length; for ties, sort by ascending symbol
+    // Sort by ascending the bit length; for ties, sort by ascending symbol
     auto compareEncoding = [](const HuffmanEncoding& encoding1, const HuffmanEncoding& encoding2) -> bool {
         return (encoding1.bitLength < encoding2.bitLength) ||
             (encoding1.bitLength == encoding2.bitLength && encoding1.value < encoding2.value);
@@ -829,16 +830,16 @@ void ImageProcessing::Jpeg::Encoder::writeMarker(const uint8_t marker, JpegBitWr
 void ImageProcessing::Jpeg::Encoder::writeFrameHeaderComponentSpecification(
     const FrameHeaderComponentSpecification& component, JpegBitWriter& bitWriter) {
     
-    uint8_t identifier = component.identifier;
-    uint8_t samplingFactor = static_cast<uint8_t>((component.horizontalSamplingFactor << 4) | component.verticalSamplingFactor);
-    uint8_t quantizationTableSelector = component.quantizationTableSelector;
+    const uint8_t identifier = component.identifier;
+    const uint8_t quantizationTableSelector = component.quantizationTableSelector;
+    const auto samplingFactor = static_cast<uint8_t>((component.horizontalSamplingFactor << 4) | component.verticalSamplingFactor);
 
     bitWriter << identifier << samplingFactor << quantizationTableSelector;
 }
 
 void ImageProcessing::Jpeg::Encoder::writeFrameHeader(const FrameHeader& frameHeader, JpegBitWriter& bitWriter) {
-    uint8_t frameType = frameHeader.encodingProcess;
-    uint16_t length = 8 + frameHeader.numOfChannels * 3;
+    const uint8_t frameType = frameHeader.encodingProcess;
+    const uint16_t length = 8 + frameHeader.numOfChannels * 3;
 
     writeMarker(frameType, bitWriter);
     bitWriter << length << frameHeader.precision << frameHeader.height << frameHeader.width << frameHeader.numOfChannels;
@@ -855,8 +856,8 @@ ImageProcessing::Jpeg::QuantizationTable ImageProcessing::Jpeg::Encoder::createQ
         quality = std::clamp(quality, 1, 100);
     }
 
-    int scale = quality < 50 ? (5000 / quality) : (200 - 2 * quality);
-    std::array<float, QuantizationTable::TableLength> scaledTable;
+    const int scale = quality < 50 ? (5000 / quality) : (200 - 2 * quality);
+    std::array<float, QuantizationTable::TableLength> scaledTable{};
     for (int i = 0; i < QuantizationTable::TableLength; i++) {
         scaledTable[i] = std::round(std::clamp(table[i] * static_cast<float>(scale) / 100, 1.0f, 255.0f));
     }
@@ -865,18 +866,18 @@ ImageProcessing::Jpeg::QuantizationTable ImageProcessing::Jpeg::Encoder::createQ
 }
 
 void ImageProcessing::Jpeg::Encoder::writeQuantizationTableNoMarker(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter) {
-    uint8_t precision = quantizationTable.is8Bit ? 0 : 1;
-    uint8_t precisionAndTableId = static_cast<uint8_t>((precision << 4) | quantizationTable.tableDestination);
+    const uint8_t precision = quantizationTable.is8Bit ? 0 : 1;
+    const auto precisionAndTableId = static_cast<uint8_t>((precision << 4) | quantizationTable.tableDestination);
     bitWriter << precisionAndTableId;
 
     if (quantizationTable.is8Bit) {
-        for (unsigned char i : zigZagMap) {
-            uint8_t byte = static_cast<uint8_t>(quantizationTable.table.at(i));
+        for (const unsigned char i : zigZagMap) {
+            auto byte = static_cast<uint8_t>(quantizationTable.table.at(i));
             bitWriter << byte;
         }
     } else {
-        for (unsigned char i : zigZagMap) {
-            uint16_t word = static_cast<uint16_t>(quantizationTable.table.at(i));
+        for (const unsigned char i : zigZagMap) {
+            auto word = static_cast<uint16_t>(quantizationTable.table.at(i));
             bitWriter << word;
         }
     }
@@ -884,9 +885,9 @@ void ImageProcessing::Jpeg::Encoder::writeQuantizationTableNoMarker(const Quanti
 
 void ImageProcessing::Jpeg::Encoder::writeQuantizationTable(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter) {
     writeMarker(DQT, bitWriter);
-    
-    uint8_t bytesPerEntry = quantizationTable.is8Bit ? 1 : 2;
-    uint16_t length = 2 + 1 + (64 * bytesPerEntry);
+
+    const uint8_t bytesPerEntry = quantizationTable.is8Bit ? 1 : 2;
+    const uint16_t length = 2 + 1 + (64 * bytesPerEntry);
     bitWriter << length;
     
     writeQuantizationTableNoMarker(quantizationTable, bitWriter);
@@ -906,7 +907,7 @@ ImageProcessing::Jpeg::HuffmanTable ImageProcessing::Jpeg::Encoder::createHuffma
         }
     }
 
-    std::array<uint8_t, 16> smallCodeSizes;
+    std::array<uint8_t, 16> smallCodeSizes{};
     std::copy(codeSizeFrequencies.begin() + 1, codeSizeFrequencies.begin() + 17, smallCodeSizes.begin());
 
     HuffmanTable table(sortedSymbols, smallCodeSizes);
@@ -944,7 +945,7 @@ void ImageProcessing::Jpeg::Encoder::writeHuffmanTableNoMarker(
     }
 
     // Write table info
-    uint8_t tableInfo = static_cast<uint8_t>((tableClass << 4) | tableDestination);
+    const auto tableInfo = static_cast<uint8_t>((tableClass << 4) | tableDestination);
     bitWriter << tableInfo;
     
     // Write code size frequencies
@@ -961,7 +962,7 @@ void ImageProcessing::Jpeg::Encoder::writeHuffmanTableNoMarker(
 void ImageProcessing::Jpeg::Encoder::writeHuffmanTable(const uint8_t tableClass, const uint8_t tableDestination,
     const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter) {
 
-    uint16_t length = 2 + 1 + 16 + static_cast<uint16_t>(sortedSymbols.size());
+    const uint16_t length = 2 + 1 + 16 + static_cast<uint16_t>(sortedSymbols.size());
     writeMarker(DHT, bitWriter);
     bitWriter << length;
     
@@ -973,7 +974,7 @@ void ImageProcessing::Jpeg::Encoder::writeHuffmanTable(const uint8_t tableClass,
     const std::vector<HuffmanEncoding>& encodings = huffmanTable.encodings;
 
     std::vector<uint8_t> sortedSymbols;
-    std::array<uint8_t, 33> codeSizesFrequencies;
+    std::array<uint8_t, 33> codeSizesFrequencies{};
     
     countCodeSizes(encodings, codeSizesFrequencies);
     sortEncodingsByLength(encodings, sortedSymbols);
@@ -983,22 +984,22 @@ void ImageProcessing::Jpeg::Encoder::writeHuffmanTable(const uint8_t tableClass,
 
 void ImageProcessing::Jpeg::Encoder::writeScanHeaderComponentSpecification(
     const ScanHeaderComponentSpecification& component, JpegBitWriter& bitWriter) {
-    uint8_t tableDestination =  static_cast<uint8_t>((component.dcTableSelector << 4) | component.acTableSelector);
+    const auto tableDestination =  static_cast<uint8_t>((component.dcTableSelector << 4) | component.acTableSelector);
     bitWriter << component.componentId << tableDestination;
 }
 
 void ImageProcessing::Jpeg::Encoder::writeScanHeader(const ScanHeader& scanHeader, JpegBitWriter& bitWriter) {
     writeMarker(SOS, bitWriter);
 
-    uint8_t numComponents = static_cast<uint8_t>(scanHeader.componentSpecifications.size());
-    uint16_t length = 6 + 2 * numComponents;
+    const auto numComponents = static_cast<uint8_t>(scanHeader.componentSpecifications.size());
+    const uint16_t length = 6 + 2 * numComponents;
     bitWriter << length << numComponents;
 
     for (auto component : scanHeader.componentSpecifications) {
         writeScanHeaderComponentSpecification(component, bitWriter);
     }
-    
-    uint8_t successiveApproximation = static_cast<uint8_t>(scanHeader.successiveApproximationHigh << 4 | scanHeader.successiveApproximationLow);
+
+    const auto successiveApproximation = static_cast<uint8_t>(scanHeader.successiveApproximationHigh << 4 | scanHeader.successiveApproximationLow);
     bitWriter << scanHeader.spectralSelectionStart << scanHeader.spectralSelectionEnd << successiveApproximation;
 }
 
@@ -1011,21 +1012,21 @@ void ImageProcessing::Jpeg::Encoder::writeCoefficients(const std::vector<Coeffic
     const HuffmanTable& acTable, JpegBitWriter& bitWriter) {
     // DC coefficient
     // Write the RLE encoded value
-    HuffmanEncoding dcEncoding = dcTable.getEncoding(coefficients[0].encoding);
+    const HuffmanEncoding dcEncoding = dcTable.getEncoding(coefficients[0].encoding);
     bitWriter << BitField(dcEncoding.encoding, dcEncoding.bitLength);
     // Write the SSSS rightmost bits of the symbol
-    uint8_t dcSSSS = coefficients[0].encoding & 0x0F;
-    int dcValue = encodeSSSS(dcSSSS, coefficients[0].value);
+    const uint8_t dcSSSS = coefficients[0].encoding & 0x0F;
+    const int dcValue = encodeSSSS(dcSSSS, coefficients[0].value);
     bitWriter << BitField(dcValue, dcSSSS);
     
     // AC coefficient
     for (size_t i = 1; i < coefficients.size(); i++) {
         // Write the RLE encoded value
-        HuffmanEncoding acEncoding = acTable.getEncoding(coefficients[i].encoding);
+        const HuffmanEncoding acEncoding = acTable.getEncoding(coefficients[i].encoding);
         bitWriter << BitField(acEncoding.encoding, acEncoding.bitLength);
         // Write the SSSS rightmost bits of the symbol
-        uint8_t acSSSS = coefficients[i].encoding & 0x0F;
-        int acValue = encodeSSSS(acSSSS, coefficients[i].value);
+        const uint8_t acSSSS = coefficients[i].encoding & 0x0F;
+        const int acValue = encodeSSSS(acSSSS, coefficients[i].value);
         bitWriter << BitField(acValue, acSSSS);
     }
 }
@@ -1059,12 +1060,12 @@ void ImageProcessing::Jpeg::Encoder::writeJpeg(const std::string& filepath, cons
     // SOI
     writeMarker(SOI, bitWriter);
     // Tables/Misc
-        // Qtable
+        // Quantization table
         QuantizationTable qTableLuminance = createQuantizationTable(LuminanceTable, settings.luminanceQuality, true, 0);
         QuantizationTable qTableChrominance = createQuantizationTable(ChrominanceTable, settings.chrominanceQuality, true, 1);
         writeQuantizationTable(qTableLuminance, bitWriter);
         writeQuantizationTable(qTableChrominance, bitWriter);
-        // Htable
+        // Huffman table
         forwardDCT(mcus);
         quantize(mcus, qTableLuminance, qTableChrominance);
     

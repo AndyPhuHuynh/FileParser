@@ -35,9 +35,9 @@ namespace Gui {
         ~RenderWindow();
     
         void setRenderMode(RenderMode mode);
-        bool isVisible();
+        bool isVisible() const;
 
-        std::future<void> windowShouldCloseAsync();
+        std::future<bool> windowShouldCloseAsync() const;
         std::future<void> hideWindowAsync();
         std::future<void> showWindowAsync();
         
@@ -66,20 +66,20 @@ namespace Gui {
         GLint m_mvpUniform = -1;
 
         void makeCurrentContext();
-        bool windowShouldClose();
+        bool windowShouldClose() const;
         void hideWindow();
         void showWindow();
         
         static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
         static void cursorPositionCallback(GLFWwindow* window, double xPos, double yPos);
-        void setMouseCallbacksForPanning();
+        void setMouseCallbacksForPanning() const;
 
         static void keyboardCallbacks(GLFWwindow* window, int key, int scancode, int action, int mods);
-        void setKeyboardCallback();
+        void setKeyboardCallback() const;
 
         void updateProjectionMatrix();
         void updateViewMatrix();
-        void updateMVP();
+        void updateMVP() const;
         
         void setBufferDataPoints(const std::shared_ptr<std::vector<Point>>& points);
         
