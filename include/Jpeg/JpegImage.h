@@ -12,8 +12,9 @@
 
 #include "BitManipulationUtil.h"
 #include "Gui/Renderer.h"
+#include "Huffman.hpp"
 
-namespace ImageProcessing::Jpeg {
+namespace FileParser::Jpeg {
     constexpr uint8_t MarkerHeader = 0xFF;
     // Start of Frame markers, non-differential, Huffman coding
     constexpr uint8_t SOF0 = 0xC0; // Baseline DCT
@@ -179,47 +180,6 @@ namespace ImageProcessing::Jpeg {
         explicit QuantizationTable(const std::array<float, TableLength>& table, const bool is8Bit, const uint8_t tableDestination)
         : table(table), is8Bit(is8Bit), tableDestination(tableDestination) {}
         void print() const;
-    };
-
-    class HuffmanEncoding {
-    public:
-        uint16_t encoding;
-        uint8_t bitLength;
-        uint8_t value;
-        HuffmanEncoding() = default;
-        HuffmanEncoding(const uint16_t encoding, const uint8_t bitLength, const uint8_t value)
-            : encoding(encoding), bitLength(bitLength), value(value) {}
-    };
-
-    struct HuffmanTableEntry {
-        uint8_t bitLength;
-        uint8_t value;
-        std::unique_ptr<std::array<HuffmanTableEntry, 256>> table;
-
-        HuffmanTableEntry() : bitLength(0), value(0), table(nullptr) {}
-        HuffmanTableEntry(const uint8_t bitLength, const uint8_t value) : bitLength(bitLength), value(value) {}
-        HuffmanTableEntry(const uint8_t bitLength, const uint8_t value, std::unique_ptr<std::array<HuffmanTableEntry, 256>> table)
-        : bitLength(bitLength), value(value), table(std::move(table)) {}
-    };
-
-    class HuffmanTable {
-    public:
-        static constexpr int maxEncodingLength = 16;
-        std::vector<HuffmanEncoding> encodings;
-        std::unique_ptr<std::array<HuffmanTableEntry, 256>> table;
-        std::map<uint8_t, HuffmanEncoding> encodingLookup;
-        bool isInitialized = false;
-
-        HuffmanTable() = default;
-        HuffmanTable(std::ifstream& file, const std::streampos& dataStartIndex);
-        HuffmanTable(const std::vector<uint8_t>& symbols, const std::array<uint8_t, maxEncodingLength>& codeSizeFrequencies);
-        explicit HuffmanTable(const std::vector<HuffmanEncoding>& encodings);
-        [[nodiscard]] HuffmanEncoding getEncoding(uint8_t symbol) const;
-        uint8_t decodeNextValue(BitReader& bitReader) const;
-        void print() const;
-    private:
-        void generateEncodings(const std::vector<uint8_t>& symbols, const std::array<uint8_t, maxEncodingLength>& codeSizeFrequencies);
-        void generateLookupTable();
     };
 
     class ScanHeaderComponentSpecification {

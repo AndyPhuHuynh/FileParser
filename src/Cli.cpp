@@ -55,7 +55,7 @@ static std::vector<std::string> SplitString(const std::string& str, const char d
  */
 static void Render(const std::vector<std::string>& args) {
     using namespace FileUtils;
-    using namespace ImageProcessing;
+    using namespace FileParser;
     if (args.size() != 2) {
         std::cerr << "Usage: render <filename>\n";
         return;
@@ -95,7 +95,7 @@ static void Render(const std::vector<std::string>& args) {
  */
 static void Convert(const std::vector<std::string>& args) {
     using namespace FileUtils;
-    using namespace ImageProcessing;
+    using namespace FileParser;
 
     if (args.size() != 3 && args.size() != 4) {
         std::cerr << "Usage: convert <filename> <new format> [<new filepath>] (default: <filename>.<new format>)\n";
@@ -162,7 +162,7 @@ void printComponent(const std::array<float, 64>& component) {
 }
 
 static void Test(const std::vector<std::string>& args) {
-    using namespace ImageProcessing;
+    using namespace FileParser;
     using namespace Jpeg;
     using namespace Jpeg::Encoder;
     

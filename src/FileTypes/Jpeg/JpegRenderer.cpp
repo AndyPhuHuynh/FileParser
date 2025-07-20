@@ -7,7 +7,7 @@
 #include "Jpeg/JpegImage.h"
 #include "Point.h"
 
-void ImageProcessing::Jpeg::Renderer::renderJpeg(const JpegImage& jpeg) {
+void FileParser::Jpeg::Renderer::renderJpeg(const JpegImage& jpeg) {
     const auto points = std::make_shared<std::vector<Point>>();
     points->reserve(static_cast<unsigned int>(jpeg.info.width * jpeg.info.height));
     // For every mcu

@@ -8,7 +8,7 @@
 
 #include "Gui/Renderer.h"
 
-namespace ImageProcessing::Bmp {
+namespace FileParser::Bmp {
     enum class BmpRasterEncoding : std::uint8_t {
         None,
         Monochrome,

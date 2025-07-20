@@ -2,7 +2,7 @@
 
 #include "Jpeg/JpegEncoder.h"
 
-std::vector<ImageProcessing::Jpeg::Mcu> ImageProcessing::Bmp::Converter::getMcus(BmpImage& bmp) {
+std::vector<FileParser::Jpeg::Mcu> FileParser::Bmp::Converter::getMcus(BmpImage& bmp) {
     const auto points = bmp.getPoints();
     
     const int columnCount = static_cast<int>(bmp.info.width + 7) / 8;
@@ -67,7 +67,7 @@ std::vector<ImageProcessing::Jpeg::Mcu> ImageProcessing::Bmp::Converter::getMcus
     return mcus;
 }
 
-void ImageProcessing::Bmp::Converter::writeBmpAsJpeg(BmpImage& bmp, const std::string& filename,
+void FileParser::Bmp::Converter::writeBmpAsJpeg(BmpImage& bmp, const std::string& filename,
     const Jpeg::Encoder::EncodingSettings& encodingSettings) {
     const std::vector<Jpeg::Mcu> mcus = getMcus(bmp);
     writeJpeg(filename, mcus, encodingSettings, static_cast<uint16_t>(bmp.info.height), static_cast<uint16_t>(bmp.info.width));

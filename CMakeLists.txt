@@ -11,6 +11,7 @@ add_library(glfw3 STATIC IMPORTED)
 
 file(GLOB_RECURSE INCLUDES 
     ${CMAKE_SOURCE_DIR}/include/*.cpp
+    ${CMAKE_SOURCE_DIR}/include/*.hpp
     ${CMAKE_SOURCE_DIR}/include/*.h)
 
 file(GLOB_RECURSE SOURCES 

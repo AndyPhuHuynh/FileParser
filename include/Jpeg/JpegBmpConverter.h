@@ -2,7 +2,7 @@
 
 #include <Jpeg/JpegImage.h>
 
-namespace ImageProcessing::Jpeg::Converter {
+namespace FileParser::Jpeg::Converter {
     void writeJpegAsBmp(const JpegImage& jpeg, const std::string& filename);
 }
  

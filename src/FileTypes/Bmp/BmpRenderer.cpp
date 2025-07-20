@@ -5,7 +5,7 @@
 #include "Gui/Renderer.h"
 #include "Gui/RenderWindow.h"
 
-void ImageProcessing::Bmp::Renderer::renderBmp(BmpImage& bmp) {
+void FileParser::Bmp::Renderer::renderBmp(BmpImage& bmp) {
     if (bmp.rasterEncoding != BmpRasterEncoding::Monochrome &&
         bmp.rasterEncoding != BmpRasterEncoding::FourBitNoCompression &&
         bmp.rasterEncoding != BmpRasterEncoding::EightBitNoCompression &&

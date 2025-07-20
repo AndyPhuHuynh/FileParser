@@ -2,6 +2,6 @@
 
 #include "Bmp/BmpImage.h"
 
-namespace ImageProcessing::Bmp::Renderer {
+namespace FileParser::Bmp::Renderer {
     void renderBmp(BmpImage &bmp);
 }

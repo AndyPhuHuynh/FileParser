@@ -8,7 +8,7 @@
 #include "Gui/Renderer.h"
 #include "Gui/RenderWindow.h"
 
-ImageProcessing::Bmp::BmpHeader ImageProcessing::Bmp::BmpHeader::getHeaderFromFile(std::ifstream& file) {
+FileParser::Bmp::BmpHeader FileParser::Bmp::BmpHeader::getHeaderFromFile(std::ifstream& file) {
     BmpHeader header;
     file.seekg(fileHeaderOffset, std::ios::beg);
     file.read(reinterpret_cast<char*>(&header.signature), 2);
@@ -18,7 +18,7 @@ ImageProcessing::Bmp::BmpHeader ImageProcessing::Bmp::BmpHeader::getHeaderFromFi
     return header;
 }
 
-ImageProcessing::Bmp::BmpInfo ImageProcessing::Bmp::BmpInfo::getInfoFromFile(std::ifstream& file) {
+FileParser::Bmp::BmpInfo FileParser::Bmp::BmpInfo::getInfoFromFile(std::ifstream& file) {
     auto info = BmpInfo();
     file.seekg(fileInfoHeaderPos, std::ios::beg);
     file.read(reinterpret_cast<char*>(&info.size), 4);
@@ -49,7 +49,7 @@ ImageProcessing::Bmp::BmpInfo ImageProcessing::Bmp::BmpInfo::getInfoFromFile(std
     return info;
 }
 
-ImageProcessing::Bmp::BmpRasterEncoding ImageProcessing::Bmp::BmpInfo::getRasterEncoding() const {
+FileParser::Bmp::BmpRasterEncoding FileParser::Bmp::BmpInfo::getRasterEncoding() const {
     if (bitCount == 1 && compression == 0) { return BmpRasterEncoding::Monochrome; }
     if (bitCount == 4 && compression == 0) { return BmpRasterEncoding::FourBitNoCompression; }
     if (bitCount == 8 && compression == 0) { return BmpRasterEncoding::EightBitNoCompression; }
@@ -60,7 +60,7 @@ ImageProcessing::Bmp::BmpRasterEncoding ImageProcessing::Bmp::BmpInfo::getRaster
     return BmpRasterEncoding::None;
 }
 
-void ImageProcessing::Bmp::BmpInfo::print() const {
+void FileParser::Bmp::BmpInfo::print() const {
     std::cout << "Size: " << size << '\n';
     std::cout << "Width: " << width << '\n';
     std::cout << "Height: " << height << '\n';
@@ -75,7 +75,7 @@ void ImageProcessing::Bmp::BmpInfo::print() const {
     std::cout << "Important colors: " << importantColors << '\n';
 }
 
-int ImageProcessing::Bmp::BmpInfo::getNumColors() const {
+int FileParser::Bmp::BmpInfo::getNumColors() const {
     if (bitCount == 1) {
         return 2;
     }
@@ -88,7 +88,7 @@ int ImageProcessing::Bmp::BmpInfo::getNumColors() const {
     return -1;
 }
 
-void ImageProcessing::Bmp::BmpImage::initColorTable() {
+void FileParser::Bmp::BmpImage::initColorTable() {
     const int colorCount = info.getNumColors();
     colorTable = std::vector<Color>(colorCount);
     file.seekg(fileColorTableOffset, std::ios::beg);
@@ -98,7 +98,7 @@ void ImageProcessing::Bmp::BmpImage::initColorTable() {
     }
 }
 
-std::shared_ptr<std::vector<Point>> ImageProcessing::Bmp::BmpImage::getPoints() {
+std::shared_ptr<std::vector<Point>> FileParser::Bmp::BmpImage::getPoints() {
     auto points = std::make_shared<std::vector<Point>>();
     points->reserve(static_cast<int>(info.width * info.height));
     file.seekg(header.dataOffset, std::ios::beg);
@@ -114,7 +114,7 @@ std::shared_ptr<std::vector<Point>> ImageProcessing::Bmp::BmpImage::getPoints() 
     return points;
 }
 
-void ImageProcessing::Bmp::BmpImage::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, const int y) {
+void FileParser::Bmp::BmpImage::ParseRowByteOrLessNoCompression(const std::shared_ptr<std::vector<Point>>& points, const int y) {
     uint32_t pixelsInRowRead = 0;
     bool allNonPaddingBitsRead = false;
     for (uint32_t byteInRow = 0; byteInRow < rowSize; byteInRow++) {
@@ -151,7 +151,7 @@ void ImageProcessing::Bmp::BmpImage::ParseRowByteOrLessNoCompression(const std::
     }
 }
 
-void ImageProcessing::Bmp::BmpImage::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, const int y) {
+void FileParser::Bmp::BmpImage::ParseRow24BitNoCompression(const std::shared_ptr<std::vector<Point>>& points, const int y) {
     for (uint32_t x = 0; x < rowSize / 3; x++) {
         unsigned char byte;
         Color color;
@@ -169,7 +169,7 @@ void ImageProcessing::Bmp::BmpImage::ParseRow24BitNoCompression(const std::share
     file.seekg(padding, std::ios::cur);
 }
 
-ImageProcessing::Bmp::BmpImage::BmpImage(const std::string& path) {
+FileParser::Bmp::BmpImage::BmpImage(const std::string& path) {
     file = std::ifstream(path, std::ios::binary);
     header = BmpHeader::getHeaderFromFile(file);
     info = BmpInfo::getInfoFromFile(file);
