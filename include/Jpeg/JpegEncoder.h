@@ -2,7 +2,6 @@
 
 #include <filesystem>
 
-#include "Bmp/BmpImage.h"
 #include "JpegBitWriter.h"
 #include "JpegImage.h"
 
