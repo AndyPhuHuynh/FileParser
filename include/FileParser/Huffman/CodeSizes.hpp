@@ -12,9 +12,9 @@ namespace FileParser {
      */
     class CodeSizes {
         /**
-         *  frequency[i] represents the number of symbols with code size i + 1.
+         * m_frequency[i] represents the number of symbols with code size i + 1.
          */
-        std::array<uint8_t, 16> frequency{};
+        std::array<uint8_t, 16> m_frequency{};
 
     public:
         /**
@@ -22,5 +22,8 @@ namespace FileParser {
          * @return The frequency of the given code size.
          */
         [[nodiscard]] auto getFrequencyOf(uint8_t codeSize) const -> uint8_t;
+
+        [[nodiscard]] auto getFrequencies() -> std::array<uint8_t, 16>&;
+        [[nodiscard]] auto getFrequencies() const -> const std::array<uint8_t, 16>&;
     };
 }

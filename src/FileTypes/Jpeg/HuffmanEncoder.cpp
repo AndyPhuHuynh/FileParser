@@ -3,6 +3,108 @@
 #include <iostream>
 #include <ranges>
 
+auto FileParser::Jpeg::CodeSizeEncoder::generateCodeSizes(const ByteFrequencies& frequencies) -> CodeSizesPerByte {
+    // Initialize frequencies with an extra code point at index 256. This is done so when creating the Huffman Table,
+    // no symbol is given the encoding of all 1's
+    std::array<uint32_t, 257> freq{};
+    std::ranges::copy(frequencies, freq.begin());
+    freq[256] = 1;
+    // Initialize codeSize
+    CodeSizesPerByte codeSizes{};
+    std::ranges::fill(codeSizes, static_cast<uint8_t>(0));
+    // Initialize others
+    std::array<uint32_t, 257> others{};
+    std::ranges::fill(others, std::numeric_limits<uint32_t>::max());
+
+    while (true) {
+        // v1 is the least frequent, v2 is the second least frequent
+        uint32_t v1 = std::numeric_limits<uint32_t>::max();
+        uint32_t v2 = std::numeric_limits<uint32_t>::max();
+        for (uint32_t i = 0; i < freq.size(); i++) {
+            if (freq.at(i) == 0) continue;
+            if (v1 == std::numeric_limits<uint32_t>::max() ||
+                freq.at(i) < freq.at(v1) || (freq.at(i) == freq.at(v1) && i > v1)) {
+                v2 = v1;
+                v1 = i;
+                } else if (v2 == std::numeric_limits<uint32_t>::max() || freq.at(i) < freq.at(v2)) {
+                    v2 = i;
+                }
+        }
+        const bool oneFound = v1 == std::numeric_limits<uint32_t>::max() || v2 == std::numeric_limits<uint32_t>::max();
+        if (oneFound) break; // If there is only one item with non-zero frequency, the algorithm is finished
+
+        // Combine the nodes
+        freq.at(v1) += freq.at(v2);
+        freq.at(v2) = 0;
+
+        // Increment the code size of every node under v1
+        codeSizes.at(v1)++;
+        while (others.at(v1) != std::numeric_limits<uint32_t>::max()) {
+            v1 = others.at(v1);
+            codeSizes.at(v1)++;
+        }
+
+        // Add v2 to the end of the chain
+        others.at(v1) = v2;
+
+        // Increment the code size of every node under v2
+        codeSizes.at(v2)++;
+        while (others.at(v2) != std::numeric_limits<uint32_t>::max()) {
+            v2 = others.at(v2);
+            codeSizes.at(v2)++;
+        }
+    }
+    return codeSizes;
+}
+
+auto FileParser::Jpeg::CodeSizeEncoder::countCodeSizes(const CodeSizesPerByte& codeSizes) -> UnadjustedCodeSizeFrequencies {
+    UnadjustedCodeSizeFrequencies unadjusted{};
+    for (auto i : codeSizes) {
+        if (i > 32) {
+            std::cerr << "Invalid code size: " << i << ", clamping to 32\n";
+            i = 32;
+        }
+        unadjusted[i]++;
+    }
+    return unadjusted;
+}
+
+auto FileParser::Jpeg::CodeSizeEncoder::adjustCodeSizes(UnadjustedCodeSizeFrequencies& unadjusted) -> CodeSizes {
+    uint32_t i = 32;
+    while (true) {
+        if (unadjusted.at(i) > 0) {
+            // Find the first shorter, non-zero code length
+            uint32_t j = i - 1;
+            do {
+                j--;
+            } while (j > 0 && unadjusted.at(j) == 0);
+
+            if (j == 0) {
+                std::cerr << "Error, no shorter non-zero code found\n";
+            }
+
+            // Move the prefixes around to make the codes shorter
+            unadjusted.at(i) -= 2;
+            unadjusted.at(i - 1) += 1;
+            unadjusted.at(j + 1) += 2;
+            unadjusted.at(j) -= 1;
+        } else {
+            i--;
+            if (i <= 16) {
+                // Remove the reserved code point
+                while (unadjusted.at(i) == 0) {
+                    i--;
+                }
+                unadjusted.at(i)--;
+                break;
+            }
+        }
+    }
+    CodeSizes codeSizes;
+    std::ranges::copy(unadjusted | std::views::drop(1) | std::views::take(16), codeSizes.getFrequencies().begin());
+    return codeSizes;
+}
+
 void FileParser::Jpeg::HuffmanEncoder::countFrequencies(const std::vector<Encoder::Coefficient>& coefficients, std::array<uint32_t, 256>& outFrequencies) {
     for (auto& coefficient : coefficients) {
         outFrequencies[coefficient.encoding]++;
@@ -152,5 +254,15 @@ void FileParser::Jpeg::HuffmanEncoder::sortEncodingsByLength(const std::vector<H
     outSortedSymbols.reserve(sortedEncodings.size());
     for (const auto& encoding : sortedEncodings) {
         outSortedSymbols.emplace_back(encoding.value);
+    }
+}
+
+FileParser::Jpeg::HuffmanEncoder::HuffmanEncoder(const std::vector<Encoder::Coefficient>& coefficients) {
+
+}
+
+auto FileParser::Jpeg::HuffmanEncoder::countFrequencies(const std::vector<Encoder::Coefficient>& coefficients) -> void {
+    for (auto& coefficient : coefficients) {
+        m_coefficientFrequencies[coefficient.encoding]++;
     }
 }
