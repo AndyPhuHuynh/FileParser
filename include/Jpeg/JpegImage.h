@@ -12,7 +12,7 @@
 
 #include "BitManipulationUtil.h"
 #include "Gui/Renderer.h"
-#include "Huffman.hpp"
+#include "../FileParser/Huffman/Table.hpp"
 
 namespace FileParser::Jpeg {
     constexpr uint8_t MarkerHeader = 0xFF;

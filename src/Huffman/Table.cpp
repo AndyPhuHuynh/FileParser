@@ -1,4 +1,4 @@
-#include "Huffman.hpp"
+#include "FileParser/Huffman/Table.hpp"
 
 #include <array>
 #include <iostream>
