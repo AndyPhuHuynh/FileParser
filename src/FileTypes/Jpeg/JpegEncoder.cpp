@@ -769,10 +769,10 @@ FileParser::HuffmanTable FileParser::Jpeg::Encoder::createHuffmanTable(const std
     std::array<uint32_t, 256> frequencies{};
     HuffmanEncoder::countFrequencies(coefficients, frequencies);
 
-    std::array<uint8_t, 257> codeSizes{};
-    HuffmanEncoder::generateCodeSizes(frequencies, codeSizes);
+    auto codeSizes = CodeSizeEncoder::getCodeSizeFrequencies(frequencies);
+    outCodeSizeFrequencies.fill(0);
+    std::ranges::copy(codeSizes.getFrequencies().begin(), codeSizes.getFrequencies().end(), outCodeSizeFrequencies.begin() + 1);
 
-    HuffmanEncoder::countCodeSizes(codeSizes, outCodeSizeFrequencies);
     HuffmanEncoder::sortSymbolsByFrequencies(frequencies, outSortedSymbols);
 
     return createHuffmanTable(outSortedSymbols, outCodeSizeFrequencies);
