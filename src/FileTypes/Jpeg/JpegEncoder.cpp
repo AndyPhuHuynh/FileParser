@@ -767,7 +767,9 @@ FileParser::HuffmanTable FileParser::Jpeg::Encoder::createHuffmanTable(
 FileParser::HuffmanTable FileParser::Jpeg::Encoder::createHuffmanTable(const std::vector<Coefficient>& coefficients,
     std::vector<uint8_t>& outSortedSymbols, std::array<uint8_t, 33>& outCodeSizeFrequencies) {
 
-    const auto encoder = HuffmanEncoder(coefficients);
+    const auto encoderExpected = HuffmanEncoder::create(coefficients);
+    // TODO: Handle error
+    const auto& encoder = *encoderExpected;
     outSortedSymbols = encoder.getSymbolsByFrequencies();
 
     const auto& codeSizes = encoder.getCodeSizes();

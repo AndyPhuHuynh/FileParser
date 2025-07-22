@@ -1,6 +1,7 @@
 #include "Jpeg/HuffmanEncoder.hpp"
 
 #include <algorithm>
+#include <expected>
 #include <iostream>
 #include <ranges>
 
@@ -15,7 +16,6 @@ auto FileParser::Jpeg::CodeSizeEncoder::getCodeSizesPerByte(const ByteFrequencie
     freq[256] = 1;
     // Initialize codeSize
     CodeSizesPerByte codeSizes{};
-    std::ranges::fill(codeSizes, static_cast<uint8_t>(0));
     // Initialize others
     std::array<uint32_t, 257> others{};
     std::ranges::fill(others, std::numeric_limits<uint32_t>::max());
@@ -73,7 +73,9 @@ auto FileParser::Jpeg::CodeSizeEncoder::countCodeSizes(const CodeSizesPerByte& c
     return unadjusted;
 }
 
-auto FileParser::Jpeg::CodeSizeEncoder::adjustCodeSizes(UnadjustedCodeSizeFrequencies& unadjusted) -> CodeSizes {
+auto FileParser::Jpeg::CodeSizeEncoder::adjustCodeSizes(
+    UnadjustedCodeSizeFrequencies& unadjusted
+) -> std::expected<CodeSizes, std::string> {
     uint32_t i = 32;
     while (true) {
         if (unadjusted.at(i) > 0) {
@@ -84,7 +86,9 @@ auto FileParser::Jpeg::CodeSizeEncoder::adjustCodeSizes(UnadjustedCodeSizeFreque
             } while (j > 0 && unadjusted.at(j) == 0);
 
             if (j == 0) {
-                std::cerr << "Error, no shorter non-zero code found\n";
+                return std::unexpected(
+                    "Unable to properly adjust code sizes: no shorter non-zero code length found during adjustment at "
+                    "i=" + std::to_string(i));
             }
 
             // Move the prefixes around to make the codes shorter
@@ -104,37 +108,39 @@ auto FileParser::Jpeg::CodeSizeEncoder::adjustCodeSizes(UnadjustedCodeSizeFreque
             }
         }
     }
-    CodeSizes codeSizes;
-    std::ranges::copy(unadjusted | std::views::drop(1) | std::views::take(16), codeSizes.getFrequencies().begin());
+    // Verify that all codeSizes are <= 16
+    for (size_t j = Encoder::MaxHuffmanBits + 1; j < unadjusted.size(); j++) {
+        if (unadjusted[j] != 0) {
+            return std::unexpected("Error adjusting code sizes, invalid Huffman code size: " + std::to_string(unadjusted[j]));
+        }
+    }
+    auto codeSizes = std::expected<CodeSizes, std::string>(std::in_place);
+    std::ranges::copy(unadjusted | std::views::drop(1) | std::views::take(16), codeSizes.value().getFrequencies().begin());
     return codeSizes;
 }
 
-auto FileParser::Jpeg::CodeSizeEncoder::getCodeSizes(const ByteFrequencies& frequencies) -> CodeSizes {
+auto FileParser::Jpeg::CodeSizeEncoder::getCodeSizes(
+    const ByteFrequencies& frequencies
+) -> std::expected<CodeSizes, std::string> {
     const auto codeSizesPerByte = getCodeSizesPerByte(frequencies);
     auto unadjustedSizes = countCodeSizes(codeSizesPerByte);
     return adjustCodeSizes(unadjustedSizes);
 }
 
-FileParser::Jpeg::HuffmanEncoder::HuffmanEncoder(const std::vector<Encoder::Coefficient>& coefficients)
-    : m_coefficientFrequencies(countFrequencies(coefficients)),
-      m_symbolsByFrequency(getSymbolsOrderedByFrequency(m_coefficientFrequencies)),
-      m_codeSizes(CodeSizeEncoder::getCodeSizes(m_coefficientFrequencies)),
-      m_table(HuffmanBuilder::generateEncodings(m_symbolsByFrequency, m_codeSizes.getFrequencies()))
-{
+auto FileParser::Jpeg::HuffmanEncoder::create(
+    const std::vector<Encoder::Coefficient>& coefficients
+) -> std::expected<HuffmanEncoder, std::string> {
+    auto frequencies = countFrequencies(coefficients);
+    auto sortedSymbols = getSymbolsOrderedByFrequency(frequencies);
 
-    // Return huffman
-    // Validate that symbols and code sizes match, ignoring the frequency of code size 0
-    // TODO: Validation below
-    // if (sortedSymbols.size() != std::accumulate(codeSizeFrequencies.begin() + 1, codeSizeFrequencies.end(), 0u)) {
-    //     throw std::invalid_argument("Number of symbols and code sizes do not match");
-    // }
-    //
-    // // Validate code size frequencies
-    // for (size_t i = MaxHuffmanBits + 1; i < codeSizeFrequencies.size(); i++) {
-    //     if (codeSizeFrequencies[i] != 0) {
-    //         throw std::invalid_argument("Invalid Huffman code size: " + std::to_string(codeSizeFrequencies[i]));
-    //     }
-    // }
+    auto codeSizesExpected = CodeSizeEncoder::getCodeSizes(frequencies);
+    if (!codeSizesExpected) {
+        return std::unexpected("Failed to generate code sizes: " + codeSizesExpected.error());
+    }
+    auto& codeSizes = codeSizesExpected.value();
+
+    auto table = HuffmanTable(HuffmanBuilder::generateEncodings(sortedSymbols, codeSizes.getFrequencies()));
+    return HuffmanEncoder(std::move(frequencies), std::move(sortedSymbols), std::move(codeSizes), std::move(table));
 }
 
 auto FileParser::Jpeg::HuffmanEncoder::getSymbolsByFrequencies() const -> const std::vector<uint8_t>& {
@@ -152,8 +158,7 @@ auto FileParser::Jpeg::HuffmanEncoder::getTable() const -> const HuffmanTable& {
 auto FileParser::Jpeg::HuffmanEncoder::countFrequencies(
     const std::vector<Encoder::Coefficient>& coefficients
 ) -> ByteFrequencies {
-    std::array<uint32_t, 256> frequencies{};
-    std::array<int, 2> test;
+    ByteFrequencies frequencies{};
     for (auto& coefficient : coefficients) {
         frequencies[coefficient.encoding]++;
     }
