@@ -2,6 +2,7 @@
 
 #include <filesystem>
 
+#include "HuffmanEncoder.hpp"
 #include "JpegBitWriter.h"
 #include "JpegImage.h"
 
@@ -88,7 +89,7 @@ namespace FileParser::Jpeg::Encoder {
         const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter);
     void writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination,
         const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter);
-    void writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination, const HuffmanTable& huffmanTable, JpegBitWriter& bitWriter);
+    void writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination, const HuffmanEncoder& huffmanEncoder, JpegBitWriter& bitWriter);
 
     void writeScanHeaderComponentSpecification(const ScanHeaderComponentSpecification& component, JpegBitWriter& bitWriter);
     void writeScanHeader(const ScanHeader& scanHeader, JpegBitWriter& bitWriter);

@@ -1,8 +1,10 @@
 #include "Jpeg/HuffmanEncoder.hpp"
 
+#include <algorithm>
 #include <iostream>
 #include <ranges>
 
+#include "Jpeg/JpegEncoder.h"
 #include "Jpeg/HuffmanBuilder.hpp"
 
 auto FileParser::Jpeg::CodeSizeEncoder::getCodeSizesPerByte(const ByteFrequencies& frequencies) -> CodeSizesPerByte {
@@ -107,71 +109,16 @@ auto FileParser::Jpeg::CodeSizeEncoder::adjustCodeSizes(UnadjustedCodeSizeFreque
     return codeSizes;
 }
 
-auto FileParser::Jpeg::CodeSizeEncoder::getCodeSizeFrequencies(const ByteFrequencies& frequencies) -> CodeSizes {
+auto FileParser::Jpeg::CodeSizeEncoder::getCodeSizes(const ByteFrequencies& frequencies) -> CodeSizes {
     const auto codeSizesPerByte = getCodeSizesPerByte(frequencies);
     auto unadjustedSizes = countCodeSizes(codeSizesPerByte);
     return adjustCodeSizes(unadjustedSizes);
 }
 
-void FileParser::Jpeg::HuffmanEncoder::countFrequencies(const std::vector<Encoder::Coefficient>& coefficients, std::array<uint32_t, 256>& outFrequencies) {
-    for (auto& coefficient : coefficients) {
-        outFrequencies[coefficient.encoding]++;
-    }
-}
-
-void FileParser::Jpeg::HuffmanEncoder::countCodeSizes(const std::vector<HuffmanEncoding>& encodings,
-    std::array<uint8_t, 33>& outCodeSizeFrequencies) {
-    outCodeSizeFrequencies.fill(0);
-    for (const auto encoding : encodings) {
-        outCodeSizeFrequencies[encoding.bitLength]++;
-    }
-}
-
-void FileParser::Jpeg::HuffmanEncoder::sortSymbolsByFrequencies(const std::array<uint32_t, 256>& frequencies, std::vector<uint8_t>& outSortedSymbols) {
-    // Each pair stores a pair of symbol to frequency
-    std::vector<std::pair<uint8_t, int>> freqPairs;
-    for (int i = 0 ; i < 256; i++) {
-        if (frequencies.at(i) == 0) {
-            continue;
-        }
-        freqPairs.emplace_back(static_cast<uint8_t>(i), frequencies.at(i));
-    }
-
-    // Sort by descending frequency; for ties, sort by ascending symbol
-    auto comparePair = [](const std::pair<uint8_t, int>& one, const std::pair<uint8_t, int>& two) -> bool {
-        return (one.second > two.second) || (one.second == two.second && one.first < two.first);
-    };
-    std::ranges::sort(freqPairs, comparePair);
-
-    // Store the sorted symbols into the output vector
-    outSortedSymbols.clear();
-    outSortedSymbols.reserve(freqPairs.size());
-    for (auto key : freqPairs | std::views::keys) {
-        outSortedSymbols.emplace_back(key);
-    }
-}
-
-void FileParser::Jpeg::HuffmanEncoder::sortEncodingsByLength(const std::vector<HuffmanEncoding>& encodings,
-    std::vector<uint8_t>& outSortedSymbols) {
-    std::vector<HuffmanEncoding> sortedEncodings = encodings;
-    // Sort by ascending the bit length; for ties, sort by ascending symbol
-    auto compareEncoding = [](const HuffmanEncoding& encoding1, const HuffmanEncoding& encoding2) -> bool {
-        return (encoding1.bitLength < encoding2.bitLength) ||
-            (encoding1.bitLength == encoding2.bitLength && encoding1.value < encoding2.value);
-    };
-
-    std::ranges::sort(sortedEncodings, compareEncoding);
-    outSortedSymbols.clear();
-    outSortedSymbols.reserve(sortedEncodings.size());
-    for (const auto& encoding : sortedEncodings) {
-        outSortedSymbols.emplace_back(encoding.value);
-    }
-}
-
 FileParser::Jpeg::HuffmanEncoder::HuffmanEncoder(const std::vector<Encoder::Coefficient>& coefficients)
     : m_coefficientFrequencies(countFrequencies(coefficients)),
       m_symbolsByFrequency(getSymbolsOrderedByFrequency(m_coefficientFrequencies)),
-      m_codeSizes(CodeSizeEncoder::getCodeSizeFrequencies(m_coefficientFrequencies)),
+      m_codeSizes(CodeSizeEncoder::getCodeSizes(m_coefficientFrequencies)),
       m_table(HuffmanBuilder::generateEncodings(m_symbolsByFrequency, m_codeSizes.getFrequencies()))
 {
 
@@ -190,10 +137,23 @@ FileParser::Jpeg::HuffmanEncoder::HuffmanEncoder(const std::vector<Encoder::Coef
     // }
 }
 
+auto FileParser::Jpeg::HuffmanEncoder::getSymbolsByFrequencies() const -> const std::vector<uint8_t>& {
+    return m_symbolsByFrequency;
+}
+
+auto FileParser::Jpeg::HuffmanEncoder::getCodeSizes() const -> const CodeSizes& {
+    return m_codeSizes;
+}
+
+auto FileParser::Jpeg::HuffmanEncoder::getTable() const -> const HuffmanTable& {
+    return m_table;
+}
+
 auto FileParser::Jpeg::HuffmanEncoder::countFrequencies(
     const std::vector<Encoder::Coefficient>& coefficients
 ) -> ByteFrequencies {
-    ByteFrequencies frequencies;
+    std::array<uint32_t, 256> frequencies{};
+    std::array<int, 2> test;
     for (auto& coefficient : coefficients) {
         frequencies[coefficient.encoding]++;
     }

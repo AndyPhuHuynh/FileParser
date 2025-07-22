@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 
 static bool CheckSignature(std::ifstream& file, const uint8_t* signature, const int signatureSize) {
+    file.clear();
     file.seekg(0, std::ios::beg);
     uint8_t byte = 0;
     for (int i = 0; i < signatureSize; i++) {
@@ -25,6 +27,11 @@ static std::string ToLower(const std::string& str) {
 
 FileUtils::FileType FileUtils::getFileType(const std::string& filePath) {
     auto file = std::ifstream(filePath, std::ios::binary);
+    if (!file.is_open()) {
+        // Debug breakpoint or print error
+        std::cerr << "Failed to open file: " << filePath << std::endl;
+        return FileType::None;
+    }
 
     if (CheckSignature(file, bmpSig, 2)) {
         return FileType::Bmp;

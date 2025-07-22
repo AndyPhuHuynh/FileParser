@@ -1,8 +1,16 @@
 #pragma once
-#include "JpegEncoder.h"
+
+#include <array>
+#include <cstdint>
+
 #include "FileParser/Huffman/CodeSizes.hpp"
+#include "FileParser/Huffman/Table.hpp"
 
 namespace FileParser::Jpeg {
+    namespace Encoder {
+        struct Coefficient;
+    }
+
     using ByteFrequencies = std::array<uint32_t, 256>;
 
     class CodeSizeEncoder {
@@ -14,7 +22,7 @@ namespace FileParser::Jpeg {
         static auto adjustCodeSizes(UnadjustedCodeSizeFrequencies& unadjusted) -> CodeSizes;
 
     public:
-        [[nodiscard]] static auto getCodeSizeFrequencies(const ByteFrequencies& frequencies) -> CodeSizes;
+        [[nodiscard]] static auto getCodeSizes(const ByteFrequencies& frequencies) -> CodeSizes;
     };
 
     class HuffmanEncoder {
@@ -23,20 +31,11 @@ namespace FileParser::Jpeg {
         CodeSizes m_codeSizes;
         HuffmanTable m_table;
     public:
-        static void countFrequencies(const std::vector<Encoder::Coefficient>& coefficients, std::array<uint32_t, 256>& outFrequencies);
-        static void sortSymbolsByFrequencies(const std::array<uint32_t, 256>& frequencies, std::vector<uint8_t>& outSortedSymbols);
-
-
-
-        // Used to extract info out of a huffman table encodings, might not need after refactor
-        static void countCodeSizes(const std::vector<HuffmanEncoding>& encodings, std::array<uint8_t, 33>& outCodeSizeFrequencies);
-        // Used to extract info out of a huffman table encodings, might not need after refactor
-        static void sortEncodingsByLength(const std::vector<HuffmanEncoding>& encodings, std::vector<uint8_t>& outSortedSymbols);
-
-
-
         explicit HuffmanEncoder(const std::vector<Encoder::Coefficient>& coefficients);
-
+        [[nodiscard]] auto getSymbolsByFrequencies() const -> const std::vector<uint8_t>&;
+        [[nodiscard]] auto getCodeSizes() const -> const CodeSizes&;
+        [[nodiscard]] auto getTable() const -> const HuffmanTable&;
+    private:
         static auto countFrequencies(const std::vector<Encoder::Coefficient>& coefficients) -> ByteFrequencies;
         static auto getSymbolsOrderedByFrequency(const std::array<uint32_t, 256>& frequencies) -> std::vector<uint8_t>;
     };

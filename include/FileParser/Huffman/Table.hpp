@@ -17,14 +17,25 @@ namespace FileParser {
     };
 
     struct HuffmanTableEntry;
-    using HuffmanSubtable = std::unique_ptr<std::array<HuffmanTableEntry, 256>>;
+
+    struct HuffmanSubtable {
+        std::unique_ptr<std::array<HuffmanTableEntry, 256>> table = nullptr;
+
+        HuffmanSubtable() = default;
+
+        HuffmanSubtable(const HuffmanSubtable& other);
+        HuffmanSubtable& operator=(const HuffmanSubtable& other);
+
+        HuffmanSubtable(HuffmanSubtable&& other) = default;
+        HuffmanSubtable& operator=(HuffmanSubtable&& other) = default;
+    };
 
     struct HuffmanTableEntry {
         uint8_t bitLength;
         uint8_t value;
         HuffmanSubtable nestedTable;
 
-        HuffmanTableEntry() : bitLength(0), value(0), nestedTable(nullptr) {}
+        HuffmanTableEntry() : bitLength(0), value(0) {}
         HuffmanTableEntry(const uint8_t bitLength, const uint8_t value) : bitLength(bitLength), value(value) {}
         HuffmanTableEntry(const uint8_t bitLength, const uint8_t value, HuffmanSubtable table)
         : bitLength(bitLength), value(value), nestedTable(std::move(table)) {}
@@ -41,6 +52,7 @@ namespace FileParser {
         bool m_isInitialized = false;
     public:
         HuffmanTable() = default;
+        HuffmanTable(const HuffmanTable&) = default;
         explicit HuffmanTable(const std::vector<HuffmanEncoding>& encodings);
 
         [[nodiscard]] auto decode(uint16_t word) const -> std::pair<uint8_t, uint8_t>;

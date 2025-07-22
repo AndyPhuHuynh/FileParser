@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../FileParser/Huffman/Table.hpp"
+#include "FileParser/Huffman/Table.hpp"
 
 namespace FileParser::Jpeg {
     class HuffmanBuilder {
