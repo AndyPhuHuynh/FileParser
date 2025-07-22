@@ -744,74 +744,17 @@ void FileParser::Jpeg::Encoder::writeQuantizationTable(const QuantizationTable& 
     writeQuantizationTableNoMarker(quantizationTable, bitWriter);
 }
 
-FileParser::HuffmanTable FileParser::Jpeg::Encoder::createHuffmanTable(
-    const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizeFrequencies) {
-    // Validate that symbols and code sizes match, ignoring the frequency of code size 0
-    if (sortedSymbols.size() != std::accumulate(codeSizeFrequencies.begin() + 1, codeSizeFrequencies.end(), 0u)) {
-        throw std::invalid_argument("Number of symbols and code sizes do not match");
-    }
-
-    // Validate code size frequencies
-    for (size_t i = MaxHuffmanBits + 1; i < codeSizeFrequencies.size(); i++) {
-        if (codeSizeFrequencies[i] != 0) {
-            throw std::invalid_argument("Invalid Huffman code size: " + std::to_string(codeSizeFrequencies[i]));
-        }
-    }
-
-    std::array<uint8_t, 16> smallCodeSizes{};
-    std::copy(codeSizeFrequencies.begin() + 1, codeSizeFrequencies.begin() + 17, smallCodeSizes.begin());
-
-    return HuffmanTable(HuffmanBuilder::generateEncodings(sortedSymbols, smallCodeSizes));
-}
-
-FileParser::HuffmanTable FileParser::Jpeg::Encoder::createHuffmanTable(const std::vector<Coefficient>& coefficients,
-    std::vector<uint8_t>& outSortedSymbols, std::array<uint8_t, 33>& outCodeSizeFrequencies) {
-
-    const auto encoderExpected = HuffmanEncoder::create(coefficients);
-    // TODO: Handle error
-    const auto& encoder = *encoderExpected;
-    outSortedSymbols = encoder.getSymbolsByFrequencies();
-
-    const auto& codeSizes = encoder.getCodeSizes();
-    outCodeSizeFrequencies.fill(0);
-    std::ranges::copy(codeSizes.getFrequencies().begin(), codeSizes.getFrequencies().end(), outCodeSizeFrequencies.begin() + 1);
-
-    // HuffmanEncoder::countFrequencies(coefficients, frequencies);
-    //
-    // auto codeSizes = CodeSizeEncoder::getCodeSizes(frequencies);
-    // outCodeSizeFrequencies.fill(0);
-    // std::ranges::copy(codeSizes.getFrequencies().begin(), codeSizes.getFrequencies().end(), outCodeSizeFrequencies.begin() + 1);
-    //
-    // HuffmanEncoder::sortSymbolsByFrequencies(frequencies, outSortedSymbols);
-
-    // return createHuffmanTable(outSortedSymbols, outCodeSizeFrequencies);
-
-    return encoder.getTable();
-}
-
 void FileParser::Jpeg::Encoder::writeHuffmanTableNoMarker(
     const uint8_t tableClass, const uint8_t tableDestination, const std::vector<uint8_t>& sortedSymbols,
-    const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter) {
-
-    // Validate that symbols and code sizes match, ignoring the frequency of code size 0
-    if (sortedSymbols.size() != std::accumulate(codeSizesFrequencies.begin() + 1, codeSizesFrequencies.end(), 0u)) {
-        throw std::invalid_argument("Number of symbols and code sizes do not match");
-    }
-
-    // Validate code size frequencies
-    for (size_t i = MaxHuffmanBits + 1; i < codeSizesFrequencies.size(); i++) {
-        if (codeSizesFrequencies[i] != 0) {
-            throw std::invalid_argument("Invalid Huffman code size: " + std::to_string(codeSizesFrequencies[i]));
-        }
-    }
+    const CodeSizes& codeSizes, JpegBitWriter& bitWriter) {
 
     // Write table info
     const auto tableInfo = static_cast<uint8_t>((tableClass << 4) | tableDestination);
     bitWriter << tableInfo;
 
     // Write code size frequencies
-    for (size_t i = 1; i <= MaxHuffmanBits; i++) {
-        bitWriter << codeSizesFrequencies[i];
+    for (uint8_t i = 1; i <= MaxHuffmanBits; i++) {
+        bitWriter << codeSizes.getFrequencyOf(i);
     }
 
     // Write codes
@@ -821,22 +764,18 @@ void FileParser::Jpeg::Encoder::writeHuffmanTableNoMarker(
 }
 
 void FileParser::Jpeg::Encoder::writeHuffmanTable(const uint8_t tableClass, const uint8_t tableDestination,
-    const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter) {
+                                                  const std::vector<uint8_t>& sortedSymbols, const CodeSizes& codeSizes, JpegBitWriter& bitWriter) {
 
     const uint16_t length = 2 + 1 + 16 + static_cast<uint16_t>(sortedSymbols.size());
     writeMarker(DHT, bitWriter);
     bitWriter << length;
 
-    return writeHuffmanTableNoMarker(tableClass, tableDestination, sortedSymbols, codeSizesFrequencies, bitWriter);
+    return writeHuffmanTableNoMarker(tableClass, tableDestination, sortedSymbols, codeSizes, bitWriter);
 }
 
 void FileParser::Jpeg::Encoder::writeHuffmanTable(const uint8_t tableClass, const uint8_t tableDestination,
                                                   const HuffmanEncoder& huffmanEncoder, JpegBitWriter& bitWriter) {
-    const auto& codeSizes = huffmanEncoder.getCodeSizes();
-    std::array<uint8_t, 33> codeSizeFrequencies{};
-    std::ranges::copy(codeSizes.getFrequencies().begin(), codeSizes.getFrequencies().end(), codeSizeFrequencies.begin() + 1);
-
-    return writeHuffmanTable(tableClass, tableDestination, huffmanEncoder.getSymbolsByFrequencies(), codeSizeFrequencies, bitWriter);
+    return writeHuffmanTable(tableClass, tableDestination, huffmanEncoder.getSymbolsByFrequencies(), huffmanEncoder.getCodeSizes(), bitWriter);
 }
 
 void FileParser::Jpeg::Encoder::writeScanHeaderComponentSpecification(
@@ -911,8 +850,10 @@ void FileParser::Jpeg::Encoder::writeEncodedMcu(const std::vector<EncodedMcu>& m
     bitWriter.setByteStuffing(false);
 }
 
-void FileParser::Jpeg::Encoder::writeJpeg(const std::string& filepath, const std::vector<Mcu>& mcus,
-    const EncodingSettings& settings, uint16_t pixelHeight, uint16_t pixelWidth) {
+auto FileParser::Jpeg::Encoder::writeJpeg(
+    const std::string& filepath, const std::vector<Mcu>& mcus, const EncodingSettings& settings,
+    uint16_t pixelHeight, uint16_t pixelWidth
+) -> std::expected<void, std::string> {
     JpegBitWriter bitWriter(filepath);
     // SOI
     writeMarker(SOI, bitWriter);
@@ -925,30 +866,40 @@ void FileParser::Jpeg::Encoder::writeJpeg(const std::string& filepath, const std
         // Huffman table
         forwardDCT(mcus);
         quantize(mcus, qTableLuminance, qTableChrominance);
-    
-        std::vector<EncodedMcu> encodedMcus;
-        std::vector<Coefficient> luminDcCoefficients, luminAcCoefficients;
-        std::vector<Coefficient> chromaDcCoefficients, chromaAcCoefficients;
-        encodeCoefficients(mcus, encodedMcus,
-            luminDcCoefficients, luminAcCoefficients,
-            chromaDcCoefficients, chromaAcCoefficients);
 
-        std::array<HuffmanTable, 4> optTables;
+        constexpr size_t luminDcIndex = 0, luminAcIndex = 1, chromaDcIndex = 2, chromaAcIndex = 3;
+        auto indexToString = [](const size_t index) {
+            switch (index) {
+                case 0:  return "Luminance DC";
+                case 1:  return "Luminance AC";
+                case 2:  return "Chrominance DC";
+                case 3:  return "Chrominance AC";
+                default: return "";
+            }
+        };
+
+        std::array<std::vector<Coefficient>, 4> coefficients{};
+
+        std::vector<EncodedMcu> encodedMcus;
+        encodeCoefficients(mcus, encodedMcus,
+            coefficients[luminDcIndex], coefficients[luminAcIndex],
+            coefficients[chromaDcIndex], coefficients[chromaAcIndex]);
+
+        std::vector<HuffmanEncoder> huffmanEncoders;
         if (settings.optimizeHuffmanTables) {
-            std::vector<uint8_t> luminDcSortedSymbols, luminAcSortedSymbols;
-            std::vector<uint8_t> chromaDcSortedSymbols, chromaAcSortedSymbols;
-            std::array<uint8_t, 33> luminDcCodeSizeFrequencies{}, luminAcCodeSizeFrequencies{};
-            std::array<uint8_t, 33> chromaDcCodeSizeFrequencies{}, chromaAcCodeSizeFrequencies{};
+            for (size_t i = 0; i < coefficients.size(); i++) {
+                auto encoder = HuffmanEncoder::create(coefficients[i]);
+                if (!encoder) {
+                    return std::unexpected(
+                        std::format("Unable to create {} Huffman table: {}",indexToString(i), encoder.error()));
+                }
+                huffmanEncoders.emplace_back(*encoder);
+            }
             
-            optTables[0] = createHuffmanTable(luminDcCoefficients, luminDcSortedSymbols, luminDcCodeSizeFrequencies);
-            optTables[1] = createHuffmanTable(luminAcCoefficients, luminAcSortedSymbols, luminAcCodeSizeFrequencies);
-            optTables[2] = createHuffmanTable(chromaDcCoefficients, chromaDcSortedSymbols, chromaDcCodeSizeFrequencies);
-            optTables[3] = createHuffmanTable(chromaAcCoefficients, chromaAcSortedSymbols, chromaAcCodeSizeFrequencies);
-            
-            writeHuffmanTable(0, 0, luminDcSortedSymbols, luminDcCodeSizeFrequencies, bitWriter);
-            writeHuffmanTable(0, 1, chromaDcSortedSymbols, chromaDcCodeSizeFrequencies, bitWriter);
-            writeHuffmanTable(1, 0, luminAcSortedSymbols, luminAcCodeSizeFrequencies, bitWriter);
-            writeHuffmanTable(1, 1, chromaAcSortedSymbols, chromaAcCodeSizeFrequencies, bitWriter);   
+            writeHuffmanTable(0, 0, huffmanEncoders[luminDcIndex].getSymbolsByFrequencies(), huffmanEncoders[luminDcIndex].getCodeSizes(), bitWriter);
+            writeHuffmanTable(0, 1, huffmanEncoders[chromaDcIndex].getSymbolsByFrequencies(), huffmanEncoders[chromaDcIndex].getCodeSizes(), bitWriter);
+            writeHuffmanTable(1, 0, huffmanEncoders[luminAcIndex].getSymbolsByFrequencies(), huffmanEncoders[luminAcIndex].getCodeSizes(), bitWriter);
+            writeHuffmanTable(1, 1, huffmanEncoders[chromaAcIndex].getSymbolsByFrequencies(), huffmanEncoders[chromaAcIndex].getCodeSizes(), bitWriter);
         } else {
             // writeHuffmanTable(0, 0, getDefaultLuminanceDcTable(), bitWriter);
             // writeHuffmanTable(0, 1, getDefaultChrominanceDcTable(), bitWriter);
@@ -956,10 +907,10 @@ void FileParser::Jpeg::Encoder::writeJpeg(const std::string& filepath, const std
             // writeHuffmanTable(1, 1, getDefaultChrominanceAcTable(), bitWriter);
         }
 
-        const HuffmanTable& luminanceDcTable = settings.optimizeHuffmanTables ? optTables[0] : getDefaultLuminanceDcTable();
-        const HuffmanTable& luminanceAcTable = settings.optimizeHuffmanTables ? optTables[1] : getDefaultLuminanceAcTable();
-        const HuffmanTable& chrominanceDcTable = settings.optimizeHuffmanTables ? optTables[2] : getDefaultChrominanceDcTable();
-        const HuffmanTable& chrominanceAcTable = settings.optimizeHuffmanTables ? optTables[3] : getDefaultChrominanceAcTable();
+        const HuffmanTable& luminanceDcTable = settings.optimizeHuffmanTables ? huffmanEncoders[0].getTable() : getDefaultLuminanceDcTable();
+        const HuffmanTable& luminanceAcTable = settings.optimizeHuffmanTables ? huffmanEncoders[1].getTable() : getDefaultLuminanceAcTable();
+        const HuffmanTable& chrominanceDcTable = settings.optimizeHuffmanTables ? huffmanEncoders[2].getTable() : getDefaultChrominanceDcTable();
+        const HuffmanTable& chrominanceAcTable = settings.optimizeHuffmanTables ? huffmanEncoders[3].getTable() : getDefaultChrominanceAcTable();
     
         // Restart Interval
         // Comment

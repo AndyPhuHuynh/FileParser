@@ -81,14 +81,11 @@ namespace FileParser::Jpeg::Encoder {
     QuantizationTable createQuantizationTable(const std::array<float, 64>& table, int quality, bool is8Bit, uint8_t tableDestination);
     void writeQuantizationTableNoMarker(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter);
     void writeQuantizationTable(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter);
-    
-    HuffmanTable createHuffmanTable(const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizeFrequencies);
-    HuffmanTable createHuffmanTable(const std::vector<Coefficient>& coefficients,
-        std::vector<uint8_t>& outSortedSymbols, std::array<uint8_t, 33>& outCodeSizeFrequencies);
+
     void writeHuffmanTableNoMarker(uint8_t tableClass, uint8_t tableDestination,
-        const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter);
+                                   const std::vector<uint8_t>& sortedSymbols, const CodeSizes& codeSizes, JpegBitWriter& bitWriter);
     void writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination,
-        const std::vector<uint8_t>& sortedSymbols, const std::array<uint8_t, 33>& codeSizesFrequencies, JpegBitWriter& bitWriter);
+                           const std::vector<uint8_t>& sortedSymbols, const CodeSizes& codeSizes, JpegBitWriter& bitWriter);
     void writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination, const HuffmanEncoder& huffmanEncoder, JpegBitWriter& bitWriter);
 
     void writeScanHeaderComponentSpecification(const ScanHeaderComponentSpecification& component, JpegBitWriter& bitWriter);
@@ -101,6 +98,8 @@ namespace FileParser::Jpeg::Encoder {
         const HuffmanTable& chrominanceDcTable, const HuffmanTable& chrominanceAcTable, JpegBitWriter& bitWriter);
     void writeEncodedMcu(const std::vector<EncodedMcu>& mcus, const HuffmanTable& luminanceDcTable, const HuffmanTable& luminanceAcTable,
         const HuffmanTable& chrominanceDcTable, const HuffmanTable& chrominanceAcTable, JpegBitWriter& bitWriter);
-    
-    void writeJpeg(const std::string& filepath, const std::vector<Mcu>& mcus, const EncodingSettings& settings, uint16_t pixelHeight, uint16_t pixelWidth);
+
+    std::expected<void, std::string> writeJpeg(const std::string& filepath, const std::vector<Mcu>& mcus,
+                                               const EncodingSettings& settings, uint16_t pixelHeight,
+                                               uint16_t pixelWidth);
 }
