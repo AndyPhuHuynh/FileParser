@@ -82,12 +82,6 @@ namespace FileParser::Jpeg::Encoder {
     void writeQuantizationTableNoMarker(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter);
     void writeQuantizationTable(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter);
 
-    void writeHuffmanTableNoMarker(uint8_t tableClass, uint8_t tableDestination,
-                                   const std::vector<uint8_t>& sortedSymbols, const CodeSizes& codeSizes, JpegBitWriter& bitWriter);
-    void writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination,
-                           const std::vector<uint8_t>& sortedSymbols, const CodeSizes& codeSizes, JpegBitWriter& bitWriter);
-    void writeHuffmanTable(uint8_t tableClass, uint8_t tableDestination, const HuffmanEncoder& huffmanEncoder, JpegBitWriter& bitWriter);
-
     void writeScanHeaderComponentSpecification(const ScanHeaderComponentSpecification& component, JpegBitWriter& bitWriter);
     void writeScanHeader(const ScanHeader& scanHeader, JpegBitWriter& bitWriter);
 

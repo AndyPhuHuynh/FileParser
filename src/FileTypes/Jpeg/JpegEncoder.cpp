@@ -2,9 +2,9 @@
 
 #include <algorithm>
 #include <iostream>
-#include <numeric>
 #include <ranges>
 
+#include "Jpeg/JpegBitWriter.h"
 #include "Jpeg/HuffmanBuilder.hpp"
 #include "Jpeg/HuffmanEncoder.hpp"
 
@@ -744,40 +744,6 @@ void FileParser::Jpeg::Encoder::writeQuantizationTable(const QuantizationTable& 
     writeQuantizationTableNoMarker(quantizationTable, bitWriter);
 }
 
-void FileParser::Jpeg::Encoder::writeHuffmanTableNoMarker(
-    const uint8_t tableClass, const uint8_t tableDestination, const std::vector<uint8_t>& sortedSymbols,
-    const CodeSizes& codeSizes, JpegBitWriter& bitWriter) {
-
-    // Write table info
-    const auto tableInfo = static_cast<uint8_t>((tableClass << 4) | tableDestination);
-    bitWriter << tableInfo;
-
-    // Write code size frequencies
-    for (uint8_t i = 1; i <= MaxHuffmanBits; i++) {
-        bitWriter << codeSizes.getFrequencyOf(i);
-    }
-
-    // Write codes
-    for (auto symbol : sortedSymbols) {
-        bitWriter << symbol;
-    }
-}
-
-void FileParser::Jpeg::Encoder::writeHuffmanTable(const uint8_t tableClass, const uint8_t tableDestination,
-                                                  const std::vector<uint8_t>& sortedSymbols, const CodeSizes& codeSizes, JpegBitWriter& bitWriter) {
-
-    const uint16_t length = 2 + 1 + 16 + static_cast<uint16_t>(sortedSymbols.size());
-    writeMarker(DHT, bitWriter);
-    bitWriter << length;
-
-    return writeHuffmanTableNoMarker(tableClass, tableDestination, sortedSymbols, codeSizes, bitWriter);
-}
-
-void FileParser::Jpeg::Encoder::writeHuffmanTable(const uint8_t tableClass, const uint8_t tableDestination,
-                                                  const HuffmanEncoder& huffmanEncoder, JpegBitWriter& bitWriter) {
-    return writeHuffmanTable(tableClass, tableDestination, huffmanEncoder.getSymbolsByFrequencies(), huffmanEncoder.getCodeSizes(), bitWriter);
-}
-
 void FileParser::Jpeg::Encoder::writeScanHeaderComponentSpecification(
     const ScanHeaderComponentSpecification& component, JpegBitWriter& bitWriter) {
     const auto tableDestination =  static_cast<uint8_t>((component.dcTableSelector << 4) | component.acTableSelector);
@@ -895,11 +861,11 @@ auto FileParser::Jpeg::Encoder::writeJpeg(
                 }
                 huffmanEncoders.emplace_back(*encoder);
             }
-            
-            writeHuffmanTable(0, 0, huffmanEncoders[luminDcIndex].getSymbolsByFrequencies(), huffmanEncoders[luminDcIndex].getCodeSizes(), bitWriter);
-            writeHuffmanTable(0, 1, huffmanEncoders[chromaDcIndex].getSymbolsByFrequencies(), huffmanEncoders[chromaDcIndex].getCodeSizes(), bitWriter);
-            writeHuffmanTable(1, 0, huffmanEncoders[luminAcIndex].getSymbolsByFrequencies(), huffmanEncoders[luminAcIndex].getCodeSizes(), bitWriter);
-            writeHuffmanTable(1, 1, huffmanEncoders[chromaAcIndex].getSymbolsByFrequencies(), huffmanEncoders[chromaAcIndex].getCodeSizes(), bitWriter);
+
+            huffmanEncoders[luminDcIndex].writeToFile(bitWriter, TableDescription::LuminanceDC);
+            huffmanEncoders[luminAcIndex].writeToFile(bitWriter, TableDescription::LuminanceAC);
+            huffmanEncoders[chromaDcIndex].writeToFile(bitWriter, TableDescription::ChrominanceDC);
+            huffmanEncoders[chromaAcIndex].writeToFile(bitWriter, TableDescription::ChrominanceAC);
         } else {
             // writeHuffmanTable(0, 0, getDefaultLuminanceDcTable(), bitWriter);
             // writeHuffmanTable(0, 1, getDefaultChrominanceDcTable(), bitWriter);

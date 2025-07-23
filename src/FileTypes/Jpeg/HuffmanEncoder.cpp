@@ -130,7 +130,7 @@ auto FileParser::Jpeg::CodeSizeEncoder::getCodeSizes(
 auto FileParser::Jpeg::HuffmanEncoder::create(
     const std::vector<Encoder::Coefficient>& coefficients
 ) -> std::expected<HuffmanEncoder, std::string> {
-    auto frequencies = countFrequencies(coefficients);
+    const auto frequencies = countFrequencies(coefficients);
     auto sortedSymbols = getSymbolsOrderedByFrequency(frequencies);
 
     auto codeSizesExpected = CodeSizeEncoder::getCodeSizes(frequencies);
@@ -140,7 +140,7 @@ auto FileParser::Jpeg::HuffmanEncoder::create(
     auto& codeSizes = codeSizesExpected.value();
 
     auto table = HuffmanTable(HuffmanBuilder::generateEncodings(sortedSymbols, codeSizes.getFrequencies()));
-    return HuffmanEncoder(std::move(frequencies), std::move(sortedSymbols), std::move(codeSizes), std::move(table));
+    return HuffmanEncoder(frequencies, std::move(sortedSymbols), codeSizes, std::move(table));
 }
 
 auto FileParser::Jpeg::HuffmanEncoder::getSymbolsByFrequencies() const -> const std::vector<uint8_t>& {
@@ -153,6 +153,30 @@ auto FileParser::Jpeg::HuffmanEncoder::getCodeSizes() const -> const CodeSizes& 
 
 auto FileParser::Jpeg::HuffmanEncoder::getTable() const -> const HuffmanTable& {
     return m_table;
+}
+
+auto FileParser::Jpeg::HuffmanEncoder::writeToFile(JpegBitWriter& bitWriter, const TableDescription description) const -> void {
+    // Write marker
+    bitWriter << MarkerHeader << DHT;
+
+    // Write length
+    constexpr uint16_t markerLength = 2, tableDescriptionLength = 1, codeSizesLength = 16;
+    const uint16_t length =
+        markerLength + tableDescriptionLength + codeSizesLength + static_cast<uint16_t>(m_symbolsByFrequency.size());
+    bitWriter << length;
+
+    // Write table info
+    bitWriter << static_cast<uint8_t>(description);
+
+    // Write code size frequencies
+    for (uint8_t i = 1; i <= Encoder::MaxHuffmanBits; i++) {
+        bitWriter << m_codeSizes.getFrequencyOf(i);
+    }
+
+    // Write symbols
+    for (auto symbol : m_symbolsByFrequency) {
+        bitWriter << symbol;
+    }
 }
 
 auto FileParser::Jpeg::HuffmanEncoder::countFrequencies(

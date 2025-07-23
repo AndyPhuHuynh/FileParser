@@ -3,8 +3,9 @@
 #include <array>
 #include <cstdint>
 #include <expected>
-#include <xstring>
+#include <string>
 
+#include "Jpeg/JpegBitWriter.h"
 #include "FileParser/Huffman/CodeSizes.hpp"
 #include "FileParser/Huffman/Table.hpp"
 
@@ -14,6 +15,13 @@ namespace FileParser::Jpeg {
     }
 
     using ByteFrequencies = std::array<uint32_t, 256>;
+
+    enum class TableDescription : uint8_t {
+        LuminanceDC   = 0x00,
+        LuminanceAC   = 0x10,
+        ChrominanceDC = 0x01,
+        ChrominanceAC = 0x11,
+    };
 
     class CodeSizeEncoder {
         using CodeSizesPerByte = std::array<uint8_t, 257>;
@@ -36,15 +44,18 @@ namespace FileParser::Jpeg {
     public:
         static auto create(const std::vector<Encoder::Coefficient>& coefficients)
             -> std::expected<HuffmanEncoder, std::string>;
+
         [[nodiscard]] auto getSymbolsByFrequencies() const -> const std::vector<uint8_t>&;
         [[nodiscard]] auto getCodeSizes() const -> const CodeSizes&;
         [[nodiscard]] auto getTable() const -> const HuffmanTable&;
+
+        auto writeToFile(JpegBitWriter& bitWriter, TableDescription description) const -> void;
     private:
         explicit HuffmanEncoder(
-            ByteFrequencies frequencies, std::vector<uint8_t> symbolsByFrequency,
-            CodeSizes codeSizes, HuffmanTable table)
-            : m_coefficientFrequencies(std::move(frequencies)), m_symbolsByFrequency(std::move(symbolsByFrequency)),
-              m_codeSizes(std::move(codeSizes)), m_table(std::move(table)) {}
+            const ByteFrequencies& frequencies, std::vector<uint8_t> symbolsByFrequency,
+            const CodeSizes codeSizes, HuffmanTable table)
+            : m_coefficientFrequencies(frequencies), m_symbolsByFrequency(std::move(symbolsByFrequency)),
+              m_codeSizes(codeSizes), m_table(std::move(table)) {}
 
         static auto countFrequencies(const std::vector<Encoder::Coefficient>& coefficients) -> ByteFrequencies;
         static auto getSymbolsOrderedByFrequency(const std::array<uint32_t, 256>& frequencies) -> std::vector<uint8_t>;

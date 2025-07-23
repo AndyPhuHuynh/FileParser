@@ -53,6 +53,10 @@ namespace FileParser {
     public:
         HuffmanTable() = default;
         HuffmanTable(const HuffmanTable&) = default;
+        HuffmanTable& operator=(const HuffmanTable&) = default;
+        HuffmanTable(HuffmanTable&&) noexcept = default;
+        HuffmanTable& operator=(HuffmanTable&&) = default;
+
         explicit HuffmanTable(const std::vector<HuffmanEncoding>& encodings);
 
         [[nodiscard]] auto decode(uint16_t word) const -> std::pair<uint8_t, uint8_t>;
