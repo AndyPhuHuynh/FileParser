@@ -237,11 +237,11 @@ namespace FileParser::Jpeg {
         // True = After FDCT, IDCT needs to be performed
         bool postDctMode = true; 
         // Component 1
-        std::vector<std::shared_ptr<std::array<float, DataUnitLength>>> Y;
+        std::vector<std::array<float, DataUnitLength>> Y;
         // Component 2
-        std::shared_ptr<std::array<float, DataUnitLength>> Cb;
+        std::array<float, DataUnitLength> Cb{};
         // Component 3
-        std::shared_ptr<std::array<float, DataUnitLength>> Cr;
+        std::array<float, DataUnitLength> Cr{};
         int horizontalSampleSize = 1;
         int verticalSampleSize = 1;
         std::vector<ColorBlock> colorBlocks;
@@ -252,11 +252,11 @@ namespace FileParser::Jpeg {
         void print() const;
         static int getColorIndex(int blockIndex, int pixelIndex, int horizontalFactor, int verticalFactor);
         void generateColorBlocks();
-        std::tuple<uint8_t, uint8_t, uint8_t> getColor(int index) const;
+        [[nodiscard]] std::tuple<uint8_t, uint8_t, uint8_t> getColor(int index) const;
         static void performInverseDCT(std::array<float, 64>& array);
         void performInverseDCT();
         static void dequantize(std::array<float, 64>& array, const QuantizationTable& quantizationTable);
-        void dequantize(JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp) const;
+        void dequantize(JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp);
     };
 
     struct ConsumerQueue {
@@ -301,7 +301,9 @@ namespace FileParser::Jpeg {
         static int decodeSSSS(BitReader& bitReader, int SSSS);
         static int decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
         static std::pair<int, int> decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
-        std::array<float, 64>* decodeComponent(BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp, int (&prevDc)[3]);
+
+        std::array<float, 64> decodeComponent(BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp,
+                                              int (&prevDc)[3]);
         void decodeMcu(Mcu* mcu, ScanHeader& scanHeader, int (&prevDc)[3]);
         static void skipZeros(BitReader& bitReader, std::array<float, 64>*& component, int numToSkip, int& index, int approximationLow);
         void decodeProgressiveComponent(std::array<float, 64>* component, ScanHeader& scanHeader,

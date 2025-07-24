@@ -557,15 +557,15 @@ void FileParser::Jpeg::Encoder::forwardDCT(std::array<float, Mcu::DataUnitLength
     }
 }
 
-void FileParser::Jpeg::Encoder::forwardDCT(const Mcu& mcu) {
+void FileParser::Jpeg::Encoder::forwardDCT(Mcu& mcu) {
     for (auto& y : mcu.Y) {
-        forwardDCT(*y);
+        forwardDCT(y);
     }
-    forwardDCT(*mcu.Cb);
-    forwardDCT(*mcu.Cr);
+    forwardDCT(mcu.Cb);
+    forwardDCT(mcu.Cr);
 }
 
-void FileParser::Jpeg::Encoder::forwardDCT(const std::vector<Mcu>& mcus) {
+void FileParser::Jpeg::Encoder::forwardDCT(std::vector<Mcu>& mcus) {
     for (auto& mcu : mcus) {
         forwardDCT(mcu);
     }
@@ -577,15 +577,15 @@ void FileParser::Jpeg::Encoder::quantize(std::array<float, Mcu::DataUnitLength>&
     }
 }
 
-void FileParser::Jpeg::Encoder::quantize(const Mcu& mcu, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable) {
+void FileParser::Jpeg::Encoder::quantize(Mcu& mcu, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable) {
     for (auto& y : mcu.Y) {
-        quantize(*y, luminanceTable);
+        quantize(y, luminanceTable);
     }
-    quantize(*mcu.Cb, chrominanceTable);
-    quantize(*mcu.Cr, chrominanceTable);
+    quantize(mcu.Cb, chrominanceTable);
+    quantize(mcu.Cr, chrominanceTable);
 }
 
-void FileParser::Jpeg::Encoder::quantize(const std::vector<Mcu>& mcus, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable) {
+void FileParser::Jpeg::Encoder::quantize(std::vector<Mcu>& mcus, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable) {
     for (auto& mcu : mcus) {
         quantize(mcu, luminanceTable, chrominanceTable);
     }
@@ -657,10 +657,10 @@ void FileParser::Jpeg::Encoder::encodeCoefficients(const Mcu& mcu, std::vector<E
     for (const auto& y : mcu.Y) {
         Y.emplace_back();
         std::vector<Coefficient>& coefficients = Y.back();
-        encodeCoefficients(*y, coefficients, outLuminanceDcCoefficients, outLuminanceAcCoefficients, prevDc[0]);
+        encodeCoefficients(y, coefficients, outLuminanceDcCoefficients, outLuminanceAcCoefficients, prevDc[0]);
     }
-    encodeCoefficients(*mcu.Cb, Cb, outChromaDcCoefficients, outChromaAcCoefficients, prevDc[1]);
-    encodeCoefficients(*mcu.Cr, Cr, outChromaDcCoefficients, outChromaAcCoefficients, prevDc[2]);
+    encodeCoefficients(mcu.Cb, Cb, outChromaDcCoefficients, outChromaAcCoefficients, prevDc[1]);
+    encodeCoefficients(mcu.Cr, Cr, outChromaDcCoefficients, outChromaAcCoefficients, prevDc[2]);
 }
 
 void FileParser::Jpeg::Encoder::encodeCoefficients(const std::vector<Mcu>& mcus, std::vector<EncodedMcu>& outEncodedMcus,
@@ -817,7 +817,7 @@ void FileParser::Jpeg::Encoder::writeEncodedMcu(const std::vector<EncodedMcu>& m
 }
 
 auto FileParser::Jpeg::Encoder::writeJpeg(
-    const std::string& filepath, const std::vector<Mcu>& mcus, const EncodingSettings& settings,
+    const std::string& filepath, std::vector<Mcu>& mcus, const EncodingSettings& settings,
     uint16_t pixelHeight, uint16_t pixelWidth
 ) -> std::expected<void, std::string> {
     JpegBitWriter bitWriter(filepath);

@@ -175,13 +175,14 @@ std::pair<int, int> FileParser::Jpeg::JpegImage::decodeAcCoefficient(BitReader& 
     return {r, s};
 }
 
-std::array<float, 64>* FileParser::Jpeg::JpegImage::decodeComponent(BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp, int (&prevDc)[3]) {
-    const auto result = new std::array<float, 64>();
-    result->fill(0);
+std::array<float, 64> FileParser::Jpeg::JpegImage::decodeComponent(BitReader& bitReader,
+                                                                   const ScanHeaderComponentSpecification& scanComp,
+                                                                   int (&prevDc)[3]) {
+    std::array<float, 64> result{};
     // DC Coefficient
     HuffmanTable &dcTable = dcHuffmanTables[scanComp.dcTableIteration][scanComp.dcTableSelector];
     int dcCoefficient = decodeDcCoefficient(bitReader, dcTable) + prevDc[scanComp.componentId - 1];
-    (*result)[0] = static_cast<float>(dcCoefficient);
+    result[0] = static_cast<float>(dcCoefficient);
     prevDc[scanComp.componentId - 1] = dcCoefficient;
 
     // AC Coefficients
@@ -201,7 +202,7 @@ std::array<float, 64>* FileParser::Jpeg::JpegImage::decodeComponent(BitReader& b
             break;
         }
         int coefficient = decodeSSSS(bitReader, s);
-        (*result)[zigZagMap[index]] = static_cast<float>(coefficient);
+        result[zigZagMap[index]] = static_cast<float>(coefficient);
         index++;
     }
     return result;
@@ -211,12 +212,12 @@ void FileParser::Jpeg::JpegImage::decodeMcu(Mcu* mcu, ScanHeader& scanHeader, in
     for (auto& component : scanHeader.componentSpecifications) {
         if (component.componentId == 1) {
             for (int i = 0; i < info.luminanceComponentsPerMcu; i++) {
-                mcu->Y[i] = (std::unique_ptr<std::array<float, Mcu::DataUnitLength>>(decodeComponent(scanHeader.bitReader, component, prevDc)));
+                mcu->Y[i] = decodeComponent(scanHeader.bitReader, component, prevDc);
             }
         } else if (component.componentId == 2) {
-            mcu->Cb = std::unique_ptr<std::array<float, Mcu::DataUnitLength>>(decodeComponent(scanHeader.bitReader, component, prevDc));
+            mcu->Cb = decodeComponent(scanHeader.bitReader, component, prevDc);
         } else if (component.componentId == 3) {
-            mcu->Cr = std::unique_ptr<std::array<float, Mcu::DataUnitLength>>(decodeComponent(scanHeader.bitReader, component, prevDc));
+            mcu->Cr = decodeComponent(scanHeader.bitReader, component, prevDc);
         }
     }
 }
@@ -529,7 +530,7 @@ void FileParser::Jpeg::Mcu::print() const {
             for (int x = 0; x < 8; x++) {
                 // Print Luminance
                 int luminanceIndex = y * 8 + x;
-                std::cout << std::setw(5) << static_cast<int>((*i)[luminanceIndex]) << " ";
+                std::cout << std::setw(5) << static_cast<int>(i[luminanceIndex]) << " ";
             }
             std::cout << "| ";
         }
@@ -537,14 +538,14 @@ void FileParser::Jpeg::Mcu::print() const {
         for (int x = 0; x < 8; x++) {
             // Print Blue Chrominance
             int blueIndex = y * 8 + x;
-            std::cout << std::setw(5) << static_cast<int>((*Cb)[blueIndex]) << " ";
+            std::cout << std::setw(5) << static_cast<int>(Cb[blueIndex]) << " ";
         }
         std::cout << "| ";
 
         for (int x = 0; x < 8; x++) {
             // Print Red Chrominance
             int redIndex = y * 8 + x;
-            std::cout << std::setw(5) << static_cast<int>((*Cr)[redIndex]) << " ";
+            std::cout << std::setw(5) << static_cast<int>(Cr[redIndex]) << " ";
         }
         std::cout << '\n';
     }
@@ -580,18 +581,18 @@ void FileParser::Jpeg::Mcu::generateColorBlocks() {
             }
 
             // Load Y values (assumes contiguous memory layout)
-            simde__m256 y = simde_mm256_loadu_ps(&(*Y[i])[j]);
+            simde__m256 y = simde_mm256_loadu_ps(&Y[i][j]);
 
             // Load Cb values using gathered indices
             simde__m256 cb = simde_mm256_set_ps(
-                (*Cb)[colorIndices[7]], (*Cb)[colorIndices[6]], (*Cb)[colorIndices[5]], (*Cb)[colorIndices[4]],
-                (*Cb)[colorIndices[3]], (*Cb)[colorIndices[2]], (*Cb)[colorIndices[1]], (*Cb)[colorIndices[0]]
+                Cb[colorIndices[7]], Cb[colorIndices[6]], Cb[colorIndices[5]], Cb[colorIndices[4]],
+                Cb[colorIndices[3]], Cb[colorIndices[2]], Cb[colorIndices[1]], Cb[colorIndices[0]]
             );
 
             // Load Cr values using gathered indices
             simde__m256 cr = simde_mm256_set_ps(
-                (*Cr)[colorIndices[7]], (*Cr)[colorIndices[6]], (*Cr)[colorIndices[5]], (*Cr)[colorIndices[4]],
-                (*Cr)[colorIndices[3]], (*Cr)[colorIndices[2]], (*Cr)[colorIndices[1]], (*Cr)[colorIndices[0]]
+                Cr[colorIndices[7]], Cr[colorIndices[6]], Cr[colorIndices[5]], Cr[colorIndices[4]],
+                Cr[colorIndices[3]], Cr[colorIndices[2]], Cr[colorIndices[1]], Cr[colorIndices[0]]
             );
 
 
@@ -776,10 +777,10 @@ void FileParser::Jpeg::Mcu::performInverseDCT() {
         return;
     }
     for (auto& y : Y) {
-        performInverseDCT(*y);
+        performInverseDCT(y);
     }
-    performInverseDCT(*Cb);
-    performInverseDCT(*Cr);
+    performInverseDCT(Cb);
+    performInverseDCT(Cr);
     postDctMode = false;
 }
 
@@ -792,40 +793,30 @@ void FileParser::Jpeg::Mcu::dequantize(std::array<float, DataUnitLength>& array,
     }
 }
 
-void FileParser::Jpeg::Mcu::dequantize(JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp) const {
+void FileParser::Jpeg::Mcu::dequantize(JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp) {
     if (scanComp.componentId == 1) {
         for (auto& y : Y) {
-            dequantize(*y, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[1].quantizationTableSelector]);
+            dequantize(y, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[1].quantizationTableSelector]);
         }
     } else if (scanComp.componentId == 2){
-        dequantize(*Cb, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[2].quantizationTableSelector]);
+        dequantize(Cb, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[2].quantizationTableSelector]);
     } else if (scanComp.componentId == 3){
-        dequantize(*Cr, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[3].quantizationTableSelector]);
+        dequantize(Cr, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[3].quantizationTableSelector]);
     }
 }
 
 FileParser::Jpeg::Mcu::Mcu() {
-    Y.push_back(std::make_shared<std::array<float, DataUnitLength>>());
-    Y[0]->fill(0);
-    Cb = std::make_shared<std::array<float, DataUnitLength>>();
-    Cb->fill(0);
-    Cr = std::make_shared<std::array<float, DataUnitLength>>();
-    Cr->fill(0);
+    Y.push_back({});
     colorBlocks = std::vector(1, ColorBlock());
 }
 
 FileParser::Jpeg::Mcu::Mcu(const int luminanceComponents, const int horizontalSampleSize, const int verticalSampleSize) {
-    for (int i : std::ranges::views::iota(0, luminanceComponents)) {
-        Y.push_back(std::make_shared<std::array<float, DataUnitLength>>());
-        Y[i]->fill(0);
+    for (const int i : std::ranges::views::iota(0, luminanceComponents)) {
+        Y.push_back({});
     }
     colorBlocks = std::vector(luminanceComponents, ColorBlock());
     this->horizontalSampleSize = horizontalSampleSize;
     this->verticalSampleSize = verticalSampleSize;
-    Cb = std::make_shared<std::array<float, DataUnitLength>>();
-    Cb->fill(0);
-    Cr = std::make_shared<std::array<float, DataUnitLength>>();
-    Cr->fill(0);
 }
 
 FileParser::Jpeg::Mcu::Mcu(const ColorBlock& colorBlock) {
@@ -833,13 +824,11 @@ FileParser::Jpeg::Mcu::Mcu(const ColorBlock& colorBlock) {
     colorBlocks.push_back(colorBlock);
     ColorBlock copy = colorBlock;
     copy.rgbToYCbCr();
-    Y.push_back(std::make_shared<std::array<float, DataUnitLength>>());
-    Cb = std::make_shared<std::array<float, DataUnitLength>>();
-    Cr = std::make_shared<std::array<float, DataUnitLength>>();
+    Y.push_back({});
     for (int i = 0; i < DataUnitLength; i++) {
-        (*Y[0])[i] = copy.R[i];
-        (*Cb)[i] = copy.G[i];
-        (*Cr)[i] = copy.B[i];
+        Y[0][i] = copy.R[i];
+        Cb[i]   = copy.G[i];
+        Cr[i]   = copy.B[i];
     }
 }
 
@@ -1127,7 +1116,7 @@ void FileParser::Jpeg::JpegImage::processProgressiveStartOfScan(const std::share
                     pollCurrentScan(mcuIndex, scanNumber);
 
                     const int luminanceIndex = luminanceColumn + luminanceRow * info.maxHorizontalSample;
-                    decodeProgressiveComponent(mcus[mcuIndex]->Y[luminanceIndex].get(), *scan, scanSpec, prevDc, componentsToSkip);
+                    decodeProgressiveComponent(&mcus[mcuIndex]->Y[luminanceIndex], *scan, scanSpec, prevDc, componentsToSkip);
 
                     // Push the mcu to the next queue
                     bool pushToQueue = (luminanceIndex == info.luminanceComponentsPerMcu - 1) ||
@@ -1166,9 +1155,9 @@ void FileParser::Jpeg::JpegImage::processProgressiveStartOfScan(const std::share
                 pollCurrentScan(mcuIndex, scanNumber);
 
                 if (scanSpec.componentId == 2) {
-                    decodeProgressiveComponent(mcus[mcuIndex]->Cb.get(), *scan, scanSpec, prevDc, componentsToSkip);
+                    decodeProgressiveComponent(&mcus[mcuIndex]->Cb, *scan, scanSpec, prevDc, componentsToSkip);
                 } else if (scanSpec.componentId == 3) {
-                    decodeProgressiveComponent(mcus[mcuIndex]->Cr.get(), *scan, scanSpec, prevDc, componentsToSkip);
+                    decodeProgressiveComponent(&mcus[mcuIndex]->Cr, *scan, scanSpec, prevDc, componentsToSkip);
                 }
 
                 // Push mcu to next queue
@@ -1203,12 +1192,12 @@ void FileParser::Jpeg::JpegImage::processProgressiveStartOfScan(const std::share
                 std::shared_ptr<std::array<float, 64>> component;
                 if (componentInfo.componentId == 1) {
                     for (int i = 0; i < info.luminanceComponentsPerMcu; i++) {
-                        decodeProgressiveComponent(mcus[mcuIndex]->Y[i].get(), *scan, componentInfo, prevDc, componentsToSkip);
+                        decodeProgressiveComponent(&mcus[mcuIndex]->Y[i], *scan, componentInfo, prevDc, componentsToSkip);
                     }
                 } else if (componentInfo.componentId == 2) {
-                    decodeProgressiveComponent(mcus[mcuIndex]->Cb.get(), *scan, componentInfo, prevDc, componentsToSkip);
+                    decodeProgressiveComponent(&mcus[mcuIndex]->Cb, *scan, componentInfo, prevDc, componentsToSkip);
                 } else if (componentInfo.componentId == 3) {
-                    decodeProgressiveComponent(mcus[mcuIndex]->Cr.get(), *scan, componentInfo, prevDc, componentsToSkip);
+                    decodeProgressiveComponent(&mcus[mcuIndex]->Cr, *scan, componentInfo, prevDc, componentsToSkip);
                 }
             }
             // Push mcu to next queue

@@ -42,11 +42,11 @@ namespace FileParser::Jpeg::Encoder {
     const HuffmanTable& getDefaultChrominanceAcTable();
     
     void forwardDCT(std::array<float, Mcu::DataUnitLength>& component);
-    void forwardDCT(const Mcu& mcu);
-    void forwardDCT(const std::vector<Mcu>& mcus);
+    void forwardDCT(Mcu& mcu);
+    void forwardDCT(std::vector<Mcu>& mcus);
     void quantize(std::array<float, Mcu::DataUnitLength>& component, const QuantizationTable& quantizationTable);
-    void quantize(const Mcu& mcu, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
-    void quantize(const std::vector<Mcu>& mcus, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
+    void quantize(Mcu& mcu, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
+    void quantize(std::vector<Mcu>& mcus, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
     
     struct Coefficient {
         uint8_t encoding; // Run-length encoded symbol
@@ -93,7 +93,7 @@ namespace FileParser::Jpeg::Encoder {
     void writeEncodedMcu(const std::vector<EncodedMcu>& mcus, const HuffmanTable& luminanceDcTable, const HuffmanTable& luminanceAcTable,
         const HuffmanTable& chrominanceDcTable, const HuffmanTable& chrominanceAcTable, JpegBitWriter& bitWriter);
 
-    std::expected<void, std::string> writeJpeg(const std::string& filepath, const std::vector<Mcu>& mcus,
+    std::expected<void, std::string> writeJpeg(const std::string& filepath, std::vector<Mcu>& mcus,
                                                const EncodingSettings& settings, uint16_t pixelHeight,
                                                uint16_t pixelWidth);
 }
