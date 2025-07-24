@@ -5,8 +5,8 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
-#include "Gui/Renderer.h"
-#include "Gui/RenderWindow.h"
+#include "FileParser/Gui/Renderer.h"
+#include "FileParser/Gui/RenderWindow.h"
 
 static Gui::Renderer *s_renderer = nullptr;
 

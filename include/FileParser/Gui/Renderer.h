@@ -7,7 +7,7 @@
 #include <thread>
 #include <future>
 
-#include <GL/glew.h>
+#include <GL/glew.h> // NOLINT (misc-unused-include) must be included before GLFW
 #include <GLFW/glfw3.h>
 
 namespace Gui {

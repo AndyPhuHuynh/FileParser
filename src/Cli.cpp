@@ -1,4 +1,4 @@
-﻿#include "Cli.h"
+﻿#include "FileParser/Cli.h"
 
 #include <filesystem>
 #include <functional>
@@ -6,14 +6,14 @@
 #include <string>
 #include <unordered_map>
 
-#include "Bmp/BmpImage.h"
-#include "Bmp/BmpJpegConverter.h"
-#include "Bmp/BmpRenderer.h"
-#include "FileUtil.h"
-#include "Jpeg/JpegBmpConverter.h"
-#include "Jpeg/JpegEncoder.h"
-#include "Jpeg/JpegImage.h"
-#include "Jpeg/JpegRenderer.h"
+#include "FileParser/Bmp/BmpImage.h"
+#include "FileParser/Bmp/BmpJpegConverter.h"
+#include "FileParser/Bmp/BmpRenderer.h"
+#include "FileParser/FileUtil.h"
+#include "FileParser/Jpeg/JpegBmpConverter.h"
+#include "FileParser/Jpeg/JpegEncoder.h"
+#include "FileParser/Jpeg/JpegImage.h"
+#include "FileParser/Jpeg/JpegRenderer.h"
 
 /**
  * @brief Tokenizes a string based on a delimiter

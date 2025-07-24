@@ -1,6 +1,6 @@
-﻿#include "Bmp/BmpJpegConverter.h"
+﻿#include "FileParser/Bmp/BmpJpegConverter.h"
 
-#include "Jpeg/JpegEncoder.h"
+#include "FileParser/Jpeg/JpegEncoder.h"
 
 std::vector<FileParser::Jpeg::Mcu> FileParser::Bmp::Converter::getMcus(BmpImage& bmp) {
     const auto points = bmp.getPoints();

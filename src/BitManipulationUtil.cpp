@@ -1,4 +1,4 @@
-﻿#include "BitManipulationUtil.h"
+﻿#include "FileParser/BitManipulationUtil.h"
 
 #include <cstdint>
 #include <sstream>

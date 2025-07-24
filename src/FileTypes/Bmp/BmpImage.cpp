@@ -3,10 +3,10 @@
 #include <cmath>
 #include <memory>
 
-#include "BitManipulationUtil.h"
-#include "Bmp/BmpImage.h"
-#include "Gui/Renderer.h"
-#include "Gui/RenderWindow.h"
+#include "FileParser/BitManipulationUtil.h"
+#include "FileParser/Bmp/BmpImage.h"
+#include "FileParser/Gui/Renderer.h"
+#include "FileParser/Gui/RenderWindow.h"
 
 FileParser::Bmp::BmpHeader FileParser::Bmp::BmpHeader::getHeaderFromFile(std::ifstream& file) {
     BmpHeader header;

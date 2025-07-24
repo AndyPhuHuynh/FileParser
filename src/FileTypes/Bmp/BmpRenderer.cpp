@@ -1,9 +1,9 @@
-﻿#include "Bmp/BmpRenderer.h"
+﻿#include "FileParser/Bmp/BmpRenderer.h"
 
 #include <sstream>
 
-#include "Gui/Renderer.h"
-#include "Gui/RenderWindow.h"
+#include "FileParser/Gui/Renderer.h"
+#include "FileParser/Gui/RenderWindow.h"
 
 void FileParser::Bmp::Renderer::renderBmp(BmpImage& bmp) {
     if (bmp.rasterEncoding != BmpRasterEncoding::Monochrome &&

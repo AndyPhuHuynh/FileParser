@@ -7,8 +7,8 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
-#include "Renderer.h"
-#include "Point.h"
+#include "FileParser/Gui/Renderer.h"
+#include "FileParser/Point.h"
 
 namespace Gui {
     class Renderer;

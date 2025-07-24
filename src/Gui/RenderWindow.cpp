@@ -1,4 +1,4 @@
-﻿#include "Gui/RenderWindow.h"
+﻿#include "FileParser/Gui/RenderWindow.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -6,10 +6,10 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "Gui/Renderer.h"
-#include "Point.h"
-#include "Shaders.h"
-#include "ShaderUtil.h"
+#include "FileParser/Gui/Renderer.h"
+#include "FileParser/Point.h"
+#include "FileParser/Shaders.h"
+#include "FileParser/ShaderUtil.h"
 
 Gui::RenderWindow::RenderWindow(const int width, const int height, std::string title, const RenderMode renderMode)
     : m_title(std::move(title)), m_width(width), m_height(height) {

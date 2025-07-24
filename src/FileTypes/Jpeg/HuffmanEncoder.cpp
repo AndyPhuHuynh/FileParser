@@ -1,21 +1,21 @@
-#include "Jpeg/HuffmanEncoder.hpp"
+#include "FileParser/Jpeg/HuffmanEncoder.hpp"
 
 #include <algorithm>
 #include <expected>
 #include <iostream>
 #include <ranges>
 
-#include "Jpeg/JpegEncoder.h"
-#include "Jpeg/HuffmanBuilder.hpp"
+#include "FileParser/Jpeg/JpegEncoder.h"
+#include "FileParser/Jpeg/HuffmanBuilder.hpp"
 
-auto FileParser::Jpeg::CodeSizeEncoder::getCodeSizesPerByte(const ByteFrequencies& frequencies) -> CodeSizesPerByte {
+auto FileParser::Jpeg::CodeSizeEncoder::getCodeSizesPerByte(const ByteFrequencies& frequencies) -> CodeSizePerByte {
     // Initialize frequencies with an extra code point at index 256. This is done so when creating the Huffman Table,
     // no symbol is given the encoding of all 1's
     std::array<uint32_t, 257> freq{};
     std::ranges::copy(frequencies, freq.begin());
     freq[256] = 1;
     // Initialize codeSize
-    CodeSizesPerByte codeSizes{};
+    CodeSizePerByte codeSizes{};
     // Initialize others
     std::array<uint32_t, 257> others{};
     std::ranges::fill(others, std::numeric_limits<uint32_t>::max());
@@ -61,7 +61,7 @@ auto FileParser::Jpeg::CodeSizeEncoder::getCodeSizesPerByte(const ByteFrequencie
     return codeSizes;
 }
 
-auto FileParser::Jpeg::CodeSizeEncoder::countCodeSizes(const CodeSizesPerByte& codeSizes) -> UnadjustedCodeSizeFrequencies {
+auto FileParser::Jpeg::CodeSizeEncoder::countCodeSizes(const CodeSizePerByte& codeSizes) -> UnadjustedCodeSizeFrequencies {
     UnadjustedCodeSizeFrequencies unadjusted{};
     for (auto i : codeSizes) {
         if (i > 32) {

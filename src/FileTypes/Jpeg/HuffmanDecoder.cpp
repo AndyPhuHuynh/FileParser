@@ -1,4 +1,4 @@
-#include "Jpeg/HuffmanDecoder.hpp"
+#include "FileParser/Jpeg/HuffmanDecoder.hpp"
 
 #include <iostream>
 

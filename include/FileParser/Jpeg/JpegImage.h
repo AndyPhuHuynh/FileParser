@@ -6,13 +6,11 @@
 #include <numbers>
 #include <vector>
 #include <queue>
-#include <thread>
 #include <mutex>
 #include <condition_variable>
 
-#include "BitManipulationUtil.h"
-#include "Gui/Renderer.h"
-#include "../FileParser/Huffman/Table.hpp"
+#include "FileParser/BitManipulationUtil.h"
+#include "FileParser/Huffman/Table.hpp"
 
 namespace FileParser::Jpeg {
     constexpr uint8_t MarkerHeader = 0xFF;

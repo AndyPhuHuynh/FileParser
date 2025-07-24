@@ -1,12 +1,12 @@
-﻿#include "Jpeg/JpegEncoder.h"
+﻿#include "FileParser/Jpeg/JpegEncoder.h"
 
 #include <algorithm>
 #include <iostream>
 #include <ranges>
 
-#include "Jpeg/JpegBitWriter.h"
-#include "Jpeg/HuffmanBuilder.hpp"
-#include "Jpeg/HuffmanEncoder.hpp"
+#include "FileParser/Jpeg/JpegBitWriter.h"
+#include "FileParser/Jpeg/HuffmanBuilder.hpp"
+#include "FileParser/Jpeg/HuffmanEncoder.hpp"
 
 const FileParser::HuffmanTable& FileParser::Jpeg::Encoder::getDefaultLuminanceDcTable() {
     static const HuffmanTable table{

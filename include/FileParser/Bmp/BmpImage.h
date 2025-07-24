@@ -1,12 +1,12 @@
 ﻿#pragma once
 
-#include "Color.h"
-#include "Point.h"
 
 #include <fstream>
 #include <vector>
 
-#include "Gui/Renderer.h"
+#include "FileParser/Color.h"
+#include "FileParser/Gui/Renderer.h"
+#include "FileParser/Point.h"
 
 namespace FileParser::Bmp {
     enum class BmpRasterEncoding : std::uint8_t {

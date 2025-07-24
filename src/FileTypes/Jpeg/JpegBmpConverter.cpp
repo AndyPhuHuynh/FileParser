@@ -1,9 +1,9 @@
-﻿#include "Jpeg/JpegBmpConverter.h"
+﻿#include "FileParser/Jpeg/JpegBmpConverter.h"
 
 #include <cstdint>
 #include <iostream>
 
-#include "BitManipulationUtil.h"
+#include "FileParser/BitManipulationUtil.h"
 
 // TODO: Make writing to bmp faster
 

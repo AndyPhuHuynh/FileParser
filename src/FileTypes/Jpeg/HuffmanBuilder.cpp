@@ -1,4 +1,4 @@
-#include "Jpeg/HuffmanBuilder.hpp"
+#include "FileParser/Jpeg/HuffmanBuilder.hpp"
 
 #include <array>
 #include <fstream>

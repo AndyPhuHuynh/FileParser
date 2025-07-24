@@ -2,9 +2,9 @@
 
 #include <filesystem>
 
-#include "HuffmanEncoder.hpp"
-#include "JpegBitWriter.h"
-#include "JpegImage.h"
+#include "FileParser/Jpeg/HuffmanEncoder.hpp"
+#include "FileParser/Jpeg/JpegBitWriter.h"
+#include "FileParser/Jpeg/JpegImage.h"
 
 namespace FileParser::Jpeg::Encoder {
     const std::array<float, QuantizationTable::TableLength> LuminanceTable = {

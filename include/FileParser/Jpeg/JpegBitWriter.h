@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "BitManipulationUtil.h"
+#include "FileParser/BitManipulationUtil.h"
 
 class JpegBitWriter final : public BitWriter{
 public:

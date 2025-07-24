@@ -1,11 +1,11 @@
-﻿#include "Jpeg/JpegRenderer.h"
+﻿#include "FileParser/Jpeg/JpegRenderer.h"
 
 #include <vector>
 
-#include "Gui/Renderer.h"
-#include "Gui/RenderWindow.h"
-#include "Jpeg/JpegImage.h"
-#include "Point.h"
+#include "FileParser/Gui/Renderer.h"
+#include "FileParser/Gui/RenderWindow.h"
+#include "FileParser/Jpeg/JpegImage.h"
+#include "FileParser/Point.h"
 
 void FileParser::Jpeg::Renderer::renderJpeg(const JpegImage& jpeg) {
     const auto points = std::make_shared<std::vector<Point>>();

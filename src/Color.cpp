@@ -1,4 +1,5 @@
-﻿#include "Color.h"
+﻿#include "FileParser/Color.h"
+
 #include <iostream>
 
 Color::Color(const float r, const float g, const float b) {

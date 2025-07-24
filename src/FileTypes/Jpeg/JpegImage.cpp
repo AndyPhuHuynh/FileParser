@@ -1,20 +1,18 @@
-﻿#include "Jpeg/JpegImage.h"
+﻿#include "FileParser/Jpeg/JpegImage.h"
 
 #include <algorithm>
 #include <future>
 #include <iomanip>
 #include <iostream>
-#include <numbers>
 #include <ctime>
-#include <numeric>
 #include <ranges>
 #include <vector>
 
 #include <simde/x86/avx512.h>
 
-#include "BitManipulationUtil.h"
-#include "Jpeg/HuffmanBuilder.hpp"
-#include "Jpeg/HuffmanDecoder.hpp"
+#include "FileParser/BitManipulationUtil.h"
+#include "FileParser/Jpeg/HuffmanBuilder.hpp"
+#include "FileParser/Jpeg/HuffmanDecoder.hpp"
 
 void FileParser::Jpeg::FrameHeaderComponentSpecification::print() const {
     std::cout << std::setw(25) << "Identifier: " << static_cast<int>(identifier) << "\n";
