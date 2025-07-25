@@ -13,6 +13,7 @@
 #include "FileParser/BitManipulationUtil.h"
 #include "FileParser/Jpeg/HuffmanBuilder.hpp"
 #include "FileParser/Jpeg/HuffmanDecoder.hpp"
+#include "FileParser/Jpeg/QuantizationTableBuilder.hpp"
 
 void FileParser::Jpeg::FrameHeaderComponentSpecification::print() const {
     std::cout << std::setw(25) << "Identifier: " << static_cast<int>(identifier) << "\n";
@@ -514,27 +515,25 @@ void FileParser::Jpeg::JpegImage::readFrameHeader(const uint8_t frameMarker) {
 void FileParser::Jpeg::JpegImage::readQuantizationTables() {
     uint16_t length = readLengthBytes();
 
-    while (length > 0) {
-        uint8_t tableId;
-        file.read(reinterpret_cast<char*>(&tableId), 1);
-        length--;
-        tableId = GetNibble(tableId, 1);
+    BitReader bytes;
+    for (uint16_t i = 0; i < length; i++) {
+        uint8_t byte;
+        file.read(reinterpret_cast<char *>(&byte), 1);
+        bytes.addByte(byte);
+    }
 
-        uint8_t precision = GetNibble(tableId, 0);
-        bool is8Bit = precision == 0;
+    while (!bytes.reachedEnd()) {
+        // TODO: Handle std::expected
+        auto table = *QuantizationTableBuilder::readFromBitReader(bytes);
 
-        std::streampos dataStartIndex = file.tellg();
-
-        QuantizationTable quantizationTable(file, dataStartIndex, is8Bit, tableId);
         int iteration = 0;
-        while (quantizationTables[iteration][tableId].has_value()) {
+        while (quantizationTables[iteration][table.destination].has_value()) {
             iteration++;
             if (static_cast<int>(quantizationTables.size()) <= iteration) {
                 quantizationTables.emplace_back();
             }
         }
-        quantizationTables[iteration][tableId] = quantizationTable;
-        length -= (static_cast<uint16_t>(file.tellg()) - static_cast<uint16_t>(dataStartIndex));
+        quantizationTables[iteration][table.destination] = table;
     }
 }
 
@@ -1032,7 +1031,9 @@ void FileParser::Jpeg::JpegImage::printInfo() const {
         for (size_t i = 0; i < quantizationTables.size(); i++) {
             if (quantizationTables[iteration][i].has_value()) {
                 std::cout << "Quantization Iteration " << iteration << ", Table #" << i << "\n";
-                quantizationTables[iteration][i]->print();
+                // TODO: Printing qtable
+                // quantizationTables[iteration][i]->print();
+                std::cout << "Todo\n";
             }
         }
     }

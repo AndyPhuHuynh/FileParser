@@ -1,11 +1,14 @@
 #pragma once
-#include <iosfwd>
 
-#include "QuantizationTable.hpp"
+#include <expected>
+
+#include "FileParser/BitManipulationUtil.h"
+#include "FileParser/Jpeg/QuantizationTable.hpp"
 
 namespace FileParser::Jpeg {
     class QuantizationTableBuilder {
-        // Called AFTER DQT marker
-        static auto readFromFile(std::ifstream& file) -> QuantizationTable;
+    public:
+        // Called AFTER DQT
+        static auto readFromBitReader(BitReader& bytes) -> std::expected<QuantizationTable, std::string>;
     };
 }

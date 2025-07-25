@@ -713,15 +713,19 @@ FileParser::Jpeg::QuantizationTable FileParser::Jpeg::Encoder::createQuantizatio
         scaledTable[i] = std::round(std::clamp(table[i] * static_cast<float>(scale) / 100, 1.0f, 255.0f));
     }
 
-    return QuantizationTable(scaledTable, is8Bit, tableDestination);
+    return QuantizationTable {
+        .precision = static_cast<uint8_t>(is8Bit ? 0 : 1),
+        .destination = tableDestination,
+        .table = scaledTable,
+    };
 }
 
 void FileParser::Jpeg::Encoder::writeQuantizationTableNoMarker(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter) {
-    const uint8_t precision = quantizationTable.is8Bit ? 0 : 1;
-    const auto precisionAndTableId = static_cast<uint8_t>((precision << 4) | quantizationTable.tableDestination);
+    const uint8_t precision = quantizationTable.precision;
+    const auto precisionAndTableId = static_cast<uint8_t>((precision << 4) | quantizationTable.destination);
     bitWriter << precisionAndTableId;
 
-    if (quantizationTable.is8Bit) {
+    if (quantizationTable.precision == 0) {
         for (const unsigned char i : zigZagMap) {
             auto byte = static_cast<uint8_t>(quantizationTable.table.at(i));
             bitWriter << byte;
@@ -737,7 +741,7 @@ void FileParser::Jpeg::Encoder::writeQuantizationTableNoMarker(const Quantizatio
 void FileParser::Jpeg::Encoder::writeQuantizationTable(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter) {
     writeMarker(DQT, bitWriter);
 
-    const uint8_t bytesPerEntry = quantizationTable.is8Bit ? 1 : 2;
+    const uint8_t bytesPerEntry = quantizationTable.precision == 0 ? 1 : 2;
     const uint16_t length = 2 + 1 + (64 * bytesPerEntry);
     bitWriter << length;
 
