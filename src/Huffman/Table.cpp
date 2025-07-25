@@ -24,7 +24,6 @@ FileParser::HuffmanTable::HuffmanTable(const std::vector<HuffmanEncoding>& encod
         m_encodingLookup.insert(std::make_pair(encoding.value, encoding));
     }
     generateLookupTable(encodings);
-    m_isInitialized = true;
 }
 
 auto FileParser::HuffmanTable::decode(const uint16_t word) const -> std::pair<uint8_t, uint8_t> {
@@ -45,10 +44,6 @@ auto FileParser::HuffmanTable::decode(const uint16_t word) const -> std::pair<ui
 // Used in the Encoder to find the encoding for a symbol
 auto FileParser::HuffmanTable::encode(const uint8_t symbol) const -> HuffmanEncoding {
     return m_encodingLookup.at(symbol);
-}
-
-auto FileParser::HuffmanTable::isInitialized() const -> bool {
-    return m_isInitialized;
 }
 
 // Main function that generates label

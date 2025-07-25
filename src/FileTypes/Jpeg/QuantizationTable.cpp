@@ -22,7 +22,6 @@ FileParser::Jpeg::QuantizationTable::QuantizationTable(
             table[i] = static_cast<float>(word);
         }
     }
-    isSet = true;
 }
 
 void FileParser::Jpeg::QuantizationTable::print() const {

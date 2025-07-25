@@ -8,6 +8,7 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
+#include <optional>
 
 #include "Mcu.hpp"
 #include "FileParser/BitManipulationUtil.h"
@@ -239,9 +240,12 @@ namespace FileParser::Jpeg {
         std::string comment;
         uint16_t currentRestartInterval = 0;
         // Index in the vector is the iteration, index in the array is the table number
-        std::vector<std::array<QuantizationTable, 4>> quantizationTables =  std::vector<std::array<QuantizationTable, 4>>(1);
-        std::vector<std::array<HuffmanTable, 4>> dcHuffmanTables = std::vector<std::array<HuffmanTable, 4>>(1);
-        std::vector<std::array<HuffmanTable, 4>> acHuffmanTables = std::vector<std::array<HuffmanTable, 4>>(1);
+        std::vector<std::array<std::optional<QuantizationTable>, 4>> quantizationTables =
+            std::vector<std::array<std::optional<QuantizationTable>, 4>>(1);
+        std::vector<std::array<std::optional<HuffmanTable>, 4>> dcHuffmanTables =
+            std::vector<std::array<std::optional<HuffmanTable>, 4>>(1);
+        std::vector<std::array<std::optional<HuffmanTable>, 4>> acHuffmanTables =
+            std::vector<std::array<std::optional<HuffmanTable>, 4>>(1);
     private:
         ConsumerQueue quantizationQueue;
         ConsumerQueue idctQueue;

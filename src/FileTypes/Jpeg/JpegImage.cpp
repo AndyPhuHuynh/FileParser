@@ -150,9 +150,10 @@ FileParser::Jpeg::Component FileParser::Jpeg::JpegImage::decodeComponent(BitRead
                                                                          const ScanHeaderComponentSpecification&
                                                                          scanComp,
                                                                          int (&prevDc)[3]) {
+    // TODO: Add error messages for getting values from huffman table optionals
     Component result;
     // DC Coefficient
-    HuffmanTable &dcTable = dcHuffmanTables[scanComp.dcTableIteration][scanComp.dcTableSelector];
+    HuffmanTable &dcTable = *dcHuffmanTables[scanComp.dcTableIteration][scanComp.dcTableSelector];
     int dcCoefficient = decodeDcCoefficient(bitReader, dcTable) + prevDc[scanComp.componentId - 1];
     result[0] = static_cast<float>(dcCoefficient);
     prevDc[scanComp.componentId - 1] = dcCoefficient;
@@ -160,7 +161,7 @@ FileParser::Jpeg::Component FileParser::Jpeg::JpegImage::decodeComponent(BitRead
     // AC Coefficients
     int index = 1;
     while (index < Mcu::DataUnitLength) {
-        HuffmanTable &acTable = acHuffmanTables[scanComp.acTableIteration][scanComp.acTableSelector];
+        HuffmanTable &acTable = *acHuffmanTables[scanComp.acTableIteration][scanComp.acTableSelector];
         auto [r, s] = decodeAcCoefficient(bitReader, acTable);
         if (r == 0x0 && s == 0x0) {
             break;
@@ -285,7 +286,7 @@ void FileParser::Jpeg::JpegImage::decodeProgressiveComponent(Component& componen
     if (spectralStart == 0 && spectralEnd == 0) {
         // First scan
         if (approximationHigh == 0) {
-            HuffmanTable& dcTable = dcHuffmanTables[componentInfo.dcTableIteration][componentInfo.dcTableSelector];
+            HuffmanTable& dcTable = *dcHuffmanTables[componentInfo.dcTableIteration][componentInfo.dcTableSelector];
             int dcCoefficient = (decodeDcCoefficient(scanHeader.bitReader, dcTable) << approximationLow) + prevDc[componentInfo.componentId - 1];
             component[0] = static_cast<float>(dcCoefficient);
             prevDc[componentInfo.componentId - 1] = dcCoefficient;
@@ -301,7 +302,7 @@ void FileParser::Jpeg::JpegImage::decodeProgressiveComponent(Component& componen
     if (approximationHigh == 0) {
         int index = spectralStart;
         while (index <= spectralEnd) {
-            HuffmanTable& acTable = acHuffmanTables[componentInfo.acTableIteration][componentInfo.acTableSelector];
+            HuffmanTable& acTable = *acHuffmanTables[componentInfo.acTableIteration][componentInfo.acTableSelector];
             auto [r, s] = decodeAcCoefficient(scanHeader.bitReader, acTable);
             if (r == 0xF && s == 0x0) {
                 index += 16;
@@ -327,7 +328,7 @@ void FileParser::Jpeg::JpegImage::decodeProgressiveComponent(Component& componen
     int index = spectralStart;
     int numToAdd = 1 << approximationLow;
     while (index <= spectralEnd) {
-        HuffmanTable& acTable = acHuffmanTables[componentInfo.acTableIteration][componentInfo.acTableSelector];
+        HuffmanTable& acTable = *acHuffmanTables[componentInfo.acTableIteration][componentInfo.acTableSelector];
         auto [r, s] = decodeAcCoefficient(scanHeader.bitReader, acTable);
         if (r == 0xF && s == 0x0) {
             skipZeros(scanHeader.bitReader, component, 16, index, approximationLow);
@@ -399,18 +400,18 @@ FileParser::Jpeg::ScanHeader::ScanHeader(JpegImage* jpeg, const std::streampos& 
         // Get the iterations for quantization and huffman tables
         int qTableSelector = jpeg->info.componentSpecifications[componentId].quantizationTableSelector;
         int quantizationTableIteration = static_cast<uint8_t>(jpeg->quantizationTables.size()) - 1;
-        while (quantizationTableIteration > 0 && !jpeg->quantizationTables[quantizationTableIteration][qTableSelector].isSet) {
+        while (quantizationTableIteration > 0 && !jpeg->quantizationTables[quantizationTableIteration][qTableSelector].has_value()) {
             quantizationTableIteration--;
         }
 
         int dcTableSelector = GetNibble(tables, 0);
         int dcTableIteration = static_cast<int>(jpeg->dcHuffmanTables.size()) - 1;
-        while (dcTableIteration > 0 && !jpeg->dcHuffmanTables[dcTableIteration][dcTableSelector].isInitialized()) {
+        while (dcTableIteration > 0 && !jpeg->dcHuffmanTables[dcTableIteration][dcTableSelector].has_value()) {
             dcTableIteration--;
         }
         int acTableSelector = GetNibble(tables, 1);
         int acIteration = static_cast<int>(jpeg->acHuffmanTables.size()) - 1;
-        while (acIteration > 0 && !jpeg->acHuffmanTables[acIteration][acTableSelector].isInitialized()) {
+        while (acIteration > 0 && !jpeg->acHuffmanTables[acIteration][acTableSelector].has_value()) {
             acIteration--;
         }
 
@@ -526,7 +527,7 @@ void FileParser::Jpeg::JpegImage::readQuantizationTables() {
 
         QuantizationTable quantizationTable(file, dataStartIndex, is8Bit, tableId);
         int iteration = 0;
-        while (quantizationTables[iteration][tableId].isSet) {
+        while (quantizationTables[iteration][tableId].has_value()) {
             iteration++;
             if (static_cast<int>(quantizationTables.size()) <= iteration) {
                 quantizationTables.emplace_back();
@@ -550,7 +551,7 @@ void FileParser::Jpeg::JpegImage::readHuffmanTables() {
 
         auto& tables = tableClass == 0 ? dcHuffmanTables : acHuffmanTables;
         int iteration = 0;
-        while (tables[iteration][tableId].isInitialized()) {
+        while (tables[iteration][tableId].has_value()) {
             iteration++;
             if (static_cast<int>(tables.size()) <= iteration) {
                 tables.emplace_back();
@@ -1029,9 +1030,9 @@ void FileParser::Jpeg::JpegImage::printInfo() const {
     std::cout << "\nQuantization Tables:\n";
     for (int iteration = 0; iteration < static_cast<int>(quantizationTables.size()); iteration++) {
         for (size_t i = 0; i < quantizationTables.size(); i++) {
-            if (quantizationTables[iteration][i].isSet) {
+            if (quantizationTables[iteration][i].has_value()) {
                 std::cout << "Quantization Iteration " << iteration << ", Table #" << i << "\n";
-                quantizationTables[iteration][i].print();
+                quantizationTables[iteration][i]->print();
             }
         }
     }
@@ -1039,7 +1040,7 @@ void FileParser::Jpeg::JpegImage::printInfo() const {
     std::cout << "\nDC Huffman Tables:\n";
     for (int iteration = 0; iteration < static_cast<int>(dcHuffmanTables.size()); iteration++) {
         for (size_t i = 0; i < dcHuffmanTables.size(); i++) {
-            if (dcHuffmanTables[iteration][i].isInitialized()) {
+            if (dcHuffmanTables[iteration][i].has_value()) {
                 std::cout << "DC Huffman Iteration " << iteration << ", Table #" << i << "\n";
                 // dcHuffmanTables[iteration][i].print();
                 std::cout << "TODO!\n";
@@ -1050,7 +1051,7 @@ void FileParser::Jpeg::JpegImage::printInfo() const {
     std::cout << "\nAC Huffman Tables:\n";
     for (int iteration = 0; iteration < static_cast<int>(acHuffmanTables.size()); iteration++) {
         for (size_t i = 0; i < acHuffmanTables.size(); i++) {
-            if (acHuffmanTables[iteration][i].isInitialized()) {
+            if (acHuffmanTables[iteration][i].has_value()) {
                 std::cout << "AC Huffman Iteration " << iteration << ", Table #" << i << "\n";
                 // acHuffmanTables[iteration][i].print();
                 std::cout << "TODO!\n";

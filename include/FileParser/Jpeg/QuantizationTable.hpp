@@ -9,7 +9,6 @@ namespace FileParser::Jpeg {
         std::array<float, length> table{};
         bool is8Bit = true;
         uint8_t tableDestination = 0;
-        bool isSet = false;
 
         QuantizationTable() = default;
         QuantizationTable(std::ifstream& file, const std::streampos& dataStartIndex, bool is8Bit, uint8_t tableDestination);

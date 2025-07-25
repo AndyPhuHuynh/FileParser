@@ -15,13 +15,14 @@ void FileParser::Jpeg::dequantize(Component& component, const QuantizationTable&
 }
 
 void FileParser::Jpeg::dequantize(Mcu& mcu, JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp) {
+    // TODO: Add error messages for getting values from these optionals
     if (scanComp.componentId == 1) {
         for (auto& y : mcu.Y) {
-            dequantize(y, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[1].quantizationTableSelector]);
+            dequantize(y, *jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[1].quantizationTableSelector]);
         }
     } else if (scanComp.componentId == 2){
-        dequantize(mcu.Cb, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[2].quantizationTableSelector]);
+        dequantize(mcu.Cb, *jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[2].quantizationTableSelector]);
     } else if (scanComp.componentId == 3){
-        dequantize(mcu.Cr, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[3].quantizationTableSelector]);
+        dequantize(mcu.Cr, *jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[3].quantizationTableSelector]);
     }
 }

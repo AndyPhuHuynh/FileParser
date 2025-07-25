@@ -285,14 +285,15 @@ void FileParser::Jpeg::Mcu::dequantize(Component& array, const QuantizationTable
 }
 
 void FileParser::Jpeg::Mcu::dequantize(JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp) {
+    // TODO: Add error messages for getting values from these optionals
     if (scanComp.componentId == 1) {
         for (auto& y : Y) {
-            dequantize(y, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[1].quantizationTableSelector]);
+            dequantize(y, *jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[1].quantizationTableSelector]);
         }
     } else if (scanComp.componentId == 2){
-        dequantize(Cb, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[2].quantizationTableSelector]);
+        dequantize(Cb, *jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[2].quantizationTableSelector]);
     } else if (scanComp.componentId == 3){
-        dequantize(Cr, jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[3].quantizationTableSelector]);
+        dequantize(Cr, *jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[3].quantizationTableSelector]);
     }
 }
 

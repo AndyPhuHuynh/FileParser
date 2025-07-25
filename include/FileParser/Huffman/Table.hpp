@@ -49,7 +49,6 @@ namespace FileParser {
     private:
         HuffmanSubtable m_table;
         std::map<uint8_t, HuffmanEncoding> m_encodingLookup;
-        bool m_isInitialized = false;
     public:
         HuffmanTable() = default;
         HuffmanTable(const HuffmanTable&) = default;
@@ -61,8 +60,6 @@ namespace FileParser {
 
         [[nodiscard]] auto decode(uint16_t word) const -> std::pair<uint8_t, uint8_t>;
         [[nodiscard]] auto encode(uint8_t symbol) const -> HuffmanEncoding;
-
-        [[nodiscard]] auto isInitialized() const -> bool;
     private:
         void generateLookupTable(const std::vector<HuffmanEncoding>& encodings);
     };
