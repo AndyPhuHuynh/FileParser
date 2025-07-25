@@ -9,8 +9,10 @@
 #include <mutex>
 #include <condition_variable>
 
+#include "Mcu.hpp"
 #include "FileParser/BitManipulationUtil.h"
 #include "FileParser/Huffman/Table.hpp"
+#include "FileParser/Jpeg/QuantizationTable.hpp"
 
 namespace FileParser::Jpeg {
     constexpr uint8_t MarkerHeader = 0xFF;
@@ -166,20 +168,6 @@ namespace FileParser::Jpeg {
         void initializeValuesFromComponents();
     };
 
-    struct QuantizationTable {
-        static constexpr int TableLength = 64;
-        std::array<float, TableLength> table{};
-        bool is8Bit = true;
-        uint8_t tableDestination = 0;
-        bool isSet = false;
-
-        QuantizationTable() = default;
-        QuantizationTable(std::ifstream& file, const std::streampos& dataStartIndex, bool is8Bit, uint8_t tableDestination);
-        explicit QuantizationTable(const std::array<float, TableLength>& table, const bool is8Bit, const uint8_t tableDestination)
-        : table(table), is8Bit(is8Bit), tableDestination(tableDestination) {}
-        void print() const;
-    };
-
     class ScanHeaderComponentSpecification {
     public:
         uint8_t componentId;
@@ -229,34 +217,6 @@ namespace FileParser::Jpeg {
         void rgbToYCbCr();
     };
 
-    class Mcu {
-    public:
-        static constexpr int DataUnitLength = 64;
-        // True = After FDCT, IDCT needs to be performed
-        bool postDctMode = true; 
-        // Component 1
-        std::vector<std::array<float, DataUnitLength>> Y;
-        // Component 2
-        std::array<float, DataUnitLength> Cb{};
-        // Component 3
-        std::array<float, DataUnitLength> Cr{};
-        int horizontalSampleSize = 1;
-        int verticalSampleSize = 1;
-        std::vector<ColorBlock> colorBlocks;
-
-        Mcu();
-        Mcu(int luminanceComponents, int horizontalSampleSize, int verticalSampleSize);
-        explicit Mcu(const ColorBlock& colorBlock);
-        void print() const;
-        static int getColorIndex(int blockIndex, int pixelIndex, int horizontalFactor, int verticalFactor);
-        void generateColorBlocks();
-        [[nodiscard]] std::tuple<uint8_t, uint8_t, uint8_t> getColor(int index) const;
-        static void performInverseDCT(std::array<float, 64>& array);
-        void performInverseDCT();
-        static void dequantize(std::array<float, 64>& array, const QuantizationTable& quantizationTable);
-        void dequantize(JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp);
-    };
-
     struct ConsumerQueue {
         std::mutex mutex;
         std::condition_variable condition;
@@ -300,12 +260,12 @@ namespace FileParser::Jpeg {
         static int decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
         static std::pair<int, int> decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable);
 
-        std::array<float, 64> decodeComponent(BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp,
-                                              int (&prevDc)[3]);
+        Component decodeComponent(BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp,
+                                  int (&prevDc)[3]);
         void decodeMcu(Mcu* mcu, ScanHeader& scanHeader, int (&prevDc)[3]);
-        static void skipZeros(BitReader& bitReader, std::array<float, 64>*& component, int numToSkip, int& index, int approximationLow);
-        void decodeProgressiveComponent(std::array<float, 64>* component, ScanHeader& scanHeader,
-            const ScanHeaderComponentSpecification& componentInfo, int (&prevDc)[3], int& numBlocksToSkip);
+        static void skipZeros(BitReader& bitReader, Component& component, int numToSkip, int& index, int approximationLow);
+        void decodeProgressiveComponent(Component& component, ScanHeader& scanHeader,
+                                        const ScanHeaderComponentSpecification& componentInfo, int (&prevDc)[3], int& numBlocksToSkip);
     private:
         uint16_t readLengthBytes();
         void readFrameHeader(uint8_t frameMarker);

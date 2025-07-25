@@ -7,7 +7,7 @@
 #include "FileParser/Jpeg/JpegImage.h"
 
 namespace FileParser::Jpeg::Encoder {
-    const std::array<float, QuantizationTable::TableLength> LuminanceTable = {
+    const std::array<float, QuantizationTable::length> LuminanceTable = {
         16, 11, 10, 16, 24, 40, 51, 61,
         12, 12, 14, 19, 26, 58, 60, 55,
         14, 13, 16, 24, 40, 57, 69, 56,
@@ -18,7 +18,7 @@ namespace FileParser::Jpeg::Encoder {
         72, 92, 95, 98, 112, 100, 103, 99
     };
 
-    const std::array<float, QuantizationTable::TableLength> ChrominanceTable = {
+    const std::array<float, QuantizationTable::length> ChrominanceTable = {
         17, 18, 24, 47, 99, 99, 99, 99,
         18, 21, 26, 66, 99, 99, 99, 99,
         24, 26, 56, 99, 99, 99, 99, 99,
@@ -41,10 +41,10 @@ namespace FileParser::Jpeg::Encoder {
     const HuffmanTable& getDefaultChrominanceDcTable();
     const HuffmanTable& getDefaultChrominanceAcTable();
     
-    void forwardDCT(std::array<float, Mcu::DataUnitLength>& component);
+    void forwardDCT(Component& component);
     void forwardDCT(Mcu& mcu);
     void forwardDCT(std::vector<Mcu>& mcus);
-    void quantize(std::array<float, Mcu::DataUnitLength>& component, const QuantizationTable& quantizationTable);
+    void quantize(Component& component, const QuantizationTable& quantizationTable);
     void quantize(Mcu& mcu, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
     void quantize(std::vector<Mcu>& mcus, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
     
@@ -61,8 +61,8 @@ namespace FileParser::Jpeg::Encoder {
         std::vector<Coefficient> Cr;
     };
     
-    void encodeCoefficients(const std::array<float, Mcu::DataUnitLength>& component, std::vector<Coefficient>& outCoefficients,
-        std::vector<Coefficient>& dcCoefficients, std::vector<Coefficient>& acCoefficients, int& prevDc);
+    void encodeCoefficients(const Component& component, std::vector<Coefficient>& outCoefficients,
+                            std::vector<Coefficient>& dcCoefficients, std::vector<Coefficient>& acCoefficients, int& prevDc);
     void encodeCoefficients(const Mcu& mcu, std::vector<EncodedMcu>& outEncodedMcus, std::array<int, 3>& prevDc,
         std::vector<Coefficient>& outLuminanceDcCoefficients, std::vector<Coefficient>& outLuminanceAcCoefficients,
         std::vector<Coefficient>& outChromaDcCoefficients, std::vector<Coefficient>& outChromaAcCoefficients);

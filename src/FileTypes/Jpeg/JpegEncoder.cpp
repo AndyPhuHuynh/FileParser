@@ -404,16 +404,16 @@ const FileParser::HuffmanTable& FileParser::Jpeg::Encoder::getDefaultChrominance
 }
 
 
-void FileParser::Jpeg::Encoder::forwardDCT(std::array<float, Mcu::DataUnitLength>& component) {
+void FileParser::Jpeg::Encoder::forwardDCT(Component& component) {
     for (int i = 0; i < 8; ++i) {
-        const float a0 = component.at(0 * 8 + i);
-        const float a1 = component.at(1 * 8 + i);
-        const float a2 = component.at(2 * 8 + i);
-        const float a3 = component.at(3 * 8 + i);
-        const float a4 = component.at(4 * 8 + i);
-        const float a5 = component.at(5 * 8 + i);
-        const float a6 = component.at(6 * 8 + i);
-        const float a7 = component.at(7 * 8 + i);
+        const float a0 = component[0 * 8 + i];
+        const float a1 = component[1 * 8 + i];
+        const float a2 = component[2 * 8 + i];
+        const float a3 = component[3 * 8 + i];
+        const float a4 = component[4 * 8 + i];
+        const float a5 = component[5 * 8 + i];
+        const float a6 = component[6 * 8 + i];
+        const float a7 = component[7 * 8 + i];
 
         const float b0 = a0 + a7;
         const float b1 = a1 + a6;
@@ -471,24 +471,24 @@ void FileParser::Jpeg::Encoder::forwardDCT(std::array<float, Mcu::DataUnitLength
         const float g6 = f5 - f6;
         const float g7 = f7 - f4;
 
-        component.at(0 * 8 + i) = g0 * s0;
-        component.at(4 * 8 + i) = g1 * s4;
-        component.at(2 * 8 + i) = g2 * s2;
-        component.at(6 * 8 + i) = g3 * s6;
-        component.at(5 * 8 + i) = g4 * s5;
-        component.at(1 * 8 + i) = g5 * s1;
-        component.at(7 * 8 + i) = g6 * s7;
-        component.at(3 * 8 + i) = g7 * s3;
+        component[0 * 8 + i] = g0 * s0;
+        component[4 * 8 + i] = g1 * s4;
+        component[2 * 8 + i] = g2 * s2;
+        component[6 * 8 + i] = g3 * s6;
+        component[5 * 8 + i] = g4 * s5;
+        component[1 * 8 + i] = g5 * s1;
+        component[7 * 8 + i] = g6 * s7;
+        component[3 * 8 + i] = g7 * s3;
     }
     for (int i = 0; i < 8; ++i) {
-        const float a0 = component.at(i * 8 + 0);
-        const float a1 = component.at(i * 8 + 1);
-        const float a2 = component.at(i * 8 + 2);
-        const float a3 = component.at(i * 8 + 3);
-        const float a4 = component.at(i * 8 + 4);
-        const float a5 = component.at(i * 8 + 5);
-        const float a6 = component.at(i * 8 + 6);
-        const float a7 = component.at(i * 8 + 7);
+        const float a0 = component[i * 8 + 0];
+        const float a1 = component[i * 8 + 1];
+        const float a2 = component[i * 8 + 2];
+        const float a3 = component[i * 8 + 3];
+        const float a4 = component[i * 8 + 4];
+        const float a5 = component[i * 8 + 5];
+        const float a6 = component[i * 8 + 6];
+        const float a7 = component[i * 8 + 7];
 
         const float b0 = a0 + a7;
         const float b1 = a1 + a6;
@@ -546,14 +546,14 @@ void FileParser::Jpeg::Encoder::forwardDCT(std::array<float, Mcu::DataUnitLength
         const float g6 = f5 - f6;
         const float g7 = f7 - f4;
 
-        component.at(i * 8 + 0) = g0 * s0;
-        component.at(i * 8 + 4) = g1 * s4;
-        component.at(i * 8 + 2) = g2 * s2;
-        component.at(i * 8 + 6) = g3 * s6;
-        component.at(i * 8 + 5) = g4 * s5;
-        component.at(i * 8 + 1) = g5 * s1;
-        component.at(i * 8 + 7) = g6 * s7;
-        component.at(i * 8 + 3) = g7 * s3;
+        component[i * 8 + 0] = g0 * s0;
+        component[i * 8 + 4] = g1 * s4;
+        component[i * 8 + 2] = g2 * s2;
+        component[i * 8 + 6] = g3 * s6;
+        component[i * 8 + 5] = g4 * s5;
+        component[i * 8 + 1] = g5 * s1;
+        component[i * 8 + 7] = g6 * s7;
+        component[i * 8 + 3] = g7 * s3;
     }
 }
 
@@ -571,9 +571,9 @@ void FileParser::Jpeg::Encoder::forwardDCT(std::vector<Mcu>& mcus) {
     }
 }
 
-void FileParser::Jpeg::Encoder::quantize(std::array<float, Mcu::DataUnitLength>& component, const QuantizationTable& quantizationTable) {
+void FileParser::Jpeg::Encoder::quantize(Component& component, const QuantizationTable& quantizationTable) {
     for (int i = 0; i < Mcu::DataUnitLength; i++) {
-        component.at(i) = std::round(component.at(i) / quantizationTable.table.at(i));
+        component[i] = std::round(component[i] / quantizationTable.table.at(i));
     }
 }
 
@@ -591,21 +591,21 @@ void FileParser::Jpeg::Encoder::quantize(std::vector<Mcu>& mcus, const Quantizat
     }
 }
 
-void FileParser::Jpeg::Encoder::encodeCoefficients(const std::array<float, 64>& component, std::vector<Coefficient>& outCoefficients,
-    std::vector<Coefficient>& dcCoefficients, std::vector<Coefficient>& acCoefficients, int& prevDc) {
+void FileParser::Jpeg::Encoder::encodeCoefficients(const Component& component, std::vector<Coefficient>& outCoefficients,
+                                                   std::vector<Coefficient>& dcCoefficients, std::vector<Coefficient>& acCoefficients, int& prevDc) {
 
     // Encode the dc coefficient
-    int dcCoefficient = static_cast<int>(component.at(0)) - prevDc;
+    int dcCoefficient = static_cast<int>(component[0]) - prevDc;
     uint8_t dcCode = dcCoefficient == 0 ? 0 : static_cast<uint8_t>(GetMinNumBits(dcCoefficient));
     dcCoefficients.emplace_back(dcCode, dcCoefficient);
     outCoefficients.emplace_back(dcCode, dcCoefficient);
-    prevDc = static_cast<int>(component.at(0));
+    prevDc = static_cast<int>(component[0]);
 
     // Find the index of the EOB
     bool eob = true;
     int eobIndex = Mcu::DataUnitLength - 1;
     while (eobIndex >= 1) {
-        const int coefficient = static_cast<int>(std::round(component.at(zigZagMap[eobIndex])));
+        const int coefficient = static_cast<int>(std::round(component[zigZagMap[eobIndex]]));
         if (coefficient != 0) {
             // If the last coefficient is non-zero, there is no eob
             if (eobIndex == Mcu::DataUnitLength - 1) {
@@ -623,7 +623,7 @@ void FileParser::Jpeg::Encoder::encodeCoefficients(const std::array<float, 64>& 
     // Look through all the ac coefficients and find their encodings
     uint8_t r = 0;
     for (int i = 1; i < eobIndex; i++) {
-        int ac = static_cast<int>(std::round(component.at(zigZagMap[i])));
+        int ac = static_cast<int>(std::round(component[zigZagMap[i]]));
         if (ac == 0) {
             if (r == 15) {
                 r = 0;
@@ -701,15 +701,15 @@ void FileParser::Jpeg::Encoder::writeFrameHeader(const FrameHeader& frameHeader,
 }
 
 FileParser::Jpeg::QuantizationTable FileParser::Jpeg::Encoder::createQuantizationTable(
-    const std::array<float, QuantizationTable::TableLength>& table, int quality, const bool is8Bit, const uint8_t tableDestination) {
+    const std::array<float, QuantizationTable::length>& table, int quality, const bool is8Bit, const uint8_t tableDestination) {
     if (quality < 1 || quality > 100) {
         std::cout << "Quality must be between 1 and 100\n";
         quality = std::clamp(quality, 1, 100);
     }
 
     const int scale = quality < 50 ? (5000 / quality) : (200 - 2 * quality);
-    std::array<float, QuantizationTable::TableLength> scaledTable{};
-    for (int i = 0; i < QuantizationTable::TableLength; i++) {
+    std::array<float, QuantizationTable::length> scaledTable{};
+    for (int i = 0; i < QuantizationTable::length; i++) {
         scaledTable[i] = std::round(std::clamp(table[i] * static_cast<float>(scale) / 100, 1.0f, 255.0f));
     }
 
@@ -824,64 +824,64 @@ auto FileParser::Jpeg::Encoder::writeJpeg(
     // SOI
     writeMarker(SOI, bitWriter);
     // Tables/Misc
-        // Quantization table
-        QuantizationTable qTableLuminance = createQuantizationTable(LuminanceTable, settings.luminanceQuality, true, 0);
-        QuantizationTable qTableChrominance = createQuantizationTable(ChrominanceTable, settings.chrominanceQuality, true, 1);
-        writeQuantizationTable(qTableLuminance, bitWriter);
-        writeQuantizationTable(qTableChrominance, bitWriter);
-        // Huffman table
-        forwardDCT(mcus);
-        quantize(mcus, qTableLuminance, qTableChrominance);
+    // Quantization table
+    QuantizationTable qTableLuminance = createQuantizationTable(LuminanceTable, settings.luminanceQuality, true, 0);
+    QuantizationTable qTableChrominance = createQuantizationTable(ChrominanceTable, settings.chrominanceQuality, true, 1);
+    writeQuantizationTable(qTableLuminance, bitWriter);
+    writeQuantizationTable(qTableChrominance, bitWriter);
+    // Huffman table
+    forwardDCT(mcus);
+    quantize(mcus, qTableLuminance, qTableChrominance);
 
-        constexpr size_t luminDcIndex = 0, luminAcIndex = 1, chromaDcIndex = 2, chromaAcIndex = 3;
-        auto indexToString = [](const size_t index) {
-            switch (index) {
-                case 0:  return "Luminance DC";
-                case 1:  return "Luminance AC";
-                case 2:  return "Chrominance DC";
-                case 3:  return "Chrominance AC";
-                default: return "";
+    constexpr size_t luminDcIndex = 0, luminAcIndex = 1, chromaDcIndex = 2, chromaAcIndex = 3;
+    auto indexToString = [](const size_t index) {
+        switch (index) {
+            case 0:  return "Luminance DC";
+            case 1:  return "Luminance AC";
+            case 2:  return "Chrominance DC";
+            case 3:  return "Chrominance AC";
+            default: return "";
+        }
+    };
+
+    std::array<std::vector<Coefficient>, 4> coefficients{};
+
+    std::vector<EncodedMcu> encodedMcus;
+    encodeCoefficients(mcus, encodedMcus,
+        coefficients[luminDcIndex], coefficients[luminAcIndex],
+        coefficients[chromaDcIndex], coefficients[chromaAcIndex]);
+
+    std::vector<HuffmanEncoder> huffmanEncoders;
+    if (settings.optimizeHuffmanTables) {
+        for (size_t i = 0; i < coefficients.size(); i++) {
+            auto encoder = HuffmanEncoder::create(coefficients[i]);
+            if (!encoder) {
+                return std::unexpected(
+                    std::format("Unable to create {} Huffman table: {}",indexToString(i), encoder.error()));
             }
-        };
-
-        std::array<std::vector<Coefficient>, 4> coefficients{};
-
-        std::vector<EncodedMcu> encodedMcus;
-        encodeCoefficients(mcus, encodedMcus,
-            coefficients[luminDcIndex], coefficients[luminAcIndex],
-            coefficients[chromaDcIndex], coefficients[chromaAcIndex]);
-
-        std::vector<HuffmanEncoder> huffmanEncoders;
-        if (settings.optimizeHuffmanTables) {
-            for (size_t i = 0; i < coefficients.size(); i++) {
-                auto encoder = HuffmanEncoder::create(coefficients[i]);
-                if (!encoder) {
-                    return std::unexpected(
-                        std::format("Unable to create {} Huffman table: {}",indexToString(i), encoder.error()));
-                }
-                huffmanEncoders.emplace_back(*encoder);
-            }
-
-            huffmanEncoders[luminDcIndex].writeToFile(bitWriter, TableDescription::LuminanceDC);
-            huffmanEncoders[luminAcIndex].writeToFile(bitWriter, TableDescription::LuminanceAC);
-            huffmanEncoders[chromaDcIndex].writeToFile(bitWriter, TableDescription::ChrominanceDC);
-            huffmanEncoders[chromaAcIndex].writeToFile(bitWriter, TableDescription::ChrominanceAC);
-        } else {
-            // writeHuffmanTable(0, 0, getDefaultLuminanceDcTable(), bitWriter);
-            // writeHuffmanTable(0, 1, getDefaultChrominanceDcTable(), bitWriter);
-            // writeHuffmanTable(1, 0, getDefaultLuminanceAcTable(), bitWriter);
-            // writeHuffmanTable(1, 1, getDefaultChrominanceAcTable(), bitWriter);
+            huffmanEncoders.emplace_back(*encoder);
         }
 
-        const HuffmanTable& luminanceDcTable = settings.optimizeHuffmanTables ? huffmanEncoders[0].getTable() : getDefaultLuminanceDcTable();
-        const HuffmanTable& luminanceAcTable = settings.optimizeHuffmanTables ? huffmanEncoders[1].getTable() : getDefaultLuminanceAcTable();
-        const HuffmanTable& chrominanceDcTable = settings.optimizeHuffmanTables ? huffmanEncoders[2].getTable() : getDefaultChrominanceDcTable();
-        const HuffmanTable& chrominanceAcTable = settings.optimizeHuffmanTables ? huffmanEncoders[3].getTable() : getDefaultChrominanceAcTable();
-    
-        // Restart Interval
-        // Comment
-        // App data
-        // Number of lines (height of image)
+        huffmanEncoders[luminDcIndex].writeToFile(bitWriter, TableDescription::LuminanceDC);
+        huffmanEncoders[luminAcIndex].writeToFile(bitWriter, TableDescription::LuminanceAC);
+        huffmanEncoders[chromaDcIndex].writeToFile(bitWriter, TableDescription::ChrominanceDC);
+        huffmanEncoders[chromaAcIndex].writeToFile(bitWriter, TableDescription::ChrominanceAC);
+    } else {
+        // writeHuffmanTable(0, 0, getDefaultLuminanceDcTable(), bitWriter);
+        // writeHuffmanTable(0, 1, getDefaultChrominanceDcTable(), bitWriter);
+        // writeHuffmanTable(1, 0, getDefaultLuminanceAcTable(), bitWriter);
+        // writeHuffmanTable(1, 1, getDefaultChrominanceAcTable(), bitWriter);
+    }
+
+    const HuffmanTable& luminanceDcTable = settings.optimizeHuffmanTables ? huffmanEncoders[0].getTable() : getDefaultLuminanceDcTable();
+    const HuffmanTable& luminanceAcTable = settings.optimizeHuffmanTables ? huffmanEncoders[1].getTable() : getDefaultLuminanceAcTable();
+    const HuffmanTable& chrominanceDcTable = settings.optimizeHuffmanTables ? huffmanEncoders[2].getTable() : getDefaultChrominanceDcTable();
+    const HuffmanTable& chrominanceAcTable = settings.optimizeHuffmanTables ? huffmanEncoders[3].getTable() : getDefaultChrominanceAcTable();
+
+    // Restart Interval
+    // Comment
+    // App data
+    // Number of lines (height of image)
     // Frame header
     FrameHeaderComponentSpecification frameCompY(1, 1, 1, 0);
     FrameHeaderComponentSpecification frameCompCb(2, 1, 1, 1);
@@ -900,4 +900,5 @@ auto FileParser::Jpeg::Encoder::writeJpeg(
     writeEncodedMcu(encodedMcus, luminanceDcTable, luminanceAcTable, chrominanceDcTable, chrominanceAcTable, bitWriter);
     //EOI
     writeMarker(EOI, bitWriter);
+    return {};
 }
