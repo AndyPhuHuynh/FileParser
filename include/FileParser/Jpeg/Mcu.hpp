@@ -34,9 +34,5 @@ namespace FileParser::Jpeg {
         static int getColorIndex(int blockIndex, int pixelIndex, int horizontalFactor, int verticalFactor);
         void generateColorBlocks();
         [[nodiscard]] std::tuple<uint8_t, uint8_t, uint8_t> getColor(int index) const;
-        static void performInverseDCT(Component& array);
-        void performInverseDCT();
-        static void dequantize(Component& array, const QuantizationTable& quantizationTable);
-        void dequantize(JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp);
     };
 }

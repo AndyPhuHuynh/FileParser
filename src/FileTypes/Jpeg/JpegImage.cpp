@@ -14,6 +14,7 @@
 #include "FileParser/Jpeg/HuffmanBuilder.hpp"
 #include "FileParser/Jpeg/HuffmanDecoder.hpp"
 #include "FileParser/Jpeg/QuantizationTableBuilder.hpp"
+#include "FileParser/Jpeg/Transform.hpp"
 
 void FileParser::Jpeg::FrameHeaderComponentSpecification::print() const {
     std::cout << std::setw(25) << "Identifier: " << static_cast<int>(identifier) << "\n";
@@ -594,7 +595,7 @@ void FileParser::Jpeg::JpegImage::processQuantizationQueue(const std::vector<Sca
             quantizationLock.unlock();
             clock_t begin = clock();
             for (const auto& scanComp : scanComps) {
-                mcu->dequantize(this, scanComp);
+                dequantize(*mcu, this, scanComp);
             }
             mcusCount++;
             clock_t end = clock();
@@ -627,7 +628,7 @@ void FileParser::Jpeg::JpegImage::processIdctQueue() {
             idctQueue.queue.pop();
             idctLock.unlock();
             clock_t begin = clock();
-            mcu->performInverseDCT();
+            inverseDCT(*mcu);
             clock_t end = clock();
             totalTime += (end - begin);
             {

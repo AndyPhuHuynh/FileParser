@@ -41,13 +41,6 @@ namespace FileParser::Jpeg::Encoder {
     const HuffmanTable& getDefaultChrominanceDcTable();
     const HuffmanTable& getDefaultChrominanceAcTable();
     
-    void forwardDCT(Component& component);
-    void forwardDCT(Mcu& mcu);
-    void forwardDCT(std::vector<Mcu>& mcus);
-    void quantize(Component& component, const QuantizationTable& quantizationTable);
-    void quantize(Mcu& mcu, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
-    void quantize(std::vector<Mcu>& mcus, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
-    
     struct Coefficient {
         uint8_t encoding; // Run-length encoded symbol
         int value; // Actual value of the coefficient
