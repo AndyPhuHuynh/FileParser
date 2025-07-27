@@ -47,7 +47,9 @@ void FileParser::Jpeg::Converter::writeJpegAsBmp(const JpegImage& jpeg, const st
             const int pixelColumn = x % jpeg.info.mcuPixelWidth;
             const int blockIndex = blockRow * jpeg.info.mcuImageWidth + blockColumn;
             const int pixelIndex = pixelRow * jpeg.info.mcuPixelWidth + pixelColumn;
-            auto [R, G, B] = jpeg.mcus[blockIndex]->getColor(pixelIndex);
+            // TODO : This won't work
+            // auto [R, G, B] = jpeg.mcus[blockIndex]->getColor(pixelIndex);
+            uint8_t R = 0, G = 0, B = 0;
 
             *bufferPos++ = B;
             *bufferPos++ = G;

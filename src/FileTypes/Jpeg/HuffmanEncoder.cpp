@@ -7,6 +7,7 @@
 
 #include "FileParser/Jpeg/JpegEncoder.h"
 #include "FileParser/Jpeg/HuffmanBuilder.hpp"
+#include "FileParser/Jpeg/Markers.hpp"
 
 auto FileParser::Jpeg::CodeSizeEncoder::getCodeSizesPerByte(const ByteFrequencies& frequencies) -> CodeSizePerByte {
     // Initialize frequencies with an extra code point at index 256. This is done so when creating the Huffman Table,

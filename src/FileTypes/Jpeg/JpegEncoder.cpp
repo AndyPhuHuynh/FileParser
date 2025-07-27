@@ -7,6 +7,7 @@
 #include "FileParser/Jpeg/JpegBitWriter.h"
 #include "FileParser/Jpeg/HuffmanBuilder.hpp"
 #include "FileParser/Jpeg/HuffmanEncoder.hpp"
+#include "FileParser/Jpeg/Markers.hpp"
 #include "FileParser/Jpeg/Transform.hpp"
 
 const FileParser::HuffmanTable& FileParser::Jpeg::Encoder::getDefaultLuminanceDcTable() {
