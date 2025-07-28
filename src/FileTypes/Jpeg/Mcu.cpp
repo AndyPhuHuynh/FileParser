@@ -1,7 +1,6 @@
 #include "FileParser/Jpeg/Mcu.hpp"
 
-#include <iomanip>
-#include <iostream>
+#include <cmath>
 #include <ranges>
 
 #include <simde/x86/avx512.h>
@@ -14,37 +13,6 @@ auto FileParser::Jpeg::Component::operator[](const size_t index) -> float& {
 
 auto FileParser::Jpeg::Component::operator[](const size_t index) const -> const float& {
     return data[index];
-}
-
-void FileParser::Jpeg::Mcu::print() const {
-    std::cout << std::dec;
-    std::cout << "Luminance (Y)(x" << Y.size() << ")        | Blue Chrominance (Cb)        | Red Chrominance (Cr)" << '\n';
-    std::cout << "----------------------------------------------------------------------------------\n";
-
-    for (int y = 0; y < 8; y++) {
-        for (const auto& i : Y) {
-            for (int x = 0; x < 8; x++) {
-                // Print Luminance
-                int luminanceIndex = y * 8 + x;
-                std::cout << std::setw(5) << static_cast<int>(i[luminanceIndex]) << " ";
-            }
-            std::cout << "| ";
-        }
-
-        for (int x = 0; x < 8; x++) {
-            // Print Blue Chrominance
-            int blueIndex = y * 8 + x;
-            std::cout << std::setw(5) << static_cast<int>(Cb[blueIndex]) << " ";
-        }
-        std::cout << "| ";
-
-        for (int x = 0; x < 8; x++) {
-            // Print Red Chrominance
-            int redIndex = y * 8 + x;
-            std::cout << std::setw(5) << static_cast<int>(Cr[redIndex]) << " ";
-        }
-        std::cout << '\n';
-    }
 }
 
 int FileParser::Jpeg::Mcu::getColorIndex(const int blockIndex, const int pixelIndex) const {

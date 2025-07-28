@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <iostream>
 #include <ctime>
+#include <filesystem>
 #include <ranges>
 #include <vector>
 
@@ -1017,54 +1018,6 @@ void FileParser::Jpeg::JpegImage::readFile() {
                 break;
             }
         }
-    }
-}
-
-void FileParser::Jpeg::JpegImage::printInfo() const {
-    info.print();
-
-    std::cout << "\nScan Information:\n";
-    for (int i = 0; i < static_cast<int>(scanHeaders.size()); i++) {
-        std::cout << "Scan #" << i << ":\n";
-        scanHeaders[i]->print();
-    }
-
-    std::cout << "\nQuantization Tables:\n";
-    for (int iteration = 0; iteration < static_cast<int>(quantizationTables.size()); iteration++) {
-        for (size_t i = 0; i < quantizationTables.size(); i++) {
-            if (quantizationTables[iteration][i].has_value()) {
-                std::cout << "Quantization Iteration " << iteration << ", Table #" << i << "\n";
-                // TODO: Printing qtable
-                // quantizationTables[iteration][i]->print();
-                std::cout << "Todo\n";
-            }
-        }
-    }
-
-    std::cout << "\nDC Huffman Tables:\n";
-    for (int iteration = 0; iteration < static_cast<int>(dcHuffmanTables.size()); iteration++) {
-        for (size_t i = 0; i < dcHuffmanTables.size(); i++) {
-            if (dcHuffmanTables[iteration][i].has_value()) {
-                std::cout << "DC Huffman Iteration " << iteration << ", Table #" << i << "\n";
-                // dcHuffmanTables[iteration][i].print();
-                std::cout << "TODO!\n";
-            }
-        }
-    }
-
-    std::cout << "\nAC Huffman Tables:\n";
-    for (int iteration = 0; iteration < static_cast<int>(acHuffmanTables.size()); iteration++) {
-        for (size_t i = 0; i < acHuffmanTables.size(); i++) {
-            if (acHuffmanTables[iteration][i].has_value()) {
-                std::cout << "AC Huffman Iteration " << iteration << ", Table #" << i << "\n";
-                // acHuffmanTables[iteration][i].print();
-                std::cout << "TODO!\n";
-            }
-        }
-    }
-
-    if (!comment.empty()) {
-        std::cout << "Comment: " << comment << "\n";
     }
 }
 

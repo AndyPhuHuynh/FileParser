@@ -29,12 +29,10 @@ namespace FileParser::Jpeg {
         Mcu();
         Mcu(int luminanceComponents, int horizontalSampleSize, int verticalSampleSize);
         explicit Mcu(const ColorBlock& colorBlock);
-        void print() const;
 
         // Given the index of the luminance block and the pixel index (0-63) within that block, get the index to the
         // corresponding pixel in Cb and Cr
         [[nodiscard]] int getColorIndex(int blockIndex, int pixelIndex) const;
-        [[nodiscard]] std::tuple<uint8_t, uint8_t, uint8_t> getColor(int index) const;
     };
 
     auto generateColorBlocks(const Mcu& mcu) -> std::vector<ColorBlock>;

@@ -8,6 +8,7 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
+#include <expected>
 #include <optional>
 
 #include "Mcu.hpp"
@@ -151,7 +152,7 @@ namespace FileParser::Jpeg {
 
         Component decodeComponent(BitReader& bitReader, const ScanHeaderComponentSpecification& scanComp,
                                   int (&prevDc)[3]);
-        void decodeMcu(Mcu* mcu, ScanHeader& scanHeader, int (&prevDc)[3]);
+        void decodeMcu(Mcu *mcu, ScanHeader& scanHeader, int (&prevDc)[3]);
         static void skipZeros(BitReader& bitReader, Component& component, int numToSkip, int& index, int approximationLow);
         void decodeProgressiveComponent(Component& component, ScanHeader& scanHeader,
                                         const ScanHeaderComponentSpecification& componentInfo, int (&prevDc)[3], int& numBlocksToSkip);
@@ -179,8 +180,6 @@ namespace FileParser::Jpeg {
         void decodeProgressive();
         void decode();
         void readFile();
-    public:
-        void printInfo() const;
     };
 
     auto convertMcusToColorBlocks(const std::vector<std::shared_ptr<Mcu>>& mcus, size_t pixelWidth, size_t pixelHeight) -> std::vector<ColorBlock>;

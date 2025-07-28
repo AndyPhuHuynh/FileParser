@@ -19,6 +19,32 @@ uint16_t SwapBytes(const uint16_t value) {
     return static_cast<uint16_t>(value << 8) | static_cast<uint16_t>(value >> 8);
 }
 
+auto getUpperNibble(const uint8_t byte) -> uint8_t {
+    return static_cast<uint8_t>(byte >> 4);
+}
+
+auto getLowerNibble(const uint8_t byte) -> uint8_t {
+    return static_cast<uint8_t>(byte & 0x0F);
+}
+
+auto read_uint8(std::ifstream& file) -> std::expected<uint8_t, std::string> {
+    uint8_t byte{};
+    file.read(reinterpret_cast<char*>(&byte), 1);
+    if (!file) {
+        return std::unexpected("Failed to read 1 byte from file (EOF or read error).");
+    }
+    return byte;
+}
+
+auto read_uint16_be(std::ifstream& file) -> std::expected<uint16_t, std::string> {
+    uint8_t bytes[2];
+    file.read(reinterpret_cast<char*>(bytes), 2);
+    if (!file) {
+        return std::unexpected("Failed to read 2 bytes from file (EOF or read error).");
+    }
+    return static_cast<uint16_t>(bytes[0] << 8 | bytes[1]);
+}
+
 bool AreFloatsEqual(const float a, const float b, const float epsilon) {
     return std::abs(a - b) < epsilon;
 }

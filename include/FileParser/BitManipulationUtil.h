@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <cstdint>
+#include <expected>
 #include <fstream>
 #include <limits>
 #include <sstream>
@@ -54,6 +55,11 @@ unsigned char GetNibble(unsigned char byte, int pos);
  * @return The value of the swapped 16-bit integer
  */
 uint16_t SwapBytes(uint16_t value);
+
+auto getUpperNibble(uint8_t byte) -> uint8_t;
+auto getLowerNibble(uint8_t byte) -> uint8_t;
+auto read_uint8(std::ifstream& file) -> std::expected<uint8_t, std::string>;
+auto read_uint16_be(std::ifstream& file) -> std::expected<uint16_t, std::string>;
 
 /**
  * @brief Compares two floats to see if they are equal.
