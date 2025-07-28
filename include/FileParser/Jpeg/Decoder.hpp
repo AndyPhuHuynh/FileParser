@@ -25,14 +25,24 @@ namespace FileParser::Jpeg {
 
     struct JpegData {
         NewFrameHeader frameHeader;
+        uint16_t restartInterval;
         NewScanHeader scanHeader;
         std::vector<uint8_t> compressedData;
     };
 
+    template <typename T>
+    auto getUnexpected(
+        const std::expected<T, std::string>& expected, std::string_view errorMsg
+    ) -> std::unexpected<std::string> {
+        return std::unexpected(std::format("{}: {}", errorMsg, expected.error()));
+    }
+
     class JpegParser {
-        static auto parseFrameComponent(std::ifstream& file) -> std::expected<NewFrameComponent, std::string>;
-        static auto parseFrameHeader(std::ifstream& file, uint8_t SOF) -> std::expected<NewFrameHeader, std::string>;
-        static auto parseDefineNumberOfLines(std::ifstream& file) -> void;
-        static auto parseFile(const std::filesystem::path& filePath) -> std::expected<void, std::string>;
+    public:
+        [[nodiscard]] static auto parseFrameComponent(std::ifstream& file) -> std::expected<NewFrameComponent, std::string>;
+        [[nodiscard]] static auto parseFrameHeader(std::ifstream& file, uint8_t SOF) -> std::expected<NewFrameHeader, std::string>;
+        [[nodiscard]] static auto parseDefineNumberOfLines(std::ifstream& file) -> std::expected<uint16_t, std::string>;
+        [[nodiscard]] static auto parseDefineRestartInterval(std::ifstream& file) -> std::expected<uint16_t, std::string>;
+        [[nodiscard]] static auto parseFile(const std::filesystem::path& filePath) -> std::expected<void, std::string>;
     };
 }

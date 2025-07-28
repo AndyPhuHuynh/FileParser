@@ -89,4 +89,9 @@ namespace FileParser::Jpeg {
     constexpr uint8_t JPG13 = 0xFD;
     constexpr uint8_t COM = 0xFE;
     constexpr uint8_t TEM = 0x01;
+
+    inline bool isSOF(const uint8_t marker) {
+        return marker >= SOF0 && marker <= SOF15 &&
+            !(marker == DHT || marker == JPG || marker == DAC);
+    }
 }

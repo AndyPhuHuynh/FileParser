@@ -10,6 +10,7 @@
 #include "FileParser/Bmp/BmpJpegConverter.h"
 #include "FileParser/Bmp/BmpRenderer.h"
 #include "FileParser/FileUtil.h"
+#include "FileParser/Jpeg/Decoder.hpp"
 #include "FileParser/Jpeg/JpegBmpConverter.h"
 #include "FileParser/Jpeg/JpegEncoder.h"
 #include "FileParser/Jpeg/JpegImage.h"
@@ -166,62 +167,11 @@ static void Test(const std::vector<std::string>& args) {
     using namespace Jpeg;
     using namespace Jpeg::Encoder;
     
-    std::array<float, 64> data = {
-        5, 0, 2 ,0 ,4 ,0 ,0 ,0,
-        -1, 0, 0 ,0 ,0 ,0 ,0 ,0,
-        0, 0, 0 ,0 ,6 ,0 ,0 ,0,
-        3, 0, 0 ,0 ,0 ,8 ,0 ,0,
-        0, 5, 0 ,-7 ,0 ,0 ,0 ,0,
-        0, 0, 0 ,0 ,0 ,0 ,0 ,0,
-        0, 0, 0 ,0 ,0 ,0 ,10 ,0,
-        0, 0, 0 ,-9 ,0 ,0 ,0 ,0,
-    };
-
-    std::array<float, 64> data2 = {
-        10, 0, 2 ,0 ,4 ,0 ,0 ,0,
-        -1, 0, 0 ,0 ,0 ,0 ,0 ,0,
-        0, 0, 0 ,0 ,6 ,0 ,0 ,0,
-        3, 3, 0 ,0 ,0 ,8 ,0 ,0,
-        0, 5, 0 ,-7 ,0 ,0 ,0 ,0,
-        0, 0, 0 ,0 ,0 ,-33 ,0 ,0,
-        0, 0, 2 ,0 ,0 ,0 ,0 ,0,
-        0, 0, 0 ,-9 ,0 ,0 ,0 ,0,
-    };
-
-    std::array<float, 64> data3 = {
-        -100, 20, 0, 0 ,0 ,0 ,0, 0,
-        0, 0, 0, 0 ,0 ,0 ,0, 0,
-        0, 0, 0, 0 ,0 ,0 ,0, 0,
-        0, 0, 0, 0 ,0 ,0 ,0, 0,
-        0, 0, 0, 0 ,0 ,0 ,0, 0,
-        0, 0, 0, 0 ,0 ,0 ,0, 0,
-        0, 0, 0, 0 ,0 ,0 ,0, 0,
-        0, 0, 0, 0 ,0 ,0 ,0, 0,
-    };
-
-    JpegBitWriter huffmanTest("huffman.test");
-    
-    std::vector<EncodedMcu> blocks;
-    std::vector<Coefficient> dcCoeff;
-    std::vector<Coefficient> acCoeff;
-    // int prevDcHuff = 0;
-    // encodeCoefficients(data, blocks, dcCoeff, acCoeff, prevDcHuff);
-    // encodeCoefficients(data2, blocks, dcCoeff, acCoeff, prevDcHuff);
-    // encodeCoefficients(data3, blocks, dcCoeff, acCoeff, prevDcHuff);
-
-    // HuffmanTable dcTable = createHuffmanTable(dcCoeff);
-    // HuffmanTable acTable = createHuffmanTable(acCoeff);
-    //
-    // huffmanTest << 0xFFFFFFFF;
-    // writeBlock(blocks, dcTable, acTable, huffmanTest);
-    //
-    // std::cout << "dcTable: \n";
-    // dcTable.print();
-    // std::cout << "acTable: \n";
-    // acTable.print();
-    
-    // Bmp::BmpImage bmp(args[1]);
-    // Bmp::Converter::writeBmpAsJpeg(bmp, "shouldwork.jpeg", );
+    const std::string& filepath = args[1];
+    const auto result = JpegParser::parseFile(filepath);
+    if (!result) {
+        std::cerr << "Error: Failed to parse file: " << filepath << '\n';
+    }
 }
 
 static std::unordered_map<std::string, std::function<void(const std::vector<std::string>&)>> commands = {

@@ -1,6 +1,8 @@
 #include "FileParser/Jpeg/Decoder.hpp"
 
+#include <format>
 #include <fstream>
+#include <unordered_set>
 
 #include "FileParser/BitManipulationUtil.h"
 #include "FileParser/Jpeg/Markers.hpp"
@@ -12,20 +14,20 @@ auto FileParser::Jpeg::JpegParser::parseFrameComponent(
 
     const auto identifier = read_uint8(file);
     if (!identifier) {
-        return std::unexpected(std::format("Unable to read component identifier: {}", identifier.error()));
+        return getUnexpected(identifier, "Unable to read component identifier");
     }
     component.identifier = identifier.value();
 
     const auto samplingFactor = read_uint8(file);
     if (!samplingFactor) {
-        return std::unexpected(std::format("Unable to read sampling factor: {}", samplingFactor.error()));
+        return getUnexpected(samplingFactor, "Unable to read sampling factor");
     }
     component.horizontalSamplingFactor  = getUpperNibble(samplingFactor.value());
     component.verticalSamplingFactor    = getLowerNibble(samplingFactor.value());
 
     const auto qTableSelector = read_uint8(file);
     if (!qTableSelector) {
-        return std::unexpected(std::format("Unable to read quantization table selector: {}", qTableSelector.error()));
+        return getUnexpected(qTableSelector, "Unable to read quantization table selector");
     }
     component.quantizationTableSelector = qTableSelector.value();
 
@@ -56,12 +58,12 @@ auto FileParser::Jpeg::JpegParser::parseFrameHeader(std::ifstream& file, const u
     NewFrameHeader frame;
     const auto length = read_uint16_be(file);
     if (!length) {
-        return std::unexpected(std::format("Unable to read frame length: {}", length.error()));
+        return getUnexpected(length, "Unable to read frame length");
     }
 
     const auto precision = read_uint8(file);
     if (!precision) {
-        return std::unexpected(std::format("Unable to read precision: {}", precision.error()));
+        return getUnexpected(precision, "Unable to read frame precision");
     }
     frame.precision = precision.value();
     if (frame.precision != 8) {
@@ -71,27 +73,27 @@ auto FileParser::Jpeg::JpegParser::parseFrameHeader(std::ifstream& file, const u
 
     const auto numberOfLines = read_uint16_be(file);
     if (!numberOfLines) {
-        return std::unexpected(std::format("Unable to read number of lines: {}", numberOfLines.error()));
+        return getUnexpected(numberOfLines, "Unable to read number of lines");
     }
     frame.numberOfLines = numberOfLines.value();
 
     const auto numberOfSamplesPerLine = read_uint16_be(file);
     if (!numberOfSamplesPerLine) {
-        return std::unexpected(std::format("Unable to read number of samples per line: {}", numberOfSamplesPerLine.error()));
+        return getUnexpected(numberOfSamplesPerLine, "Unable to read number of samples per line");
     }
     frame.numberOfSamplesPerLine = numberOfSamplesPerLine.value();
 
     const auto numberOfComponents = read_uint8(file);
     if (!numberOfComponents) {
-        return std::unexpected(std::format("Unable to read number of components: {}", numberOfComponents.error()));
+        return getUnexpected(numberOfComponents, "Unable to read number of components");
     }
     frame.numberOfComponents = numberOfComponents.value();
 
     const uint16_t expectedLength = 8 + 3 * frame.numberOfComponents;
-    if (length.value() != expectedLength) {
+    if (*length != expectedLength) {
         return std::unexpected(
             std::format(R"(Specified length of FrameHeader "{}" does not match expected length of "{}")",
-                length, expectedLength));
+                *length, expectedLength));
     }
 
     constexpr uint16_t minComponents = 1, maxComponents = 4;
@@ -112,8 +114,42 @@ auto FileParser::Jpeg::JpegParser::parseFrameHeader(std::ifstream& file, const u
     return frame;
 }
 
-auto FileParser::Jpeg::JpegParser::parseDefineNumberOfLines(std::ifstream& file) -> void {
+auto FileParser::Jpeg::JpegParser::parseDefineNumberOfLines(
+    std::ifstream& file
+) -> std::expected<uint16_t, std::string> {
+    const auto length = read_uint16_be(file);
+    if (!length) {
+        return getUnexpected(length, "Unable to parse length");
+    }
+    constexpr uint16_t expectedLength = 4;
+    if (*length != expectedLength) {
+        return std::unexpected(std::format("Expected length {}, got {}", expectedLength, *length));
+    }
 
+    const auto numberOfLines = read_uint16_be(file);
+    if (!numberOfLines) {
+        return getUnexpected(numberOfLines, "Unable to parse number of lines");
+    }
+    return *numberOfLines;
+}
+
+auto FileParser::Jpeg::JpegParser::parseDefineRestartInterval(
+    std::ifstream& file
+) -> std::expected<uint16_t, std::string> {
+    const auto length = read_uint16_be(file);
+    if (!length) {
+        return getUnexpected(length, "Unable to parse length");
+    }
+    constexpr uint16_t expectedLength = 4;
+    if (*length != expectedLength) {
+        return std::unexpected(std::format("Expected length {}, got {}", expectedLength, *length));
+    }
+
+    const auto restartInterval = read_uint16_be(file);
+    if (!restartInterval) {
+        return getUnexpected(restartInterval, "Unable to parse restart interval");
+    }
+    return *restartInterval;
 }
 
 auto FileParser::Jpeg::JpegParser::parseFile(
@@ -130,6 +166,7 @@ auto FileParser::Jpeg::JpegParser::parseFile(
         return std::unexpected("File could not be opened: " + filePath.string());
     }
 
+    std::unordered_set<uint8_t> encounteredMarkers;
     JpegData data;
 
     uint8_t byte;
@@ -138,21 +175,38 @@ auto FileParser::Jpeg::JpegParser::parseFile(
         if (byte == 0xFF) {
             uint8_t marker;
             file.read(reinterpret_cast<char*>(&marker), 1);
-            if (marker == 0x00) continue;
+            if (marker == 0x00) continue; // Byte stuffing
             if (marker == DHT) {
                 // readHuffmanTables();
             } else if (marker == DQT) {
                 // readQuantizationTables();
-            } else if (marker >= SOF0 && marker <= SOF15 && !(marker == DHT || marker == JPG || marker == DAC)) {
+            } else if (isSOF(marker)) {
+                if (std::ranges::any_of(encounteredMarkers, [](const uint8_t m) { return isSOF(m); })) {
+                    return std::unexpected("Multiple SOF markers encountered. Only one SOF marker is allowed");
+                }
                 auto frameHeader = parseFrameHeader(file, marker);
-                if (!frameHeader.has_value()) {
+                if (!frameHeader) {
                     return std::unexpected(std::format("Unable to parser frame header: {}", frameHeader.error()));
                 }
-                data.frameHeader = frameHeader.value();
+                data.frameHeader = *frameHeader;
             } else if (marker == DNL) {
-                // readDefineNumberOfLines();
+                if (encounteredMarkers.contains(DNL)) {
+                    return std::unexpected("Multiple DNL markers encountered. Only one DNL marker is allowed");
+                }
+                auto numberOfLines = parseDefineNumberOfLines(file);
+                if (!numberOfLines) {
+                    return std::unexpected(std::format("Unable to parser DNL: {}", numberOfLines.error()));
+                }
+                data.frameHeader.numberOfLines = *numberOfLines;
             } else if (marker == DRI) {
-                // readDefineRestartIntervals();
+                if (encounteredMarkers.contains(DRI)) {
+                    return std::unexpected("Multiple DRI markers encountered. Only one DRI marker is allowed");
+                }
+                auto restartInterval = parseDefineRestartInterval(file);
+                if (!restartInterval) {
+                    return std::unexpected(std::format("Unable parser DRI: {}", restartInterval.error()));
+                }
+                data.restartInterval = *restartInterval;
             } else if (marker == COM) {
                 // readComments();
             } else if (marker == SOS) {
@@ -161,7 +215,11 @@ auto FileParser::Jpeg::JpegParser::parseFile(
                 // decode();
                 break;
             }
+            encounteredMarkers.insert(marker);
         }
     }
+
+    // Check if number of lines in frame == 0, error
+
     return {};
 }
