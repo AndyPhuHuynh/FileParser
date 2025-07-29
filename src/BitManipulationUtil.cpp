@@ -27,22 +27,60 @@ auto getLowerNibble(const uint8_t byte) -> uint8_t {
     return static_cast<uint8_t>(byte & 0x0F);
 }
 
+static auto getReadBytesErrorMsg(const std::streamsize n) -> std::unexpected<std::string> {
+    return std::unexpected(std::format("Unable to read {} bytes from file (EOF or read error)", n));
+}
+
 auto read_uint8(std::ifstream& file) -> std::expected<uint8_t, std::string> {
     uint8_t byte{};
     file.read(reinterpret_cast<char*>(&byte), 1);
     if (!file) {
-        return std::unexpected("Failed to read 1 byte from file (EOF or read error).");
+        return getReadBytesErrorMsg(1);
     }
     return byte;
+}
+
+auto read_uint8(std::ifstream& file, const std::streamsize n) -> std::expected<std::vector<uint8_t>, std::string> {
+    if (n < 1) {
+        return std::unexpected("A size of at least one must be specified for reading bytes");
+    }
+    auto bytes = std::vector<uint8_t>(n);
+    if (!file.read(reinterpret_cast<char*>(bytes.data()), n)) {
+        return getReadBytesErrorMsg(n);
+    }
+    return bytes;
 }
 
 auto read_uint16_be(std::ifstream& file) -> std::expected<uint16_t, std::string> {
     uint8_t bytes[2];
     file.read(reinterpret_cast<char*>(bytes), 2);
     if (!file) {
-        return std::unexpected("Failed to read 2 bytes from file (EOF or read error).");
+        return getReadBytesErrorMsg(2);
     }
     return static_cast<uint16_t>(bytes[0] << 8 | bytes[1]);
+}
+
+auto read_uint16_be(std::ifstream& file, const std::streamsize n) -> std::expected<std::vector<uint16_t>, std::string> {
+    auto bytes = read_uint8(file, n * static_cast<std::streamsize>(sizeof(uint16_t)));
+    if (!bytes) {
+        return std::unexpected(bytes.error());
+    }
+    auto words = std::vector<uint16_t>(n);
+    for (size_t i = 0; i < n; i++) {
+        words[i] = static_cast<uint16_t>((*bytes)[2 * i] << 8 | (*bytes)[2 * i + 1]);
+    }
+    return words;
+}
+
+auto read_string(std::ifstream& file, const std::streamsize n) -> std::expected<std::string, std::string> {
+    if (n < 1) {
+        return std::unexpected("A size of at least one must be specified for reading bytes");
+    }
+    std::string bytes(n, '\0');
+    if (!file.read(bytes.data(), n)) {
+        return getReadBytesErrorMsg(n);
+    }
+    return bytes;
 }
 
 bool AreFloatsEqual(const float a, const float b, const float epsilon) {

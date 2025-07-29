@@ -1,9 +1,8 @@
 ﻿#pragma once
+
 #include <array>
-#include <cmath>
 #include <fstream>
 #include <map>
-#include <numbers>
 #include <vector>
 #include <queue>
 #include <mutex>

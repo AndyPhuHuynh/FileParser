@@ -58,8 +58,14 @@ uint16_t SwapBytes(uint16_t value);
 
 [[nodiscard]] auto getUpperNibble(uint8_t byte) -> uint8_t;
 [[nodiscard]] auto getLowerNibble(uint8_t byte) -> uint8_t;
+
 [[nodiscard]] auto read_uint8(std::ifstream& file) -> std::expected<uint8_t, std::string>;
+[[nodiscard]] auto read_uint8(std::ifstream& file, std::streamsize n) -> std::expected<std::vector<uint8_t>, std::string>;
+
 [[nodiscard]] auto read_uint16_be(std::ifstream& file) -> std::expected<uint16_t, std::string>;
+[[nodiscard]] auto read_uint16_be(std::ifstream& file, std::streamsize n) -> std::expected<std::vector<uint16_t>, std::string>;
+
+[[nodiscard]] auto read_string(std::ifstream& file, std::streamsize n) -> std::expected<std::string, std::string>;
 
 /**
  * @brief Compares two floats to see if they are equal.

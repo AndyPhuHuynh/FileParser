@@ -5,7 +5,7 @@ auto FileParser::Jpeg::QuantizationTableBuilder::readFromBitReader(BitReader& by
     if (bytes.reachedEnd()) {
         return std::unexpected("Unable to read precision and table id");
     }
-    const uint8_t precisionAndId = static_cast<uint8_t>(bytes.getNBits(8));
+    const auto precisionAndId = static_cast<uint8_t>(bytes.getNBits(8));
 
     QuantizationTable table {
         .precision        = GetNibble(precisionAndId, 0),
@@ -23,9 +23,9 @@ auto FileParser::Jpeg::QuantizationTableBuilder::readFromBitReader(BitReader& by
     } else {
         for (const unsigned char i : zigZagMap) {
             if (bytes.reachedEnd()) return std::unexpected("Length was too short, unable to fully read table");
-            const uint8_t high = static_cast<uint8_t>(bytes.getNBits(8));
+            const auto high = static_cast<uint8_t>(bytes.getNBits(8));
             if (bytes.reachedEnd()) return std::unexpected("Length was too short, unable to fully read table");
-            const uint8_t low = static_cast<uint8_t>(bytes.getNBits(8));
+            const auto low = static_cast<uint8_t>(bytes.getNBits(8));
             table[i] = static_cast<float>((high << 8) | low);
         }
         return table;

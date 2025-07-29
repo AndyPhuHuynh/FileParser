@@ -1,7 +1,10 @@
 #pragma once
 
+#include <array>
 #include <expected>
 #include <filesystem>
+
+#include "QuantizationTable.hpp"
 
 namespace FileParser::Jpeg {
     struct NewFrameComponent {
@@ -28,6 +31,9 @@ namespace FileParser::Jpeg {
         uint16_t restartInterval;
         NewScanHeader scanHeader;
         std::vector<uint8_t> compressedData;
+        std::vector<std::string> comments;
+
+        std::array<std::vector<QuantizationTable>, 4> quantizationTables;
     };
 
     template <typename T>
@@ -41,8 +47,10 @@ namespace FileParser::Jpeg {
     public:
         [[nodiscard]] static auto parseFrameComponent(std::ifstream& file) -> std::expected<NewFrameComponent, std::string>;
         [[nodiscard]] static auto parseFrameHeader(std::ifstream& file, uint8_t SOF) -> std::expected<NewFrameHeader, std::string>;
-        [[nodiscard]] static auto parseDefineNumberOfLines(std::ifstream& file) -> std::expected<uint16_t, std::string>;
-        [[nodiscard]] static auto parseDefineRestartInterval(std::ifstream& file) -> std::expected<uint16_t, std::string>;
+        [[nodiscard]] static auto parseDNL(std::ifstream& file) -> std::expected<uint16_t, std::string>;
+        [[nodiscard]] static auto parseDRI(std::ifstream& file) -> std::expected<uint16_t, std::string>;
+        [[nodiscard]] static auto parseComment(std::ifstream& file) -> std::expected<std::string, std::string>;
+        [[nodiscard]] static auto parseDQT(std::ifstream& file) -> std::expected<std::vector<QuantizationTable>, std::string>;
         [[nodiscard]] static auto parseFile(const std::filesystem::path& filePath) -> std::expected<void, std::string>;
     };
 }

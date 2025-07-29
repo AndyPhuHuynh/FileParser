@@ -2,6 +2,7 @@
 
 #include <format>
 #include <fstream>
+#include <iostream>
 #include <unordered_set>
 
 #include "FileParser/BitManipulationUtil.h"
@@ -108,13 +109,13 @@ auto FileParser::Jpeg::JpegParser::parseFrameHeader(std::ifstream& file, const u
         if (!component) {
             return std::unexpected(std::format("Error parsing frame component #{}: {}", i, component.error()));
         }
-        frame.components.push_back(std::move(component.value()));
+        frame.components.push_back(*component);
     }
 
     return frame;
 }
 
-auto FileParser::Jpeg::JpegParser::parseDefineNumberOfLines(
+auto FileParser::Jpeg::JpegParser::parseDNL(
     std::ifstream& file
 ) -> std::expected<uint16_t, std::string> {
     const auto length = read_uint16_be(file);
@@ -130,10 +131,10 @@ auto FileParser::Jpeg::JpegParser::parseDefineNumberOfLines(
     if (!numberOfLines) {
         return getUnexpected(numberOfLines, "Unable to parse number of lines");
     }
-    return *numberOfLines;
+    return numberOfLines;
 }
 
-auto FileParser::Jpeg::JpegParser::parseDefineRestartInterval(
+auto FileParser::Jpeg::JpegParser::parseDRI(
     std::ifstream& file
 ) -> std::expected<uint16_t, std::string> {
     const auto length = read_uint16_be(file);
@@ -149,7 +150,66 @@ auto FileParser::Jpeg::JpegParser::parseDefineRestartInterval(
     if (!restartInterval) {
         return getUnexpected(restartInterval, "Unable to parse restart interval");
     }
-    return *restartInterval;
+    return restartInterval;
+}
+
+auto FileParser::Jpeg::JpegParser::parseComment(std::ifstream& file) -> std::expected<std::string, std::string> {
+    const auto length = read_uint16_be(file);
+    if (!length) {
+        return getUnexpected(length, "Unable to parse length");
+    }
+    auto comment = read_string(file, *length - 2);
+    if (!comment) {
+        return getUnexpected(comment, "Unable to parse comment");
+    }
+    return comment;
+}
+
+auto FileParser::Jpeg::JpegParser::parseDQT(
+    std::ifstream& file
+) -> std::expected<std::vector<QuantizationTable>, std::string> {
+    const std::streampos filePosBefore = file.tellg();
+
+    const auto length = read_uint16_be(file);
+    if (!length) {
+        return getUnexpected(length, "Unable to parse length");
+    }
+
+    std::vector<QuantizationTable> tables;
+    while (file.tellg() - filePosBefore < *length && file) {
+        const auto precisionAndDestination = read_uint8(file);
+        if (!precisionAndDestination) {
+            return getUnexpected(precisionAndDestination, "Unable to parse precision and id");
+        }
+
+        QuantizationTable& table = tables.emplace_back();
+        // Precision (1 = 16-bit, 0 = 8-bit) in upper nibble, Destination ID in lower nibble
+        table.precision   = getUpperNibble(*precisionAndDestination);
+        table.destination = getLowerNibble(*precisionAndDestination);
+
+        if (table.precision == 0) {
+            const auto elements = read_uint8(file, QuantizationTable::length);
+            if (!elements) {
+                return getUnexpected(elements, "Unable to parse quantization table elements");
+            }
+            for (const auto i : zigZagMap) {
+                table[i] = static_cast<float>((*elements)[i]);
+            }
+        } else {
+            const auto elements = read_uint16_be(file, QuantizationTable::length);
+            if (!elements) {
+                return getUnexpected(elements, "Unable to parse quantization table elements");
+            }
+            for (const auto i : zigZagMap) {
+                table[i] = static_cast<float>((*elements)[i]);
+            }
+        }
+    }
+    const std::streampos filePosAfter = file.tellg();
+    if (const auto bytesRead = filePosAfter - filePosBefore; bytesRead != *length) {
+        return std::unexpected(std::format("Length mismatch. Length was {}, however {} bytes was read", *length, bytesRead));
+    }
+    return tables;
 }
 
 auto FileParser::Jpeg::JpegParser::parseFile(
@@ -179,36 +239,46 @@ auto FileParser::Jpeg::JpegParser::parseFile(
             if (marker == DHT) {
                 // readHuffmanTables();
             } else if (marker == DQT) {
-                // readQuantizationTables();
+                auto tables = parseDQT(file);
+                if (!tables) {
+                    return getUnexpected(tables, "Unable to parse DQT data");
+                }
+                for (const auto& table : *tables) {
+                    data.quantizationTables[table.destination].push_back(table);
+                }
             } else if (isSOF(marker)) {
                 if (std::ranges::any_of(encounteredMarkers, [](const uint8_t m) { return isSOF(m); })) {
                     return std::unexpected("Multiple SOF markers encountered. Only one SOF marker is allowed");
                 }
                 auto frameHeader = parseFrameHeader(file, marker);
                 if (!frameHeader) {
-                    return std::unexpected(std::format("Unable to parser frame header: {}", frameHeader.error()));
+                    return getUnexpected(frameHeader, "Unable to parse frame header");
                 }
                 data.frameHeader = *frameHeader;
             } else if (marker == DNL) {
                 if (encounteredMarkers.contains(DNL)) {
                     return std::unexpected("Multiple DNL markers encountered. Only one DNL marker is allowed");
                 }
-                auto numberOfLines = parseDefineNumberOfLines(file);
+                auto numberOfLines = parseDNL(file);
                 if (!numberOfLines) {
-                    return std::unexpected(std::format("Unable to parser DNL: {}", numberOfLines.error()));
+                    return getUnexpected(numberOfLines, "Unable to parse DNL");
                 }
                 data.frameHeader.numberOfLines = *numberOfLines;
             } else if (marker == DRI) {
                 if (encounteredMarkers.contains(DRI)) {
                     return std::unexpected("Multiple DRI markers encountered. Only one DRI marker is allowed");
                 }
-                auto restartInterval = parseDefineRestartInterval(file);
+                auto restartInterval = parseDRI(file);
                 if (!restartInterval) {
-                    return std::unexpected(std::format("Unable parser DRI: {}", restartInterval.error()));
+                    return getUnexpected(restartInterval, "Unable to parse restart interval");
                 }
                 data.restartInterval = *restartInterval;
             } else if (marker == COM) {
-                // readComments();
+                auto comment = parseComment(file);
+                if (!comment) {
+                    return getUnexpected(comment, "Unable to parse comment");
+                }
+                data.comments.push_back(std::move(*comment));
             } else if (marker == SOS) {
                 // readStartOfScan();
             } else if (marker == EOI) {
