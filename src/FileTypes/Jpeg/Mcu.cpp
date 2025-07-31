@@ -34,7 +34,7 @@ FileParser::Jpeg::Mcu::Mcu() {
 }
 
 FileParser::Jpeg::Mcu::Mcu(const int luminanceComponents, const int horizontalSampleSize, const int verticalSampleSize) {
-    for (const int i : std::ranges::views::iota(0, luminanceComponents)) {
+    for (int i = 0; i < luminanceComponents; i++) {
         Y.push_back({});
     }
     this->horizontalSampleSize = horizontalSampleSize;

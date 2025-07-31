@@ -1,8 +1,6 @@
-#pragma once
+#include "FileParser/Huffman/CodeSizes.hpp"
 
 #include <stdexcept>
-
-#include "FileParser/Huffman/CodeSizes.hpp"
 
 auto FileParser::CodeSizes::getFrequencyOf(const uint8_t codeSize) const -> uint8_t {
     if (codeSize <= 0 || codeSize > 16) {

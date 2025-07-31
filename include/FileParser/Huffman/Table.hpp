@@ -61,6 +61,6 @@ namespace FileParser {
         [[nodiscard]] auto decode(uint16_t word) const -> std::pair<uint8_t, uint8_t>;
         [[nodiscard]] auto encode(uint8_t symbol) const -> HuffmanEncoding;
     private:
-        void generateLookupTable(const std::vector<HuffmanEncoding>& encodings);
+        void generateLookupTable(const std::vector<HuffmanEncoding>& encodingsVec);
     };
 }

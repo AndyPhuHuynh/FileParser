@@ -4,27 +4,30 @@
 #include <fstream>
 #include <numeric>
 
+#include "FileParser/BitManipulationUtil.h"
+
 auto FileParser::Jpeg::HuffmanBuilder::readFromFile(
-    std::ifstream& file,
-    const std::streampos& dataStartIndex
-) -> HuffmanTable {
-    file.seekg(dataStartIndex, std::ios::beg);
+    std::ifstream& file
+) -> std::expected<HuffmanTable, std::string> {
     // Read num of each encoding
-    std::array<uint8_t, HuffmanTable::maxEncodingLength> codeSizes{};
-    for (int i = 0; i < HuffmanTable::maxEncodingLength; i++) {
-        file.read(reinterpret_cast<char*>(&codeSizes[i]), 1);
+    const auto codeSizesExpected = read_uint8(file, HuffmanTable::maxEncodingLength);
+    if (!codeSizesExpected) {
+        return getUnexpected(codeSizesExpected, "Unable to parse code sizes");
     }
+    if (codeSizesExpected->size() != HuffmanTable::maxEncodingLength) {
+        return std::unexpected("Incorrect number of code sizes");
+    }
+    std::array<uint8_t, HuffmanTable::maxEncodingLength> codeSizes{};
+    std::ranges::copy(codeSizesExpected->begin(), codeSizesExpected->end(), codeSizes.begin());
 
     // Read symbols
     const int symbolCount = std::accumulate(codeSizes.begin(), codeSizes.end(), 0);
-    std::vector<uint8_t> symbols;
-    for (int i = 0; i < symbolCount; i++) {
-        uint8_t byte;
-        file.read(reinterpret_cast<char*>(&byte), 1);
-        symbols.push_back(byte);
+    const auto symbols = read_uint8(file, symbolCount);
+    if (!symbols) {
+        return getUnexpected(symbols, "Unable to parse symbols");
     }
 
-    const std::vector<HuffmanEncoding> encodings = generateEncodings(symbols, codeSizes);
+    const std::vector<HuffmanEncoding> encodings = generateEncodings(*symbols, codeSizes);
     return HuffmanTable(encodings);
 }
 

@@ -47,9 +47,9 @@ auto FileParser::HuffmanTable::encode(const uint8_t symbol) const -> HuffmanEnco
 }
 
 // Main function that generates label
-void FileParser::HuffmanTable::generateLookupTable(const std::vector<HuffmanEncoding>& encodings) {
+void FileParser::HuffmanTable::generateLookupTable(const std::vector<HuffmanEncoding>& encodingsVec) {
     m_table.table = std::make_unique<std::array<HuffmanTableEntry, 256>>();
-    for (const auto& encoding : encodings) {
+    for (const auto& encoding : encodingsVec) {
         if (encoding.bitLength <= 8) {
             const auto leftShifted = static_cast<uint8_t>(encoding.encoding << (8 - encoding.bitLength));
             for (uint8_t i = 0; i < static_cast<uint8_t>(1 << (8 - encoding.bitLength)); i++) {

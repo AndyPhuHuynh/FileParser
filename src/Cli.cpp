@@ -1,5 +1,8 @@
 ﻿#include "FileParser/Cli.h"
 
+#include <algorithm>
+#include <bitset>
+#include <cmath>
 #include <filesystem>
 #include <functional>
 #include <iostream>
@@ -166,11 +169,11 @@ static void Test(const std::vector<std::string>& args) {
     using namespace FileParser;
     using namespace Jpeg;
     using namespace Jpeg::Encoder;
-    
+
     const std::string& filepath = args[1];
     const auto result = JpegParser::parseFile(filepath);
     if (!result) {
-        std::cerr << "Error: Failed to parse file: " << filepath << '\n';
+        std::cerr << "Error: Failed to parse file: " << filepath << " " << result.error() << '\n';
     }
 }
 

@@ -90,8 +90,20 @@ namespace FileParser::Jpeg {
     constexpr uint8_t COM = 0xFE;
     constexpr uint8_t TEM = 0x01;
 
-    inline bool isSOF(const uint8_t marker) {
+    constexpr uint8_t ByteStuffing = 0x00;
+
+    inline auto isSOF(const uint8_t marker) -> bool {
         return marker >= SOF0 && marker <= SOF15 &&
             !(marker == DHT || marker == JPG || marker == DAC);
+    }
+
+    inline auto isRST(const uint8_t marker) -> bool {
+        return marker >= RST0 && marker <= RST7;
+    }
+
+    inline auto getNextRST(const uint8_t marker) -> uint8_t {
+        if (!isRST(marker)) throw std::invalid_argument(std::format("Marker {} is not an RST", marker));
+        if (marker == RST7) return RST0;
+        return marker + 1;
     }
 }

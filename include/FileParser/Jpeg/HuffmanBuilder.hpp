@@ -1,5 +1,8 @@
 #pragma once
 
+#include <complex.h>
+#include <expected>
+
 #include "FileParser/Huffman/Table.hpp"
 
 namespace FileParser::Jpeg {
@@ -12,14 +15,13 @@ namespace FileParser::Jpeg {
              * from the DHT marker segment.
              *
              * @param file The input file stream pointing to the JPEG file.
-             * @param dataStartIndex The position in the file where the Huffman table data begins. This should not
-             * include the DHT marker.
              * @return A HuffmanTable constructed from the parsed file data
              *
              * @note If the DHT segment contains multiple Huffman tables, call this function repeatedly, updating the
              * file position each time, to read each table in sequence
              */
-            static auto readFromFile(std::ifstream& file, const std::streampos& dataStartIndex) -> HuffmanTable;
+            static auto readFromFile(std::ifstream& file) -> std::expected<
+                HuffmanTable, std::string>;
 
             /**
              * @param symbols The list of symbols to be encoded.

@@ -112,8 +112,8 @@ void FileParser::Jpeg::FrameHeader::initializeValuesFromComponents() {
             maxVerticalSample = component.verticalSamplingFactor;
             if (component.horizontalSamplingFactor == 1 && component.verticalSamplingFactor == 1) {
                 luminanceComponentsPerMcu = 1;
-            } else if (component.horizontalSamplingFactor == 1 && component.verticalSamplingFactor == 2
-                    || component.horizontalSamplingFactor == 2 && component.verticalSamplingFactor == 1) {
+            } else if ((component.horizontalSamplingFactor == 1 && component.verticalSamplingFactor == 2)
+                    || (component.horizontalSamplingFactor == 2 && component.verticalSamplingFactor == 1)) {
                 luminanceComponentsPerMcu = 2;
             } else if (component.horizontalSamplingFactor == 2 && component.verticalSamplingFactor == 2) {
                 luminanceComponentsPerMcu = 4;
@@ -559,7 +559,7 @@ void FileParser::Jpeg::JpegImage::readHuffmanTables() {
                 tables.emplace_back();
             }
         }
-        tables[iteration][tableId] = HuffmanBuilder::readFromFile(file, dataStartIndex);
+        tables[iteration][tableId] = *HuffmanBuilder::readFromFile(file);
         length -= (static_cast<uint16_t>(file.tellg()) - static_cast<uint16_t>(dataStartIndex));
     }
 }
@@ -1040,8 +1040,6 @@ auto FileParser::Jpeg::convertMcusToColorBlocks(
     const int vertical   =  mcus[0]->verticalSampleSize;
 
     const size_t mcuTotalWidth  = ceilDivide(blockWidth, horizontal);
-    const size_t mcuTotalHeight = ceilDivide(blockHeight, vertical);
-
     std::vector result(blockWidth * blockHeight , ColorBlock());
 
     for (size_t mcuIndex = 0; mcuIndex < mcus.size(); mcuIndex++) {

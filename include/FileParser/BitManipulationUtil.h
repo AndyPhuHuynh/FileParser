@@ -56,6 +56,13 @@ unsigned char GetNibble(unsigned char byte, int pos);
  */
 uint16_t SwapBytes(uint16_t value);
 
+template <typename T>
+auto getUnexpected(
+    const std::expected<T, std::string>& expected, std::string_view errorMsg
+) -> std::unexpected<std::string> {
+    return std::unexpected(std::format("{}: {}", errorMsg, expected.error()));
+}
+
 [[nodiscard]] auto getUpperNibble(uint8_t byte) -> uint8_t;
 [[nodiscard]] auto getLowerNibble(uint8_t byte) -> uint8_t;
 
@@ -134,6 +141,36 @@ private:
     int m_byteIndex = 0;
     uint8_t m_bitPosition = 0;
 };
+
+class NewBitReader {
+public:
+    NewBitReader() = default;
+    explicit NewBitReader(const std::vector<uint8_t>& bytes);
+    explicit NewBitReader(std::vector<uint8_t>&& bytes);
+
+    auto getBit() -> uint8_t;
+    auto getNBits(size_t numBits) -> uint64_t;
+    auto getUInt8() -> uint8_t;
+    auto getUInt16() -> uint16_t;
+    auto getUInt32() -> uint32_t;
+    auto getUInt64() -> uint64_t;
+
+    [[nodiscard]] auto peekBit() const -> uint8_t;
+    [[nodiscard]] auto peekNBits(size_t numBits) const -> uint64_t;
+    [[nodiscard]] auto peekUInt8() const -> uint8_t;
+    [[nodiscard]] auto peekUInt16() const -> uint16_t;
+    [[nodiscard]] auto peekUInt32() const -> uint32_t;
+    [[nodiscard]] auto peekUInt64() const -> uint64_t;
+
+    auto skipBits(size_t numBits) -> void;
+    auto alignToByte() -> void;
+    auto addByte(uint8_t byte) -> void;
+private:
+    std::vector<uint8_t> m_bytes;
+    size_t m_byteIndex = 0;
+    size_t m_bitPosition = 0;
+};
+
 
 class BitWriter {
 public:

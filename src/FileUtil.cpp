@@ -21,7 +21,7 @@ static bool CheckSignature(std::ifstream& file, const uint8_t* signature, const 
 static std::string ToLower(const std::string& str) {
     std::string result = str;
     std::ranges::transform(result, result.begin(), 
-                           [](const unsigned char c) { return std::tolower(c); });
+                           [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return result;
 }
 

@@ -8,7 +8,7 @@ auto FileParser::Jpeg::QuantizationTableBuilder::readFromBitReader(BitReader& by
     const auto precisionAndId = static_cast<uint8_t>(bytes.getNBits(8));
 
     QuantizationTable table {
-        .precision        = GetNibble(precisionAndId, 0),
+        .precision   = GetNibble(precisionAndId, 0),
         .destination = GetNibble(precisionAndId, 1),
     };
 

@@ -66,7 +66,7 @@ auto read_uint16_be(std::ifstream& file, const std::streamsize n) -> std::expect
         return std::unexpected(bytes.error());
     }
     auto words = std::vector<uint16_t>(n);
-    for (size_t i = 0; i < n; i++) {
+    for (std::streamsize i = 0; i < n; i++) {
         words[i] = static_cast<uint16_t>((*bytes)[2 * i] << 8 | (*bytes)[2 * i + 1]);
     }
     return words;
@@ -185,6 +185,124 @@ bool BitReader::reachedEnd() const {
 }
 
 void BitReader::addByte(const uint8_t byte) {
+    m_bytes.push_back(byte);
+}
+
+NewBitReader::NewBitReader(const std::vector<uint8_t>& bytes) {
+    m_bytes = bytes;
+}
+
+NewBitReader::NewBitReader(std::vector<uint8_t>&& bytes) {
+    m_bytes = std::move(bytes);
+}
+
+auto NewBitReader::getBit() -> uint8_t {
+    const auto result = getUInt8();
+    skipBits(1);
+    return result;
+}
+
+auto NewBitReader::getNBits(const size_t numBits) -> uint64_t {
+    const auto result = peekNBits(numBits);
+    skipBits(numBits);
+    return result;
+}
+
+auto NewBitReader::getUInt8() -> uint8_t {
+    const auto result = peekUInt8();
+    skipBits(8);
+    return result;
+}
+
+auto NewBitReader::getUInt16() -> uint16_t {
+    const auto result = peekUInt16();
+    skipBits(16);
+    return result;
+}
+
+auto NewBitReader::getUInt32() -> uint32_t {
+    const auto result = peekUInt32();
+    skipBits(32);
+    return result;
+}
+
+auto NewBitReader::getUInt64() -> uint64_t {
+    const auto result = peekUInt64();
+    skipBits(64);
+    return result;
+}
+
+auto NewBitReader::peekBit() const -> uint8_t {
+    return static_cast<uint8_t>((m_bytes[m_byteIndex] >> (7 - m_bitPosition)) & 1);
+}
+
+auto NewBitReader::peekNBits(const size_t numBits) const -> uint64_t {
+    if (numBits == 0) return 0;
+    if (numBits > 64) {
+        throw std::invalid_argument("Number of bits to read must be in the range [0, 64]");
+    }
+
+    constexpr size_t bitsInByte = 8;
+    uint64_t result = 0;
+    size_t bitsRead = 0;
+
+    size_t byteIndex = m_byteIndex;
+    size_t bitOffset = m_bitPosition;
+
+    while (bitsRead < numBits) {
+        const uint8_t currentByte = (byteIndex < m_bytes.size()) ? m_bytes[byteIndex] : 0;
+
+        const size_t bitsAvailable = bitsInByte - bitOffset;
+        const size_t bitsToRead = std::min(numBits - bitsRead, bitsAvailable);
+
+        const uint8_t shifted = currentByte >> (bitsInByte - bitOffset - bitsToRead);
+        const uint8_t mask = (1 << bitsToRead) - 1;
+        const uint8_t extracted = shifted & mask;
+
+        result = (result << bitsToRead) | extracted;
+
+        bitsRead += bitsToRead;
+        bitOffset += bitsToRead;
+
+        if (bitOffset == bitsInByte) {
+            bitOffset = 0;
+            ++byteIndex;
+        }
+    }
+
+    return result;
+}
+
+auto NewBitReader::peekUInt8() const -> uint8_t {
+    return static_cast<uint8_t>(peekNBits(8));
+}
+
+auto NewBitReader::peekUInt16() const -> uint16_t {
+    return static_cast<uint16_t>(peekNBits(16));
+}
+
+auto NewBitReader::peekUInt32() const -> uint32_t {
+    return static_cast<uint32_t>(peekNBits(32));
+}
+
+auto NewBitReader::peekUInt64() const -> uint64_t {
+    return peekNBits(64);
+}
+
+auto NewBitReader::skipBits(const size_t numBits) -> void {
+    constexpr size_t bitsInByte = 8;
+    m_bitPosition += numBits;
+    m_byteIndex   += m_bitPosition / bitsInByte;
+    m_bitPosition  = m_bitPosition % bitsInByte;
+}
+
+auto NewBitReader::alignToByte() -> void {
+    if (m_bitPosition == 0) return;
+    m_bitPosition = 0;
+    m_byteIndex++;
+}
+
+auto NewBitReader::addByte(const uint8_t byte) -> void {
     m_bytes.push_back(byte);
 }
 

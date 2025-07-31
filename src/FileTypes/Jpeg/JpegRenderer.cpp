@@ -24,7 +24,7 @@ void FileParser::Jpeg::Renderer::renderJpeg(const JpegImage& jpeg) {
             Color color(R[colorRow * 8 + colorCol], G[colorRow * 8 + colorCol], B[colorRow * 8 + colorCol]);
             color.normalizeColor();
 
-            points->emplace_back(x, y, color);
+            points->emplace_back(static_cast<float>(x), static_cast<float>(y), color);
         }
     }
 

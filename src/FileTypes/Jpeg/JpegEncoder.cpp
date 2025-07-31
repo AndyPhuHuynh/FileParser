@@ -523,7 +523,7 @@ FileParser::Jpeg::QuantizationTable FileParser::Jpeg::Encoder::createQuantizatio
 
     const int scale = quality < 50 ? (5000 / quality) : (200 - 2 * quality);
     std::array<float, QuantizationTable::length> scaledTable{};
-    for (int i = 0; i < QuantizationTable::length; i++) {
+    for (size_t i = 0; i < QuantizationTable::length; i++) {
         scaledTable[i] = std::round(std::clamp(table[i] * static_cast<float>(scale) / 100, 1.0f, 255.0f));
     }
 
