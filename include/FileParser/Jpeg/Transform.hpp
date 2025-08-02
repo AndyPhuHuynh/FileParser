@@ -38,9 +38,48 @@ namespace FileParser::Jpeg {
     void dequantize(Component& component, const QuantizationTable& quantizationTable);
     void dequantize(Mcu& mcu, const FrameInfo& frame, const NewScanHeader& scanHeader,
         const TableIterations& iterations, const std::array<std::vector<QuantizationTable>, 4>& quantizationTables);
-    void dequantize(Mcu& mcu, JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp);
 
     void quantize(Component& component, const QuantizationTable& quantizationTable);
     void quantize(Mcu& mcu, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
     void quantize(std::vector<Mcu>& mcus, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
+
+    inline auto convertMcusToColorBlocks(const std::vector<Mcu>& mcus, const size_t pixelWidth,
+                                         const size_t pixelHeight) -> std::vector<ColorBlock> {
+        auto ceilDivide = [](auto a, auto b) {
+            return (a + b - 1) / b;
+        };
+
+        if (mcus.empty()) {
+            return {};
+        }
+
+        constexpr size_t blockSideLength = 8;
+        const size_t blockWidth  = ceilDivide(pixelWidth, blockSideLength);
+        const size_t blockHeight = ceilDivide(pixelHeight, blockSideLength);
+
+        const int horizontal =  mcus[0].horizontalSampleSize;
+        const int vertical   =  mcus[0].verticalSampleSize;
+
+        const size_t mcuTotalWidth  = ceilDivide(blockWidth, horizontal);
+        std::vector result(blockWidth * blockHeight , ColorBlock());
+
+        for (size_t mcuIndex = 0; mcuIndex < mcus.size(); mcuIndex++) {
+            const size_t mcuRow = mcuIndex / mcuTotalWidth;
+            const size_t mcuCol = mcuIndex % mcuTotalWidth;
+
+            auto colors = generateColorBlocks(mcus[mcuIndex]);
+            for (size_t colorIndex = 0; colorIndex < colors.size(); colorIndex++) {
+                const size_t colorRow = colorIndex / horizontal;
+                const size_t colorCol = colorIndex % horizontal;
+
+                const size_t blockRow = mcuRow * vertical   + colorRow;
+                const size_t blockCol = mcuCol * horizontal + colorCol;
+
+                if (blockRow < blockHeight && blockCol < blockWidth) {
+                    result[blockRow * blockWidth + blockCol] = colors[colorIndex];
+                }
+            }
+        }
+        return result;
+    }
 }

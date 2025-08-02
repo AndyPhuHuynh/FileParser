@@ -117,25 +117,6 @@ struct BitField {
     BitField(T value, const int bitCount) : value(value), bitCount(bitCount) {}
 };
 
-class BitReader {
-public:
-    BitReader() = default;
-    explicit BitReader(const std::vector<uint8_t>& bytes);
-    uint8_t getBit();
-    uint32_t getNBits(int numBits);
-    [[nodiscard]] uint8_t getLastByteRead() const;
-    void alignToByte();
-    [[nodiscard]] uint8_t getByteConstant() const;
-    [[nodiscard]] uint16_t getWordConstant() const;
-    void skipBits(int numBits);
-    [[nodiscard]] bool reachedEnd() const;
-    void addByte(uint8_t byte);
-private:
-    std::vector<uint8_t> m_bytes;
-    int m_byteIndex = 0;
-    uint8_t m_bitPosition = 0;
-};
-
 class NewBitReader {
 public:
     NewBitReader() = default;

@@ -3,8 +3,6 @@
 #include <cmath> // NOLINT (needed for simde)
 #include "simde/x86/avx512.h"
 
-#include "FileParser/Jpeg/JpegImage.h"
-
 // Uses AAN DCT
 void FileParser::Jpeg::inverseDCT(Component& array) {
     float results[64];
@@ -345,19 +343,6 @@ void FileParser::Jpeg::forwardDCT(Mcu& mcu) {
 void FileParser::Jpeg::forwardDCT(std::vector<Mcu>& mcus) {
     for (auto& mcu : mcus) {
         forwardDCT(mcu);
-    }
-}
-
-void FileParser::Jpeg::dequantize(Mcu& mcu, JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp) {
-    // TODO: Add error messages for getting values from these optionals
-    if (scanComp.componentId == 1) {
-        for (auto& y : mcu.Y) {
-            dequantize(y, *jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[1].quantizationTableSelector]);
-        }
-    } else if (scanComp.componentId == 2){
-        dequantize(mcu.Cb, *jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[2].quantizationTableSelector]);
-    } else if (scanComp.componentId == 3){
-        dequantize(mcu.Cr, *jpeg->quantizationTables[scanComp.quantizationTableIteration][jpeg->info.componentSpecifications[3].quantizationTableSelector]);
     }
 }
 

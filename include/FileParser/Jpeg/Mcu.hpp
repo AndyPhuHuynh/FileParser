@@ -5,8 +5,6 @@
 
 namespace FileParser::Jpeg {
     class JpegImage;
-    class ScanHeaderComponentSpecification;
-    class ColorBlock;
     struct QuantizationTable;
 
     struct Component {
@@ -15,6 +13,15 @@ namespace FileParser::Jpeg {
 
         auto operator[](size_t index) -> float&;
         auto operator[](size_t index) const -> const float&;
+    };
+
+    class ColorBlock {
+    public:
+        static constexpr int colorBlockLength = 64;
+        std::array<float, colorBlockLength> R{};
+        std::array<float, colorBlockLength> G{};
+        std::array<float, colorBlockLength> B{};
+        void rgbToYCbCr();
     };
 
     class Mcu {

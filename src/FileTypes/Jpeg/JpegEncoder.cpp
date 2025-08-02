@@ -493,7 +493,7 @@ void FileParser::Jpeg::Encoder::writeMarker(const uint8_t marker, JpegBitWriter&
 }
 
 void FileParser::Jpeg::Encoder::writeFrameHeaderComponentSpecification(
-    const FrameHeaderComponentSpecification& component, JpegBitWriter& bitWriter) {
+    const NewFrameComponent& component, JpegBitWriter& bitWriter) {
 
     const uint8_t identifier = component.identifier;
     const uint8_t quantizationTableSelector = component.quantizationTableSelector;
@@ -502,14 +502,15 @@ void FileParser::Jpeg::Encoder::writeFrameHeaderComponentSpecification(
     bitWriter << identifier << samplingFactor << quantizationTableSelector;
 }
 
-void FileParser::Jpeg::Encoder::writeFrameHeader(const FrameHeader& frameHeader, JpegBitWriter& bitWriter) {
-    const uint8_t frameType = frameHeader.encodingProcess;
-    const uint16_t length = 8 + frameHeader.numOfChannels * 3;
+void FileParser::Jpeg::Encoder::writeFrameHeader(const uint8_t SOF, const NewFrameHeader& frameHeader, JpegBitWriter& bitWriter) {
+    const uint8_t frameType = SOF;
+    const uint16_t length = 8 + frameHeader.components.size() * 3;
 
     writeMarker(frameType, bitWriter);
-    bitWriter << length << frameHeader.precision << frameHeader.height << frameHeader.width << frameHeader.numOfChannels;
+    bitWriter << length << frameHeader.precision << frameHeader.numberOfLines <<
+        frameHeader.numberOfSamplesPerLine << static_cast<uint8_t>(frameHeader.components.size());
 
-    for (auto& component : frameHeader.componentSpecifications | std::views::values) {
+    for (const auto& component : frameHeader.components) {
         writeFrameHeaderComponentSpecification(component, bitWriter);
     }
 }
@@ -563,19 +564,19 @@ void FileParser::Jpeg::Encoder::writeQuantizationTable(const QuantizationTable& 
 }
 
 void FileParser::Jpeg::Encoder::writeScanHeaderComponentSpecification(
-    const ScanHeaderComponentSpecification& component, JpegBitWriter& bitWriter) {
+    const NewScanHeaderComponent& component, JpegBitWriter& bitWriter) {
     const auto tableDestination =  static_cast<uint8_t>((component.dcTableSelector << 4) | component.acTableSelector);
-    bitWriter << component.componentId << tableDestination;
+    bitWriter << component.componentSelector << tableDestination;
 }
 
-void FileParser::Jpeg::Encoder::writeScanHeader(const ScanHeader& scanHeader, JpegBitWriter& bitWriter) {
+void FileParser::Jpeg::Encoder::writeScanHeader(const NewScanHeader& scanHeader, JpegBitWriter& bitWriter) {
     writeMarker(SOS, bitWriter);
 
-    const auto numComponents = static_cast<uint8_t>(scanHeader.componentSpecifications.size());
+    const auto numComponents = static_cast<uint8_t>(scanHeader.components.size());
     const uint16_t length = 6 + 2 * numComponents;
     bitWriter << length << numComponents;
 
-    for (auto component : scanHeader.componentSpecifications) {
+    for (auto component : scanHeader.components) {
         writeScanHeaderComponentSpecification(component, bitWriter);
     }
 
@@ -701,18 +702,18 @@ auto FileParser::Jpeg::Encoder::writeJpeg(
     // App data
     // Number of lines (height of image)
     // Frame header
-    FrameHeaderComponentSpecification frameCompY(1, 1, 1, 0);
-    FrameHeaderComponentSpecification frameCompCb(2, 1, 1, 1);
-    FrameHeaderComponentSpecification frameCompCr(3, 1, 1, 1);
+    NewFrameComponent frameCompY(1, 1, 1, 0);
+    NewFrameComponent frameCompCb(2, 1, 1, 1);
+    NewFrameComponent frameCompCr(3, 1, 1, 1);
     std::vector frameComponents{frameCompY, frameCompCb, frameCompCr};
-    FrameHeader frameHeader(SOF0, 8, pixelHeight, pixelWidth, frameComponents);
-    writeFrameHeader(frameHeader, bitWriter);
+    NewFrameHeader frameHeader(8, pixelHeight, pixelWidth, frameComponents);
+    writeFrameHeader(SOF0, frameHeader, bitWriter);
     // Scan
-    ScanHeaderComponentSpecification component1(1, 0, 0, 0, 0, 0);
-    ScanHeaderComponentSpecification component2(2, 1, 1, 0, 0, 0);
-    ScanHeaderComponentSpecification component3(3, 1, 1, 0, 0, 0);
+    NewScanHeaderComponent component1(1, 0, 0);
+    NewScanHeaderComponent component2(2, 1, 1);
+    NewScanHeaderComponent component3(3, 1, 1);
     std::vector scanComponents{component1, component2, component3};
-    ScanHeader scanHeader(scanComponents, 0, 63, 0, 0);
+    NewScanHeader scanHeader(scanComponents, 0, 63, 0, 0);
     writeScanHeader(scanHeader, bitWriter);
     // Entropy Data
     writeEncodedMcu(encodedMcus, luminanceDcTable, luminanceAcTable, chrominanceDcTable, chrominanceAcTable, bitWriter);

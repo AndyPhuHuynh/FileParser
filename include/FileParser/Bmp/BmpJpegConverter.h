@@ -2,7 +2,6 @@
 
 #include "FileParser/Bmp/BmpImage.h"
 #include "FileParser/Jpeg/JpegEncoder.h"
-#include "FileParser/Jpeg/JpegImage.h"
 
 namespace FileParser::Bmp::Converter {
     std::vector<Jpeg::Mcu> getMcus(BmpImage& bmp);

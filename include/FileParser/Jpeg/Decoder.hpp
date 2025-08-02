@@ -24,7 +24,6 @@ namespace FileParser::Jpeg {
         uint8_t  precision = 0; // Precision in bits for the samples for the components
         uint16_t numberOfLines = 0;
         uint16_t numberOfSamplesPerLine = 0;
-        uint8_t  numberOfComponents = 0;
         std::vector<NewFrameComponent> components;
     };
 

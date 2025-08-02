@@ -5,8 +5,6 @@
 
 #include <simde/x86/avx512.h>
 
-#include "FileParser/Jpeg/JpegImage.h"
-
 auto FileParser::Jpeg::Component::operator[](const size_t index) -> float& {
     return data[index];
 }
@@ -15,6 +13,16 @@ auto FileParser::Jpeg::Component::operator[](const size_t index) const -> const 
     return data[index];
 }
 
+void FileParser::Jpeg::ColorBlock::rgbToYCbCr() {
+    for (int i = 0; i < colorBlockLength; i++) {
+        const float Y =      0.299f * R[i] +    0.587f * G[i] +    0.114f *  B[i];
+        const float Cb = -0.168736f * R[i] - 0.331264f * G[i] +      0.5f *  B[i];
+        const float Cr =       0.5f * R[i] - 0.418688f * G[i] - 0.081312f *  B[i];
+        R[i] = Y - 128;
+        G[i] = Cb;
+        B[i] = Cr;
+    }
+}
 int FileParser::Jpeg::Mcu::getColorIndex(const int blockIndex, const int pixelIndex) const {
     const int blockRow = blockIndex / horizontalSampleSize;
     const int blockCol = blockIndex % horizontalSampleSize;

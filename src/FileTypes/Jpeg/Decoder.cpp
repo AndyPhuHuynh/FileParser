@@ -92,9 +92,8 @@ auto FileParser::Jpeg::JpegParser::parseFrameHeader(std::ifstream& file, const u
     if (!numberOfComponents) {
         return utils::getUnexpected(numberOfComponents, "Unable to read number of components");
     }
-    frame.numberOfComponents = numberOfComponents.value();
 
-    const uint16_t expectedLength = 8 + 3 * frame.numberOfComponents;
+    const uint16_t expectedLength = 8 + 3 * *numberOfComponents;
     if (*length != expectedLength) {
         return std::unexpected(
             std::format(R"(Specified length of FrameHeader "{}" does not match expected length of "{}")",
@@ -102,13 +101,13 @@ auto FileParser::Jpeg::JpegParser::parseFrameHeader(std::ifstream& file, const u
     }
 
     constexpr uint16_t minComponents = 1, maxComponents = 4;
-    if (frame.numberOfComponents < minComponents || frame.numberOfComponents > maxComponents) {
+    if (*numberOfComponents < minComponents || *numberOfComponents > maxComponents) {
         return std::unexpected(std::format(R"(Number of components must be between {} and {}, got {})",
-            minComponents, maxComponents, frame.numberOfComponents));
+            minComponents, maxComponents, *numberOfComponents));
     }
 
 
-    for (size_t i = 0; i < frame.numberOfComponents; ++i) {
+    for (size_t i = 0; i < *numberOfComponents; ++i) {
         auto component = parseFrameComponent(file);
         if (!component) {
             return std::unexpected(std::format("Error parsing frame component #{}: {}", i, component.error()));

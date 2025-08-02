@@ -1,7 +1,5 @@
 ﻿#include "FileParser/Cli.h"
 
-#include <algorithm>
-#include <bitset>
 #include <cmath>
 #include <filesystem>
 #include <functional>
@@ -14,9 +12,7 @@
 #include "FileParser/Bmp/BmpRenderer.h"
 #include "FileParser/FileUtil.h"
 #include "FileParser/Jpeg/Decoder.hpp"
-#include "FileParser/Jpeg/JpegBmpConverter.h"
 #include "FileParser/Jpeg/JpegEncoder.h"
-#include "FileParser/Jpeg/JpegImage.h"
 #include "FileParser/Jpeg/JpegRenderer.h"
 
 /**
@@ -62,7 +58,7 @@ static void Render(const std::vector<std::string>& args) {
     using namespace FileParser;
     if (args.size() != 2) {
         std::cerr << "Usage: render <filename>\n";
-        // return;
+        return;
     }
     
     const std::string& filepath = args[1];
@@ -81,20 +77,14 @@ static void Render(const std::vector<std::string>& args) {
             break;
         }
         case FileType::Jpeg: {
-            // Jpeg::JpegImage jpeg(filepath);
-            if (args.size() > 2 && args[2] == "new") {
-                uint16_t width, height;
-                const auto& mcus = Jpeg::JpegDecoder::decode(filepath, &width, &height);
-                if (!mcus) {
-                    std::cerr << "Error: Failed to decode Jpeg file: " << filepath << ": " << mcus.error() << '\n';
-                    return;
-                }
-
-                Jpeg::Renderer::renderJpeg(*mcus, width, height);
-            } else {
-                Jpeg::JpegImage jpeg(filepath);
-                Jpeg::Renderer::renderJpeg(jpeg);
+            uint16_t width, height;
+            const auto& mcus = Jpeg::JpegDecoder::decode(filepath, &width, &height);
+            if (!mcus) {
+                std::cerr << "Error: Failed to decode Jpeg file: " << filepath << ": " << mcus.error() << '\n';
+                return;
             }
+
+            Jpeg::Renderer::renderJpeg(*mcus, width, height);
             break;
         }
         case FileType::None:
@@ -136,23 +126,6 @@ static void Convert(const std::vector<std::string>& args) {
                     settings.chrominanceQuality = 100;
                     settings.optimizeHuffmanTables = true;
                     Bmp::Converter::writeBmpAsJpeg(bmp, newFilepath, settings);
-                    break;
-                }
-                case FileType::None: {
-                    std::cout << "Unknown file type: " << newFilepath << '\n';
-                    break;
-                }
-            }
-            break;
-        }
-        case FileType::Jpeg: {
-            Jpeg::JpegImage jpeg(filepath);
-            switch (newFormat) {
-                case FileType::Bmp: {
-                    Jpeg::Converter::writeJpegAsBmp(jpeg, newFilepath);
-                    break;
-                }
-                case FileType::Jpeg: {
                     break;
                 }
                 case FileType::None: {
