@@ -33,8 +33,8 @@ FileParser::Jpeg::Mcu::Mcu() {
     Y.push_back({});
 }
 
-FileParser::Jpeg::Mcu::Mcu(const int luminanceComponents, const int horizontalSampleSize, const int verticalSampleSize) {
-    for (int i = 0; i < luminanceComponents; i++) {
+FileParser::Jpeg::Mcu::Mcu(const int horizontalSampleSize, const int verticalSampleSize) {
+    for (int i = 0; i < horizontalSampleSize * verticalSampleSize; i++) {
         Y.push_back({});
     }
     this->horizontalSampleSize = horizontalSampleSize;

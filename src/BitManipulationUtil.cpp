@@ -31,6 +31,13 @@ static auto getReadBytesErrorMsg(const std::streamsize n) -> std::unexpected<std
     return std::unexpected(std::format("Unable to read {} bytes from file (EOF or read error)", n));
 }
 
+auto read_bytes(char *buffer, std::ifstream& file, const std::streamsize n) -> std::expected<void, std::string> {
+    if (!file.read(buffer, n)) {
+        return getReadBytesErrorMsg(n);
+    }
+    return {};
+}
+
 auto read_uint8(std::ifstream& file) -> std::expected<uint8_t, std::string> {
     uint8_t byte{};
     file.read(reinterpret_cast<char*>(&byte), 1);
@@ -300,6 +307,10 @@ auto NewBitReader::alignToByte() -> void {
     if (m_bitPosition == 0) return;
     m_bitPosition = 0;
     m_byteIndex++;
+}
+
+auto NewBitReader::reachedEnd() const -> bool {
+    return m_byteIndex >= static_cast<int>(m_bytes.size());
 }
 
 auto NewBitReader::addByte(const uint8_t byte) -> void {

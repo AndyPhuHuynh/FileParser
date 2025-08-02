@@ -150,6 +150,8 @@ std::pair<int, int> FileParser::Jpeg::JpegImage::decodeAcCoefficient(BitReader& 
     return {r, s};
 }
 
+std::ofstream oldLog = std::ofstream("./oldlog.txt");
+
 FileParser::Jpeg::Component FileParser::Jpeg::JpegImage::decodeComponent(BitReader& bitReader,
                                                                          const ScanHeaderComponentSpecification&
                                                                          scanComp,
@@ -161,12 +163,14 @@ FileParser::Jpeg::Component FileParser::Jpeg::JpegImage::decodeComponent(BitRead
     int dcCoefficient = decodeDcCoefficient(bitReader, dcTable) + prevDc[scanComp.componentId - 1];
     result[0] = static_cast<float>(dcCoefficient);
     prevDc[scanComp.componentId - 1] = dcCoefficient;
+    oldLog  << std::format("DC: {}\n", dcCoefficient);
 
     // AC Coefficients
     int index = 1;
     while (index < Mcu::DataUnitLength) {
         HuffmanTable &acTable = *acHuffmanTables[scanComp.acTableIteration][scanComp.acTableSelector];
         auto [r, s] = decodeAcCoefficient(bitReader, acTable);
+        oldLog  << std::format("AC: {}\n", r << 4 | s);
         if (r == 0x0 && s == 0x0) {
             break;
         }
@@ -182,10 +186,13 @@ FileParser::Jpeg::Component FileParser::Jpeg::JpegImage::decodeComponent(BitRead
         result[zigZagMap[index]] = static_cast<float>(coefficient);
         index++;
     }
+    oldLog << "\n\n";
     return result;
 }
 
 void FileParser::Jpeg::JpegImage::decodeMcu(Mcu* mcu, ScanHeader& scanHeader, int (&prevDc)[3]) {
+    static int i = 0;
+    oldLog << std::format("MCU: {}\n", i++);
     for (auto& component : scanHeader.componentSpecifications) {
         if (component.componentId == 1) {
             for (int i = 0; i < info.luminanceComponentsPerMcu; i++) {
@@ -510,7 +517,7 @@ void FileParser::Jpeg::JpegImage::readFrameHeader(const uint8_t frameMarker) {
     info = FrameHeader(frameMarker, file, file.tellg());
     mcus.reserve(static_cast<unsigned int>(info.mcuImageHeight * info.mcuImageWidth));
     for (int i = 0; i < info.mcuImageHeight * info.mcuImageWidth; i++) {
-        mcus.emplace_back(std::make_shared<Mcu>(info.luminanceComponentsPerMcu, info.maxHorizontalSample, info.maxVerticalSample));
+        mcus.emplace_back(std::make_shared<Mcu>(info.maxHorizontalSample, info.maxVerticalSample));
     }
 }
 
@@ -1047,6 +1054,46 @@ auto FileParser::Jpeg::convertMcusToColorBlocks(
         const size_t mcuCol = mcuIndex % mcuTotalWidth;
 
         auto colors = generateColorBlocks(*mcus[mcuIndex]);
+        for (size_t colorIndex = 0; colorIndex < colors.size(); colorIndex++) {
+            const size_t colorRow = colorIndex / horizontal;
+            const size_t colorCol = colorIndex % horizontal;
+
+            const size_t blockRow = mcuRow * vertical   + colorRow;
+            const size_t blockCol = mcuCol * horizontal + colorCol;
+
+            if (blockRow < blockHeight && blockCol < blockWidth) {
+                result[blockRow * blockWidth + blockCol] = colors[colorIndex];
+            }
+        }
+    }
+    return result;
+}
+
+auto FileParser::Jpeg::convertMcusToColorBlocks(const std::vector<Mcu>& mcus, size_t pixelWidth,
+    size_t pixelHeight) -> std::vector<ColorBlock> {
+    auto ceilDivide = [](auto a, auto b) {
+        return (a + b - 1) / b;
+    };
+
+    if (mcus.empty()) {
+        return {};
+    }
+
+    constexpr size_t blockSideLength = 8;
+    const size_t blockWidth  = ceilDivide(pixelWidth, blockSideLength);
+    const size_t blockHeight = ceilDivide(pixelHeight, blockSideLength);
+
+    const int horizontal =  mcus[0].horizontalSampleSize;
+    const int vertical   =  mcus[0].verticalSampleSize;
+
+    const size_t mcuTotalWidth  = ceilDivide(blockWidth, horizontal);
+    std::vector result(blockWidth * blockHeight , ColorBlock());
+
+    for (size_t mcuIndex = 0; mcuIndex < mcus.size(); mcuIndex++) {
+        const size_t mcuRow = mcuIndex / mcuTotalWidth;
+        const size_t mcuCol = mcuIndex % mcuTotalWidth;
+
+        auto colors = generateColorBlocks(mcus[mcuIndex]);
         for (size_t colorIndex = 0; colorIndex < colors.size(); colorIndex++) {
             const size_t colorRow = colorIndex / horizontal;
             const size_t colorCol = colorIndex % horizontal;

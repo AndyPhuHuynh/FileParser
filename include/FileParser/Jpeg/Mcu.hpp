@@ -27,7 +27,7 @@ namespace FileParser::Jpeg {
         int verticalSampleSize = 1;
 
         Mcu();
-        Mcu(int luminanceComponents, int horizontalSampleSize, int verticalSampleSize);
+        Mcu(int horizontalSampleSize, int verticalSampleSize);
         explicit Mcu(const ColorBlock& colorBlock);
 
         // Given the index of the luminance block and the pixel index (0-63) within that block, get the index to the

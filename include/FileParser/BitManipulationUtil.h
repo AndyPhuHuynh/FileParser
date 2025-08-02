@@ -56,16 +56,10 @@ unsigned char GetNibble(unsigned char byte, int pos);
  */
 uint16_t SwapBytes(uint16_t value);
 
-template <typename T>
-auto getUnexpected(
-    const std::expected<T, std::string>& expected, std::string_view errorMsg
-) -> std::unexpected<std::string> {
-    return std::unexpected(std::format("{}: {}", errorMsg, expected.error()));
-}
-
 [[nodiscard]] auto getUpperNibble(uint8_t byte) -> uint8_t;
 [[nodiscard]] auto getLowerNibble(uint8_t byte) -> uint8_t;
 
+[[nodiscard]] auto read_bytes(char *buffer, std::ifstream &file, std::streamsize n) -> std::expected<void, std::string>;
 [[nodiscard]] auto read_uint8(std::ifstream& file) -> std::expected<uint8_t, std::string>;
 [[nodiscard]] auto read_uint8(std::ifstream& file, std::streamsize n) -> std::expected<std::vector<uint8_t>, std::string>;
 
@@ -162,6 +156,7 @@ public:
     [[nodiscard]] auto peekUInt32() const -> uint32_t;
     [[nodiscard]] auto peekUInt64() const -> uint64_t;
 
+    [[nodiscard]] auto reachedEnd() const -> bool;
     auto skipBits(size_t numBits) -> void;
     auto alignToByte() -> void;
     auto addByte(uint8_t byte) -> void;

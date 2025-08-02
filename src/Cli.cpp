@@ -62,7 +62,7 @@ static void Render(const std::vector<std::string>& args) {
     using namespace FileParser;
     if (args.size() != 2) {
         std::cerr << "Usage: render <filename>\n";
-        return;
+        // return;
     }
     
     const std::string& filepath = args[1];
@@ -81,8 +81,20 @@ static void Render(const std::vector<std::string>& args) {
             break;
         }
         case FileType::Jpeg: {
-            Jpeg::JpegImage jpeg(filepath);
-            Jpeg::Renderer::renderJpeg(jpeg);
+            // Jpeg::JpegImage jpeg(filepath);
+            if (args.size() > 2 && args[2] == "new") {
+                uint16_t width, height;
+                const auto& mcus = Jpeg::JpegDecoder::decode(filepath, &width, &height);
+                if (!mcus) {
+                    std::cerr << "Error: Failed to decode Jpeg file: " << filepath << ": " << mcus.error() << '\n';
+                    return;
+                }
+
+                Jpeg::Renderer::renderJpeg(*mcus, width, height);
+            } else {
+                Jpeg::JpegImage jpeg(filepath);
+                Jpeg::Renderer::renderJpeg(jpeg);
+            }
             break;
         }
         case FileType::None:

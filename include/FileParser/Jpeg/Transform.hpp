@@ -3,6 +3,7 @@
 #include <cmath>
 #include <numbers>
 
+#include "Decoder.hpp"
 #include "Mcu.hpp"
 
 namespace FileParser::Jpeg {
@@ -35,6 +36,8 @@ namespace FileParser::Jpeg {
     // Quantization
 
     void dequantize(Component& component, const QuantizationTable& quantizationTable);
+    void dequantize(Mcu& mcu, const FrameInfo& frame, const NewScanHeader& scanHeader,
+        const TableIterations& iterations, const std::array<std::vector<QuantizationTable>, 4>& quantizationTables);
     void dequantize(Mcu& mcu, JpegImage* jpeg, const ScanHeaderComponentSpecification& scanComp);
 
     void quantize(Component& component, const QuantizationTable& quantizationTable);

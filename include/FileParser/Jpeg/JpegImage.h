@@ -182,4 +182,5 @@ namespace FileParser::Jpeg {
     };
 
     auto convertMcusToColorBlocks(const std::vector<std::shared_ptr<Mcu>>& mcus, size_t pixelWidth, size_t pixelHeight) -> std::vector<ColorBlock>;
+    auto convertMcusToColorBlocks(const std::vector<Mcu>& mcus, size_t pixelWidth, size_t pixelHeight) -> std::vector<ColorBlock>;
 }

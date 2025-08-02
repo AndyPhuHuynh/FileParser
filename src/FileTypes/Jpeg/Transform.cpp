@@ -163,6 +163,24 @@ void FileParser::Jpeg::dequantize(Component& component, const QuantizationTable&
     }
 }
 
+auto FileParser::Jpeg::dequantize(
+    Mcu& mcu, const FrameInfo& frame, const NewScanHeader& scanHeader,
+    const TableIterations& iterations, const std::array<std::vector<QuantizationTable>, 4>& quantizationTables
+) -> void {
+    for (const auto& scanComp : scanHeader.components) {
+        const auto& qTable = quantizationTables[scanComp.dcTableSelector][iterations.quantization[scanComp.dcTableSelector]];
+        if (scanComp.componentSelector == frame.luminanceID) {
+            for (auto& y : mcu.Y) {
+                dequantize(y, qTable);
+            }
+        } else if (scanComp.componentSelector == frame.chrominanceBlueID) {
+            dequantize(mcu.Cb, qTable);
+        } else if (scanComp.componentSelector == frame.chrominanceRedID) {
+            dequantize(mcu.Cr, qTable);
+        }
+    }
+}
+
 void FileParser::Jpeg::forwardDCT(Component& component) {
     for (int i = 0; i < 8; ++i) {
         const float a0 = component[0 * 8 + i];

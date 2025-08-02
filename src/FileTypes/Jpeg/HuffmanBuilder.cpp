@@ -5,6 +5,7 @@
 #include <numeric>
 
 #include "FileParser/BitManipulationUtil.h"
+#include "FileParser/Utils.hpp"
 
 auto FileParser::Jpeg::HuffmanBuilder::readFromFile(
     std::ifstream& file
@@ -12,7 +13,7 @@ auto FileParser::Jpeg::HuffmanBuilder::readFromFile(
     // Read num of each encoding
     const auto codeSizesExpected = read_uint8(file, HuffmanTable::maxEncodingLength);
     if (!codeSizesExpected) {
-        return getUnexpected(codeSizesExpected, "Unable to parse code sizes");
+        return utils::getUnexpected(codeSizesExpected, "Unable to parse code sizes");
     }
     if (codeSizesExpected->size() != HuffmanTable::maxEncodingLength) {
         return std::unexpected("Incorrect number of code sizes");
@@ -24,7 +25,7 @@ auto FileParser::Jpeg::HuffmanBuilder::readFromFile(
     const int symbolCount = std::accumulate(codeSizes.begin(), codeSizes.end(), 0);
     const auto symbols = read_uint8(file, symbolCount);
     if (!symbols) {
-        return getUnexpected(symbols, "Unable to parse symbols");
+        return utils::getUnexpected(symbols, "Unable to parse symbols");
     }
 
     const std::vector<HuffmanEncoding> encodings = generateEncodings(*symbols, codeSizes);
