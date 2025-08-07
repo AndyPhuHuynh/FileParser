@@ -9,11 +9,9 @@
 
 #include "FileParser/Bmp/BmpImage.h"
 #include "FileParser/Bmp/BmpJpegConverter.h"
-#include "FileParser/Bmp/BmpRenderer.h"
 #include "FileParser/FileUtil.h"
 #include "FileParser/Jpeg/Decoder.hpp"
 #include "FileParser/Jpeg/JpegEncoder.h"
-#include "FileParser/Jpeg/JpegRenderer.h"
 
 /**
  * @brief Tokenizes a string based on a delimiter
@@ -73,18 +71,18 @@ static void Render(const std::vector<std::string>& args) {
     switch (getFileType(filepath)) {
         case FileType::Bmp: {
             Bmp::BmpImage bmp(filepath);
-            Bmp::Renderer::renderBmp(bmp);
             break;
         }
         case FileType::Jpeg: {
             uint16_t width, height;
-            const auto& mcus = Jpeg::JpegDecoder::decode(filepath, &width, &height);
-            if (!mcus) {
-                std::cerr << "Error: Failed to decode Jpeg file: " << filepath << ": " << mcus.error() << '\n';
+            const auto& image = Jpeg::JpegDecoder::decode(filepath);
+            if (!image) {
+                std::cerr << "Error: Failed to decode Jpeg file: " << filepath << ": " << image.error() << '\n';
                 return;
             }
 
-            Jpeg::Renderer::renderJpeg(*mcus, width, height);
+
+
             break;
         }
         case FileType::None:

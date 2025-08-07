@@ -417,12 +417,12 @@ void FileParser::Jpeg::Encoder::encodeCoefficients(const Component& component, s
 
     // Find the index of the EOB
     bool eob = true;
-    int eobIndex = Mcu::DataUnitLength - 1;
+    size_t eobIndex = Component::length - 1;
     while (eobIndex >= 1) {
         const int coefficient = static_cast<int>(std::round(component[zigZagMap[eobIndex]]));
         if (coefficient != 0) {
             // If the last coefficient is non-zero, there is no eob
-            if (eobIndex == Mcu::DataUnitLength - 1) {
+            if (eobIndex == Component::length - 1) {
                 eob = false;
             }
             // eobIndex is currently index of last non-zero
@@ -432,7 +432,7 @@ void FileParser::Jpeg::Encoder::encodeCoefficients(const Component& component, s
         }
         eobIndex--;
     }
-    eobIndex = std::max(1, eobIndex);
+    eobIndex = std::max<size_t>(1, eobIndex);
 
     // Look through all the ac coefficients and find their encodings
     uint8_t r = 0;
@@ -493,7 +493,7 @@ void FileParser::Jpeg::Encoder::writeMarker(const uint8_t marker, JpegBitWriter&
 }
 
 void FileParser::Jpeg::Encoder::writeFrameHeaderComponentSpecification(
-    const NewFrameComponent& component, JpegBitWriter& bitWriter) {
+    const FrameComponent& component, JpegBitWriter& bitWriter) {
 
     const uint8_t identifier = component.identifier;
     const uint8_t quantizationTableSelector = component.quantizationTableSelector;
@@ -502,9 +502,9 @@ void FileParser::Jpeg::Encoder::writeFrameHeaderComponentSpecification(
     bitWriter << identifier << samplingFactor << quantizationTableSelector;
 }
 
-void FileParser::Jpeg::Encoder::writeFrameHeader(const uint8_t SOF, const NewFrameHeader& frameHeader, JpegBitWriter& bitWriter) {
+void FileParser::Jpeg::Encoder::writeFrameHeader(const uint8_t SOF, const FrameHeader& frameHeader, JpegBitWriter& bitWriter) {
     const uint8_t frameType = SOF;
-    const uint16_t length = 8 + frameHeader.components.size() * 3;
+    const auto length = static_cast<uint16_t>(8 + frameHeader.components.size() * 3);
 
     writeMarker(frameType, bitWriter);
     bitWriter << length << frameHeader.precision << frameHeader.numberOfLines <<
@@ -564,12 +564,12 @@ void FileParser::Jpeg::Encoder::writeQuantizationTable(const QuantizationTable& 
 }
 
 void FileParser::Jpeg::Encoder::writeScanHeaderComponentSpecification(
-    const NewScanHeaderComponent& component, JpegBitWriter& bitWriter) {
+    const ScanComponent& component, JpegBitWriter& bitWriter) {
     const auto tableDestination =  static_cast<uint8_t>((component.dcTableSelector << 4) | component.acTableSelector);
     bitWriter << component.componentSelector << tableDestination;
 }
 
-void FileParser::Jpeg::Encoder::writeScanHeader(const NewScanHeader& scanHeader, JpegBitWriter& bitWriter) {
+void FileParser::Jpeg::Encoder::writeScanHeader(const ScanHeader& scanHeader, JpegBitWriter& bitWriter) {
     writeMarker(SOS, bitWriter);
 
     const auto numComponents = static_cast<uint8_t>(scanHeader.components.size());
@@ -702,18 +702,18 @@ auto FileParser::Jpeg::Encoder::writeJpeg(
     // App data
     // Number of lines (height of image)
     // Frame header
-    NewFrameComponent frameCompY(1, 1, 1, 0);
-    NewFrameComponent frameCompCb(2, 1, 1, 1);
-    NewFrameComponent frameCompCr(3, 1, 1, 1);
+    FrameComponent frameCompY(1, 1, 1, 0);
+    FrameComponent frameCompCb(2, 1, 1, 1);
+    FrameComponent frameCompCr(3, 1, 1, 1);
     std::vector frameComponents{frameCompY, frameCompCb, frameCompCr};
-    NewFrameHeader frameHeader(8, pixelHeight, pixelWidth, frameComponents);
+    FrameHeader frameHeader(8, pixelHeight, pixelWidth, frameComponents);
     writeFrameHeader(SOF0, frameHeader, bitWriter);
     // Scan
-    NewScanHeaderComponent component1(1, 0, 0);
-    NewScanHeaderComponent component2(2, 1, 1);
-    NewScanHeaderComponent component3(3, 1, 1);
+    ScanComponent component1(1, 0, 0);
+    ScanComponent component2(2, 1, 1);
+    ScanComponent component3(3, 1, 1);
     std::vector scanComponents{component1, component2, component3};
-    NewScanHeader scanHeader(scanComponents, 0, 63, 0, 0);
+    ScanHeader scanHeader(scanComponents, 0, 63, 0, 0);
     writeScanHeader(scanHeader, bitWriter);
     // Entropy Data
     writeEncodedMcu(encodedMcus, luminanceDcTable, luminanceAcTable, chrominanceDcTable, chrominanceAcTable, bitWriter);

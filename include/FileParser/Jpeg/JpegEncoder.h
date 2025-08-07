@@ -6,7 +6,6 @@
 #include "FileParser/Jpeg/HuffmanEncoder.hpp"
 #include "FileParser/Jpeg/JpegBitWriter.h"
 #include "FileParser/Jpeg/Mcu.hpp"
-#include "FileParser/Jpeg/QuantizationTable.hpp"
 
 namespace FileParser::Jpeg::Encoder {
     const std::array<float, QuantizationTable::length> LuminanceTable = {
@@ -70,15 +69,15 @@ namespace FileParser::Jpeg::Encoder {
     // Writing to file
     
     void writeMarker(uint8_t marker, JpegBitWriter& bitWriter);
-    void writeFrameHeaderComponentSpecification(const NewFrameComponent& component, JpegBitWriter& bitWriter);
-    void writeFrameHeader(uint8_t SOF, const NewFrameHeader& frameHeader, JpegBitWriter& bitWriter);
+    void writeFrameHeaderComponentSpecification(const FrameComponent& component, JpegBitWriter& bitWriter);
+    void writeFrameHeader(uint8_t SOF, const FrameHeader& frameHeader, JpegBitWriter& bitWriter);
 
     QuantizationTable createQuantizationTable(const std::array<float, 64>& table, int quality, bool is8Bit, uint8_t tableDestination);
     void writeQuantizationTableNoMarker(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter);
     void writeQuantizationTable(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter);
 
-    void writeScanHeaderComponentSpecification(const NewScanHeaderComponent& component, JpegBitWriter& bitWriter);
-    void writeScanHeader(const NewScanHeader& scanHeader, JpegBitWriter& bitWriter);
+    void writeScanHeaderComponentSpecification(const ScanComponent& component, JpegBitWriter& bitWriter);
+    void writeScanHeader(const ScanHeader& scanHeader, JpegBitWriter& bitWriter);
 
     int encodeSSSS(uint8_t SSSS, int value);
     void writeCoefficients(const std::vector<Coefficient>& coefficients,

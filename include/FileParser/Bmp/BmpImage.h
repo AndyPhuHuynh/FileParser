@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "FileParser/Color.h"
-#include "FileParser/Gui/Renderer.h"
 #include "FileParser/Point.h"
 
 namespace FileParser::Bmp {

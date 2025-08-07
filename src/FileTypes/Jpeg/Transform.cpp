@@ -1,6 +1,8 @@
 #include "FileParser/Jpeg/Transform.hpp"
 
 #include <cmath> // NOLINT (needed for simde)
+
+#include "FileParser/Utils.hpp"
 #include "simde/x86/avx512.h"
 
 // Uses AAN DCT
@@ -162,7 +164,7 @@ void FileParser::Jpeg::dequantize(Component& component, const QuantizationTable&
 }
 
 auto FileParser::Jpeg::dequantize(
-    Mcu& mcu, const FrameInfo& frame, const NewScanHeader& scanHeader,
+    Mcu& mcu, const FrameInfo& frame, const ScanHeader& scanHeader,
     const TableIterations& iterations, const std::array<std::vector<QuantizationTable>, 4>& quantizationTables
 ) -> void {
     for (const auto& scanComp : scanHeader.components) {
@@ -347,7 +349,7 @@ void FileParser::Jpeg::forwardDCT(std::vector<Mcu>& mcus) {
 }
 
 void FileParser::Jpeg::quantize(Component& component, const QuantizationTable& quantizationTable) {
-    for (int i = 0; i < Mcu::DataUnitLength; i++) {
+    for (int i = 0; i < Component::length; i++) {
         component[i] = std::round(component[i] / quantizationTable.table.at(i));
     }
 }
@@ -364,4 +366,110 @@ void FileParser::Jpeg::quantize(std::vector<Mcu>& mcus, const QuantizationTable&
     for (auto& mcu : mcus) {
         quantize(mcu, luminanceTable, chrominanceTable);
     }
+}
+
+auto FileParser::Jpeg::YCbCrToRGB(float y, const float cb, const float cr) -> RGB {
+    y += 128; // Shift Y up into the range [0, 255] (part of JPEG)
+    const float r = y               + 1.402f * cr;
+    const float g = y - 0.344f * cb - 0.714f * cr;
+    const float b = y + 1.772f * cb;
+
+    return {
+        .r = std::clamp(r, 0.0f, 255.0f),
+        .g = std::clamp(g, 0.0f, 255.0f),
+        .b = std::clamp(b, 0.0f, 255.0f),
+    };
+}
+
+auto FileParser::Jpeg::RGBToYCbCr(const float r, const float g, const float b) -> YCbCr {
+    // Subtract 128 to get Y into the range [-128, 127]
+    const float y =      0.299f * r +    0.587f * g +    0.114f *  b - 128;
+    const float cb = -0.168736f * r - 0.331264f * g +      0.5f *  b;
+    const float cr =       0.5f * r - 0.418688f * g - 0.081312f *  b;
+    return {
+        .y = y,
+        .cb = cb,
+        .cr = cr
+    };
+}
+
+auto FileParser::Jpeg::generateColorBlocks(const Mcu& mcu) -> std::vector<ColorBlock> {
+    std::vector colorBlocks(mcu.Y.size(), ColorBlock());
+    for (size_t blockIndex = 0; blockIndex < mcu.Y.size(); blockIndex++) {
+        auto& [R, G, B] = colorBlocks[blockIndex];
+
+        for (size_t pixelIndex = 0; pixelIndex < Component::length; pixelIndex++) {
+            const size_t colorIndex = mcu.getColorIndex(blockIndex, pixelIndex);
+            auto [r, g, b] = YCbCrToRGB(mcu.Y[blockIndex][pixelIndex], mcu.Cb[colorIndex], mcu.Cr[colorIndex]);
+            R[pixelIndex] = r;
+            G[pixelIndex] = g;
+            B[pixelIndex] = b;
+        }
+    }
+
+    return colorBlocks;
+}
+
+auto FileParser::Jpeg::convertMcusToColorBlocks(const std::vector<Mcu>& mcus, const size_t pixelWidth,
+                                                const size_t pixelHeight) -> std::vector<ColorBlock> {
+    if (mcus.empty()) {
+        return {};
+    }
+
+    constexpr size_t blockSideLength = 8;
+    const size_t blockWidth  = utils::ceilDivide(pixelWidth, blockSideLength);
+    const size_t blockHeight = utils::ceilDivide(pixelHeight, blockSideLength);
+
+    const int horizontal =  mcus[0].horizontalSampleSize;
+    const int vertical   =  mcus[0].verticalSampleSize;
+
+    const size_t mcuTotalWidth  = utils::ceilDivide(blockWidth, static_cast<size_t>(horizontal));
+    std::vector result(blockWidth * blockHeight , ColorBlock());
+
+    for (size_t mcuIndex = 0; mcuIndex < mcus.size(); mcuIndex++) {
+        const size_t mcuRow = mcuIndex / mcuTotalWidth;
+        const size_t mcuCol = mcuIndex % mcuTotalWidth;
+
+        auto colors = generateColorBlocks(mcus[mcuIndex]);
+        for (size_t colorIndex = 0; colorIndex < colors.size(); colorIndex++) {
+            const size_t colorRow = colorIndex / horizontal;
+            const size_t colorCol = colorIndex % horizontal;
+
+            const size_t blockRow = mcuRow * vertical   + colorRow;
+            const size_t blockCol = mcuCol * horizontal + colorCol;
+
+            if (blockRow < blockHeight && blockCol < blockWidth) {
+                result[blockRow * blockWidth + blockCol] = colors[colorIndex];
+            }
+        }
+    }
+    return result;
+}
+
+auto FileParser::Jpeg::getRawRGBData(
+    const std::vector<ColorBlock>& colorBlocks, const size_t pixelWidth, const size_t pixelHeight
+) -> std::vector<uint8_t> {
+    std::vector<uint8_t> rgbData;
+    rgbData.reserve(pixelWidth * pixelHeight * 3);
+
+    constexpr size_t blockSideLength = 8;
+    const size_t blockWidth = utils::ceilDivide(pixelWidth, blockSideLength);
+    for (size_t y = 0; y < pixelHeight; y++) {
+        for (size_t x = 0; x < pixelWidth; x++) {
+            const size_t blockRow = y / blockSideLength;
+            const size_t blockCol = x / blockSideLength;
+
+            const size_t colorRow = y % blockSideLength;
+            const size_t colorCol = x % blockSideLength;
+
+            const size_t blockIndex = blockRow * blockWidth + blockCol;
+            const size_t colorIndex = colorRow * blockSideLength + colorCol;
+
+            const auto& [R, G, B] = colorBlocks[blockIndex];
+            rgbData.push_back(static_cast<uint8_t>(std::clamp(R[colorIndex], 0.0f, 255.0f)));
+            rgbData.push_back(static_cast<uint8_t>(std::clamp(G[colorIndex], 0.0f, 255.0f)));
+            rgbData.push_back(static_cast<uint8_t>(std::clamp(B[colorIndex], 0.0f, 255.0f)));
+        }
+    }
+    return rgbData;
 }

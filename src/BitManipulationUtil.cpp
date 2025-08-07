@@ -106,55 +106,55 @@ void PutShort(uint8_t*& bufferPos, const int value) {
     *bufferPos++ = static_cast<unsigned char>(value >> 8);
 }
 
-NewBitReader::NewBitReader(const std::vector<uint8_t>& bytes) {
+BitReader::BitReader(const std::vector<uint8_t>& bytes) {
     m_bytes = bytes;
 }
 
-NewBitReader::NewBitReader(std::vector<uint8_t>&& bytes) {
+BitReader::BitReader(std::vector<uint8_t>&& bytes) {
     m_bytes = std::move(bytes);
 }
 
-auto NewBitReader::getBit() -> uint8_t {
+auto BitReader::getBit() -> uint8_t {
     const auto result = getUInt8();
     skipBits(1);
     return result;
 }
 
-auto NewBitReader::getNBits(const size_t numBits) -> uint64_t {
+auto BitReader::getNBits(const size_t numBits) -> uint64_t {
     const auto result = peekNBits(numBits);
     skipBits(numBits);
     return result;
 }
 
-auto NewBitReader::getUInt8() -> uint8_t {
+auto BitReader::getUInt8() -> uint8_t {
     const auto result = peekUInt8();
     skipBits(8);
     return result;
 }
 
-auto NewBitReader::getUInt16() -> uint16_t {
+auto BitReader::getUInt16() -> uint16_t {
     const auto result = peekUInt16();
     skipBits(16);
     return result;
 }
 
-auto NewBitReader::getUInt32() -> uint32_t {
+auto BitReader::getUInt32() -> uint32_t {
     const auto result = peekUInt32();
     skipBits(32);
     return result;
 }
 
-auto NewBitReader::getUInt64() -> uint64_t {
+auto BitReader::getUInt64() -> uint64_t {
     const auto result = peekUInt64();
     skipBits(64);
     return result;
 }
 
-auto NewBitReader::peekBit() const -> uint8_t {
+auto BitReader::peekBit() const -> uint8_t {
     return static_cast<uint8_t>((m_bytes[m_byteIndex] >> (7 - m_bitPosition)) & 1);
 }
 
-auto NewBitReader::peekNBits(const size_t numBits) const -> uint64_t {
+auto BitReader::peekNBits(const size_t numBits) const -> uint64_t {
     if (numBits == 0) return 0;
     if (numBits > 64) {
         throw std::invalid_argument("Number of bits to read must be in the range [0, 64]");
@@ -191,40 +191,40 @@ auto NewBitReader::peekNBits(const size_t numBits) const -> uint64_t {
     return result;
 }
 
-auto NewBitReader::peekUInt8() const -> uint8_t {
+auto BitReader::peekUInt8() const -> uint8_t {
     return static_cast<uint8_t>(peekNBits(8));
 }
 
-auto NewBitReader::peekUInt16() const -> uint16_t {
+auto BitReader::peekUInt16() const -> uint16_t {
     return static_cast<uint16_t>(peekNBits(16));
 }
 
-auto NewBitReader::peekUInt32() const -> uint32_t {
+auto BitReader::peekUInt32() const -> uint32_t {
     return static_cast<uint32_t>(peekNBits(32));
 }
 
-auto NewBitReader::peekUInt64() const -> uint64_t {
+auto BitReader::peekUInt64() const -> uint64_t {
     return peekNBits(64);
 }
 
-auto NewBitReader::skipBits(const size_t numBits) -> void {
+auto BitReader::skipBits(const size_t numBits) -> void {
     constexpr size_t bitsInByte = 8;
     m_bitPosition += numBits;
     m_byteIndex   += m_bitPosition / bitsInByte;
     m_bitPosition  = m_bitPosition % bitsInByte;
 }
 
-auto NewBitReader::alignToByte() -> void {
+auto BitReader::alignToByte() -> void {
     if (m_bitPosition == 0) return;
     m_bitPosition = 0;
     m_byteIndex++;
 }
 
-auto NewBitReader::reachedEnd() const -> bool {
-    return m_byteIndex >= static_cast<int>(m_bytes.size());
+auto BitReader::reachedEnd() const -> bool {
+    return m_byteIndex >= m_bytes.size();
 }
 
-auto NewBitReader::addByte(const uint8_t byte) -> void {
+auto BitReader::addByte(const uint8_t byte) -> void {
     m_bytes.push_back(byte);
 }
 

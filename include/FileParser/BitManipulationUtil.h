@@ -117,11 +117,11 @@ struct BitField {
     BitField(T value, const int bitCount) : value(value), bitCount(bitCount) {}
 };
 
-class NewBitReader {
+class BitReader {
 public:
-    NewBitReader() = default;
-    explicit NewBitReader(const std::vector<uint8_t>& bytes);
-    explicit NewBitReader(std::vector<uint8_t>&& bytes);
+    BitReader() = default;
+    explicit BitReader(const std::vector<uint8_t>& bytes);
+    explicit BitReader(std::vector<uint8_t>&& bytes);
 
     auto getBit() -> uint8_t;
     auto getNBits(size_t numBits) -> uint64_t;
