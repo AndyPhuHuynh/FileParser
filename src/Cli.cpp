@@ -8,7 +8,6 @@
 #include <unordered_map>
 
 #include "FileParser/Bmp/BmpImage.h"
-#include "FileParser/Bmp/BmpJpegConverter.h"
 #include "FileParser/FileUtil.h"
 #include "FileParser/Jpeg/Decoder.hpp"
 #include "FileParser/Jpeg/JpegEncoder.h"
@@ -70,7 +69,7 @@ static void Render(const std::vector<std::string>& args) {
 
     switch (getFileType(filepath)) {
         case FileType::Bmp: {
-            Bmp::BmpImage bmp(filepath);
+            // Bmp::BmpImage bmp(filepath);
             break;
         }
         case FileType::Jpeg: {
@@ -113,7 +112,7 @@ static void Convert(const std::vector<std::string>& args) {
     
     switch (getFileType(filepath)) {
         case FileType::Bmp: {
-            Bmp::BmpImage bmp(filepath);
+            // Bmp::BmpImage bmp(filepath);
             switch (newFormat) {
                 case FileType::Bmp: {
                     break;
@@ -123,7 +122,7 @@ static void Convert(const std::vector<std::string>& args) {
                     settings.luminanceQuality = 100;
                     settings.chrominanceQuality = 100;
                     settings.optimizeHuffmanTables = true;
-                    Bmp::Converter::writeBmpAsJpeg(bmp, newFilepath, settings);
+                    // Bmp::Converter::writeBmpAsJpeg(bmp, newFilepath, settings);
                     break;
                 }
                 case FileType::None: {

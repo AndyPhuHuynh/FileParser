@@ -1,7 +1,6 @@
 #include "FileParser/Jpeg/HuffmanBuilder.hpp"
 
 #include <array>
-#include <fstream>
 #include <numeric>
 
 #include "FileParser/BitManipulationUtil.h"

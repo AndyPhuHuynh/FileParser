@@ -58,6 +58,15 @@ auto read_uint8(std::ifstream& file, const std::streamsize n) -> std::expected<s
     return bytes;
 }
 
+auto read_uint16_le(std::ifstream& file) -> std::expected<uint16_t, std::string> {
+    uint8_t bytes[2];
+    file.read(reinterpret_cast<char*>(bytes), 2);
+    if (!file) {
+        return getReadBytesErrorMsg(2);
+    }
+    return static_cast<uint16_t>((bytes[1] << 8) | static_cast<uint16_t>(bytes[0]));
+}
+
 auto read_uint16_be(std::ifstream& file) -> std::expected<uint16_t, std::string> {
     uint8_t bytes[2];
     file.read(reinterpret_cast<char*>(bytes), 2);
@@ -77,6 +86,15 @@ auto read_uint16_be(std::ifstream& file, const std::streamsize n) -> std::expect
         words[i] = static_cast<uint16_t>((*bytes)[2 * i] << 8 | (*bytes)[2 * i + 1]);
     }
     return words;
+}
+
+auto read_uint32_le(std::ifstream& file) -> std::expected<uint32_t, std::string> {
+    uint8_t bytes[4];
+    file.read(reinterpret_cast<char*>(bytes), 4);
+    if (!file) {
+        return getReadBytesErrorMsg(4);
+    }
+    return static_cast<uint32_t>(bytes[0] | bytes[1] << 8 | bytes[2] << 16 | bytes[3] << 24);
 }
 
 auto read_string(std::ifstream& file, const std::streamsize n) -> std::expected<std::string, std::string> {

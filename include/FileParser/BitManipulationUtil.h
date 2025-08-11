@@ -63,8 +63,12 @@ uint16_t SwapBytes(uint16_t value);
 [[nodiscard]] auto read_uint8(std::ifstream& file) -> std::expected<uint8_t, std::string>;
 [[nodiscard]] auto read_uint8(std::ifstream& file, std::streamsize n) -> std::expected<std::vector<uint8_t>, std::string>;
 
+[[nodiscard]] auto read_uint16_le(std::ifstream& file) -> std::expected<uint16_t, std::string>;
+
 [[nodiscard]] auto read_uint16_be(std::ifstream& file) -> std::expected<uint16_t, std::string>;
 [[nodiscard]] auto read_uint16_be(std::ifstream& file, std::streamsize n) -> std::expected<std::vector<uint16_t>, std::string>;
+
+[[nodiscard]] auto read_uint32_le(std::ifstream& file) -> std::expected<uint32_t, std::string>;
 
 [[nodiscard]] auto read_string(std::ifstream& file, std::streamsize n) -> std::expected<std::string, std::string>;
 

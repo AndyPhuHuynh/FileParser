@@ -1,7 +1,7 @@
 #pragma once
 
-#include <complex.h>
 #include <expected>
+#include <string>
 
 #include "FileParser/Huffman/Table.hpp"
 
@@ -20,8 +20,7 @@ namespace FileParser::Jpeg {
              * @note If the DHT segment contains multiple Huffman tables, call this function repeatedly, updating the
              * file position each time, to read each table in sequence
              */
-            static auto readFromFile(std::ifstream& file) -> std::expected<
-                HuffmanTable, std::string>;
+            static auto readFromFile(std::ifstream& file) -> std::expected<HuffmanTable, std::string>;
 
             /**
              * @param symbols The list of symbols to be encoded.

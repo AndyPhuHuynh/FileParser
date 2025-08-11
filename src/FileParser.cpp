@@ -3,6 +3,9 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include "FileParser/FileUtil.h"
+#include "FileParser/Utils.hpp"
+#include "FileParser/Bmp/BmpImage.h"
 #include "FileParser/Jpeg/Decoder.hpp"
 
 // Vertex and fragment shaders for rendering a textured quad
@@ -70,6 +73,30 @@ GLuint compileShaders(const char* vertSrc, const char* fragSrc) {
     return shaderProgram;
 }
 
+auto decodeImage(const std::filesystem::path& filePath) -> std::expected<FileParser::Image, std::string> {
+    using namespace FileUtils;
+    const FileType fileType = getFileType(filePath.string());
+    switch (fileType) {
+        case FileType::Bmp: {
+            const auto img = FileParser::Bmp::decode(filePath);
+            if (!img) {
+                return FileParser::utils::getUnexpected(img, "Unable to parse bmp");
+            }
+            return img;
+        }
+        case FileType::Jpeg: {
+            const auto img = FileParser::Bmp::decode(filePath);
+            if (!img) {
+                return FileParser::utils::getUnexpected(img, "Unable to parse jpeg");
+            }
+            return img;
+        }
+        case FileType::None:
+            return std::unexpected<std::string>("File type not recognised");
+    }
+    return std::unexpected<std::string>("File type not recognised");
+}
+
 int main(const int argc, const char** argv) {
     if (!glfwInit()) {
         std::cerr << "Error: Failed to initialize GLFW." << std::endl;
@@ -81,9 +108,10 @@ int main(const int argc, const char** argv) {
         return -1;
     }
 
-    auto image = FileParser::Jpeg::JpegDecoder::decode(argv[1]);
+    auto image = decodeImage(argv[1]);
     if (!image) {
         std::cout << "Failed to decode jpeg: " << image.error() << '\n';
+        return 0;
     }
 
     // Create window
