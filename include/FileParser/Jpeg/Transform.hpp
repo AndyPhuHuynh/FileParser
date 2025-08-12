@@ -36,11 +36,12 @@ namespace FileParser::Jpeg {
     // Quantization
 
     void dequantize(Component& component, const QuantizationTable& quantizationTable);
-    void dequantize(Mcu& mcu, const FrameInfo& frame, const ScanHeader& scanHeader,
-        const TableIterations& iterations, const std::array<std::vector<QuantizationTable>, 4>& quantizationTables);
 
-    void quantize(Component& component, const QuantizationTable& quantizationTable);
-    void quantize(Mcu& mcu, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
+    std::expected<void, std::string> dequantize(Mcu& mcu, const FrameInfo& frame, const ScanHeader& scanHeader,
+                                                const std::array<const QuantizationTable *, 4>& quantizationTables);
+
+    void quantize(Component& component,   const QuantizationTable& quantizationTable);
+    void quantize(Mcu& mcu,               const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
     void quantize(std::vector<Mcu>& mcus, const QuantizationTable& luminanceTable, const QuantizationTable& chrominanceTable);
 
     // Color conversion
@@ -50,7 +51,7 @@ namespace FileParser::Jpeg {
     auto YCbCrToRGB(float y, float cb, float cr) -> RGB;
     auto RGBToYCbCr(float r, float g, float b) -> YCbCr;
 
-    auto generateColorBlocks(const Mcu& mcu) -> std::vector<ColorBlock>;
-    auto convertMcusToColorBlocks(const std::vector<Mcu>& mcus, size_t pixelWidth, size_t pixelHeight) -> std::vector<ColorBlock>;
-    auto getRawRGBData(const std::vector<ColorBlock>& colorBlocks, size_t pixelWidth, size_t pixelHeight) -> std::vector<uint8_t>;
+    auto generateColorBlocks(const Mcu& mcu) -> std::vector<RGBBlock>;
+    auto convertMcusToColorBlocks(const std::vector<Mcu>& mcus, size_t pixelWidth, size_t pixelHeight) -> std::vector<RGBBlock>;
+    auto getRawRGBData(const std::vector<RGBBlock>& colorBlocks, size_t pixelWidth, size_t pixelHeight) -> std::vector<uint8_t>;
 }

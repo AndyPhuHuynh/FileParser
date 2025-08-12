@@ -14,7 +14,7 @@ auto FileParser::Jpeg::Component::operator[](const size_t index) const -> const 
     return data[index];
 }
 
-void FileParser::Jpeg::ColorBlock::rgbToYCbCr() {
+void FileParser::Jpeg::RGBBlock::rgbToYCbCr() {
     for (size_t i = 0; i < Component::length; i++) {
         auto [y, cb, cr] = RGBToYCbCr(R[i], G[i], B[i]);
         R[i] = y;
@@ -27,12 +27,13 @@ size_t FileParser::Jpeg::Mcu::getColorIndex(const size_t blockIndex, const size_
     const size_t blockRow = blockIndex / horizontalSampleSize;
     const size_t blockCol = blockIndex % horizontalSampleSize;
 
+    constexpr size_t blockWidth  = 8;
     constexpr size_t blockHeight = 8;
-    const size_t pixelRow = pixelIndex / blockHeight;
-    const size_t pixelCol = pixelIndex % blockHeight;
+    const size_t pixelRow = pixelIndex / blockWidth;
+    const size_t pixelCol = pixelIndex % blockWidth;
 
     const size_t chromaRow = (blockRow * blockHeight + pixelRow) / verticalSampleSize;
-    const size_t chromaCol = (blockCol * blockHeight + pixelCol) / horizontalSampleSize;
+    const size_t chromaCol = (blockCol * blockWidth + pixelCol) / horizontalSampleSize;
 
     return chromaRow * blockHeight + chromaCol;
 }
@@ -49,8 +50,8 @@ FileParser::Jpeg::Mcu::Mcu(const int horizontalSampleSize, const int verticalSam
     this->verticalSampleSize = verticalSampleSize;
 }
 
-FileParser::Jpeg::Mcu::Mcu(const ColorBlock& colorBlock) {
-    ColorBlock copy = colorBlock;
+FileParser::Jpeg::Mcu::Mcu(const RGBBlock& colorBlock) {
+    RGBBlock copy = colorBlock;
     copy.rgbToYCbCr();
     Y.push_back({});
     for (size_t i = 0; i < Component::length; i++) {

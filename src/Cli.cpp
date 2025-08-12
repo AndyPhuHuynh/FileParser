@@ -74,7 +74,7 @@ static void Render(const std::vector<std::string>& args) {
         }
         case FileType::Jpeg: {
             uint16_t width, height;
-            const auto& image = Jpeg::JpegDecoder::decode(filepath);
+            const auto& image = Jpeg::Decoder::decode(filepath);
             if (!image) {
                 std::cerr << "Error: Failed to decode Jpeg file: " << filepath << ": " << image.error() << '\n';
                 return;
@@ -153,7 +153,7 @@ static void Test(const std::vector<std::string>& args) {
     using namespace Jpeg::Encoder;
 
     const std::string& filepath = args[1];
-    const auto result = JpegParser::parseFile(filepath);
+    const auto result = Parser::parseFile(filepath);
     if (!result) {
         std::cerr << "Error: Failed to parse file: " << filepath << " " << result.error() << '\n';
     }

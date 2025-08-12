@@ -43,6 +43,7 @@ GLuint createTexture(const FileParser::Image& img) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     // Upload data to GPU
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);  // Set to 1 for RGB data
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,
         static_cast<int>(img.getWidth()),
         static_cast<int>(img.getHeight()),
@@ -85,7 +86,7 @@ auto decodeImage(const std::filesystem::path& filePath) -> std::expected<FilePar
             return img;
         }
         case FileType::Jpeg: {
-            const auto img = FileParser::Bmp::decode(filePath);
+            const auto img = FileParser::Jpeg::Decoder::decode(filePath);
             if (!img) {
                 return FileParser::utils::getUnexpected(img, "Unable to parse jpeg");
             }
@@ -96,6 +97,11 @@ auto decodeImage(const std::filesystem::path& filePath) -> std::expected<FilePar
     }
     return std::unexpected<std::string>("File type not recognised");
 }
+
+#include <fstream>
+#include <vector>
+#include <iostream>
+#include <cstring>
 
 int main(const int argc, const char** argv) {
     if (!glfwInit()) {
@@ -110,7 +116,7 @@ int main(const int argc, const char** argv) {
 
     auto image = decodeImage(argv[1]);
     if (!image) {
-        std::cout << "Failed to decode jpeg: " << image.error() << '\n';
+        std::cout << "Error: " << image.error() << '\n';
         return 0;
     }
 

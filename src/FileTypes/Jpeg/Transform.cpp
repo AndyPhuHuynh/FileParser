@@ -2,6 +2,7 @@
 
 #include <cmath> // NOLINT (needed for simde)
 
+#include "FileParser/Macros.hpp"
 #include "FileParser/Utils.hpp"
 #include "simde/x86/avx512.h"
 
@@ -164,21 +165,29 @@ void FileParser::Jpeg::dequantize(Component& component, const QuantizationTable&
 }
 
 auto FileParser::Jpeg::dequantize(
-    Mcu& mcu, const FrameInfo& frame, const ScanHeader& scanHeader,
-    const TableIterations& iterations, const std::array<std::vector<QuantizationTable>, 4>& quantizationTables
-) -> void {
+    Mcu& mcu,
+    const FrameInfo& frame,
+    const ScanHeader& scanHeader,
+    const std::array<const QuantizationTable *, 4>& quantizationTables
+) -> std::expected<void, std::string> {
     for (const auto& scanComp : scanHeader.components) {
-        const auto& qTable = quantizationTables[scanComp.dcTableSelector][iterations.quantization[scanComp.dcTableSelector]];
+        READ_OR_RETURN(frameComp, frame.header.getComponent(scanComp.componentSelector), "");
+        const auto qTable = quantizationTables[frameComp.quantizationTableSelector];
+        if (qTable == nullptr) {
+            return std::unexpected("Quantization table was undefined");
+        }
+
         if (scanComp.componentSelector == frame.luminanceID) {
             for (auto& y : mcu.Y) {
-                dequantize(y, qTable);
+                dequantize(y, *qTable);
             }
         } else if (scanComp.componentSelector == frame.chrominanceBlueID) {
-            dequantize(mcu.Cb, qTable);
+            dequantize(mcu.Cb, *qTable);
         } else if (scanComp.componentSelector == frame.chrominanceRedID) {
-            dequantize(mcu.Cr, qTable);
+            dequantize(mcu.Cr, *qTable);
         }
     }
+    return {};
 }
 
 void FileParser::Jpeg::forwardDCT(Component& component) {
@@ -393,8 +402,8 @@ auto FileParser::Jpeg::RGBToYCbCr(const float r, const float g, const float b) -
     };
 }
 
-auto FileParser::Jpeg::generateColorBlocks(const Mcu& mcu) -> std::vector<ColorBlock> {
-    std::vector colorBlocks(mcu.Y.size(), ColorBlock());
+auto FileParser::Jpeg::generateColorBlocks(const Mcu& mcu) -> std::vector<RGBBlock> {
+    std::vector colorBlocks(mcu.Y.size(), RGBBlock());
     for (size_t blockIndex = 0; blockIndex < mcu.Y.size(); blockIndex++) {
         auto& [R, G, B] = colorBlocks[blockIndex];
 
@@ -411,7 +420,7 @@ auto FileParser::Jpeg::generateColorBlocks(const Mcu& mcu) -> std::vector<ColorB
 }
 
 auto FileParser::Jpeg::convertMcusToColorBlocks(const std::vector<Mcu>& mcus, const size_t pixelWidth,
-                                                const size_t pixelHeight) -> std::vector<ColorBlock> {
+                                                const size_t pixelHeight) -> std::vector<RGBBlock> {
     if (mcus.empty()) {
         return {};
     }
@@ -424,7 +433,7 @@ auto FileParser::Jpeg::convertMcusToColorBlocks(const std::vector<Mcu>& mcus, co
     const int vertical   =  mcus[0].verticalSampleSize;
 
     const size_t mcuTotalWidth  = utils::ceilDivide(blockWidth, static_cast<size_t>(horizontal));
-    std::vector result(blockWidth * blockHeight , ColorBlock());
+    std::vector result(blockWidth * blockHeight , RGBBlock());
 
     for (size_t mcuIndex = 0; mcuIndex < mcus.size(); mcuIndex++) {
         const size_t mcuRow = mcuIndex / mcuTotalWidth;
@@ -447,7 +456,7 @@ auto FileParser::Jpeg::convertMcusToColorBlocks(const std::vector<Mcu>& mcus, co
 }
 
 auto FileParser::Jpeg::getRawRGBData(
-    const std::vector<ColorBlock>& colorBlocks, const size_t pixelWidth, const size_t pixelHeight
+    const std::vector<RGBBlock>& colorBlocks, const size_t pixelWidth, const size_t pixelHeight
 ) -> std::vector<uint8_t> {
     std::vector<uint8_t> rgbData;
     rgbData.reserve(pixelWidth * pixelHeight * 3);

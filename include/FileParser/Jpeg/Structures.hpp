@@ -4,6 +4,8 @@
 #include <vector>
 
 namespace FileParser::Jpeg {
+    constexpr size_t MaxTableId = 4;
+
     struct FrameComponent {
         uint8_t identifier = 0;
         uint8_t horizontalSamplingFactor = 0;
@@ -17,6 +19,12 @@ namespace FileParser::Jpeg {
         uint16_t numberOfLines = 0;
         uint16_t numberOfSamplesPerLine = 0;
         std::vector<FrameComponent> components;
+
+        [[nodiscard]] auto getComponent(uint8_t id) const -> std::expected<FrameComponent, std::string> {
+            const auto it = std::ranges::find_if(components, [id](const FrameComponent& c) { return c.identifier == id; });
+            if (it == components.end()) return std::unexpected(std::format("Unable to find frame component with id {}", id));
+            return *it;
+        }
     };
 
     struct ScanComponent {
@@ -35,9 +43,9 @@ namespace FileParser::Jpeg {
 
     // Tables can be overridden in progressive Jpegs. This struct tells you which iteration of each table to use
     struct TableIterations {
-        std::array<size_t, 4> quantization{};
-        std::array<size_t, 4> dc{};
-        std::array<size_t, 4> ac{};
+        std::array<size_t, MaxTableId> quantization{};
+        std::array<size_t, MaxTableId> dc{};
+        std::array<size_t, MaxTableId> ac{};
     };
 
     struct Scan {

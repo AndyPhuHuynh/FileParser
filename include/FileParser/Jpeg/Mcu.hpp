@@ -12,7 +12,7 @@ namespace FileParser::Jpeg {
         auto operator[](size_t index) const -> const float&;
     };
 
-    struct ColorBlock {
+    struct RGBBlock {
         Component R{};
         Component G{};
         Component B{};
@@ -28,7 +28,7 @@ namespace FileParser::Jpeg {
 
         Mcu();
         Mcu(int horizontalSampleSize, int verticalSampleSize);
-        explicit Mcu(const ColorBlock& colorBlock);
+        explicit Mcu(const RGBBlock& colorBlock);
 
         // Given the index of the luminance block and the pixel index (0-63) within that block, get the index to the
         // corresponding pixel in Cb and Cr

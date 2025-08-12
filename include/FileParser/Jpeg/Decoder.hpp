@@ -2,7 +2,6 @@
 
 #include <array>
 #include <expected>
-#include <expected>
 #include <filesystem>
 #include <vector>
 
@@ -46,6 +45,9 @@ namespace FileParser::Jpeg {
         int s;
     };
 
+    using QuantizationTablePtrs = std::array<const QuantizationTable *, MaxTableId>;
+    using HuffmanTablePtrs      = std::array<const HuffmanTable *,      MaxTableId>;
+
     struct JpegData {
         FrameInfo frameInfo;
         uint16_t lastSetRestartInterval = 0;
@@ -56,9 +58,9 @@ namespace FileParser::Jpeg {
         HuffmanTables huffmanTables;
     };
 
-    using PreviousDC = std::array<int, 3>;
+    using PreviousDC = std::map<int, int>;
 
-    class JpegParser {
+    class Parser {
         [[nodiscard]] static auto parseFrameComponent(std::ifstream& file) -> std::expected<FrameComponent, std::string>;
         [[nodiscard]] static auto parseFrameHeader(std::ifstream& file, uint8_t SOF) -> std::expected<FrameHeader, std::string>;
         [[nodiscard]] static auto parseDNL(std::ifstream& file) -> std::expected<uint16_t, std::string>;
@@ -77,43 +79,43 @@ namespace FileParser::Jpeg {
         [[nodiscard]] static auto parseFile(const std::filesystem::path& filePath) -> std::expected<JpegData, std::string>;
     };
 
-    class JpegDecoder {
+    class Decoder {
         [[nodiscard]] static auto isEOB(int r, int s) -> bool;
         [[nodiscard]] static auto isZRL(int r, int s) -> bool;
 
         // Given the SSSS category, read that many bits from the BitReader and decode its value
-        static auto decodeSSSS(BitReader& bitReader, int SSSS) -> int;
-        static auto decodeNextValue(BitReader& bitReader, const HuffmanTable& table) -> uint8_t;
+        static auto decodeSSSS         (BitReader& bitReader, int SSSS) -> int;
+        static auto decodeNextValue    (BitReader& bitReader, const HuffmanTable& huffmanTable) -> uint8_t;
         static auto decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) -> int;
         static auto decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) -> ACCoefficientResult;
 
         [[nodiscard]] static auto decodeComponent(
             BitReader& bitReader,
             const ScanComponent& scanComp,
-            const TableIterations& iterations,
-            const HuffmanTables& huffmanTables,
+            const HuffmanTablePtrs& dcTables,
+            const HuffmanTablePtrs& acTables,
             PreviousDC& prevDc) -> std::expected<Component, std::string>;
 
         [[nodiscard]] static auto decodeMcu(
             BitReader& bitReader,
             const FrameInfo& frame,
             const ScanHeader& scanHeader,
-            const TableIterations& iterations,
-            const HuffmanTables& huffmanTables,
+            const HuffmanTablePtrs& dcTables,
+            const HuffmanTablePtrs& acTables,
             PreviousDC& prevDc) -> std::expected<Mcu, std::string>;
 
         [[nodiscard]] static auto decodeRSTSegment(
             const FrameInfo& frame,
             const ScanHeader& scanHeader,
-            const TableIterations& iterations,
-            const HuffmanTables& huffmanTables,
+            const HuffmanTablePtrs& dcTables,
+            const HuffmanTablePtrs& acTables,
             uint16_t restartInterval,
             const std::vector<uint8_t>& rstData) -> std::expected<std::vector<Mcu>, std::string>;
 
         [[nodiscard]] static auto decodeScan(
             const FrameInfo& frame,
             const Scan& scan,
-            const HuffmanTables& huffmanTables) -> std::expected<std::vector<Mcu>, std::string>;
+            const HuffmanTablePtrs& dcTables, const HuffmanTablePtrs& acTables) -> std::expected<std::vector<Mcu>, std::string>;
     public:
         [[nodiscard]] static auto decode(const std::filesystem::path& filePath) -> std::expected<Image, std::string>;
     };
