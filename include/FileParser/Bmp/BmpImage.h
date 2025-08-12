@@ -2,7 +2,6 @@
 
 #include <expected>
 #include <filesystem>
-#include <fstream>
 #include <vector>
 
 #include "FileParser/Image.hpp"
@@ -54,13 +53,17 @@ namespace FileParser::Bmp {
         std::vector<Color> colorTable;
     };
 
+    auto calculateRowSize(uint16_t bitCount, uint32_t width) -> uint32_t;
+
     auto parseHeader(std::ifstream& file) -> std::expected<BmpHeader, std::string>;
     auto parseInfo(std::ifstream& file) -> std::expected<BmpInfo, std::string>;
     auto parseColorTable(std::ifstream& file, int numColors) -> std::expected<std::vector<Color>, std::string>;
     auto parseImageData(std::ifstream& file, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
 
-    auto parseRow24BitNoCompression(std::ifstream& file, std::vector<uint8_t>& data, int rowSize) -> std::expected<void, std::string>;
-    auto parseRowByteOrLessNoCompression(std::ifstream& file, std::vector<uint8_t>& data, const BmpData& bmpData, int rowSize) -> std::expected<void, std::string>;
+    auto parseImageDataMonochrome(std::ifstream& file, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
+    auto parseImageData4BitNoCompression(std::ifstream& file, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
+    auto parseImageData8BitNoCompression(std::ifstream& file, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
+    auto parseImageData24Bit(std::ifstream& file, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
 
     auto decode(const std::filesystem::path& filePath) -> std::expected<Image, std::string>;
 }
