@@ -1,16 +1,13 @@
 #include "FileParser/Jpeg/Transform.hpp"
 
-#include <cmath> // NOLINT (needed for simde)
-
 #include "FileParser/Macros.hpp"
 #include "FileParser/Utils.hpp"
-#include "simde/x86/avx512.h"
 
 // Uses AAN DCT
 void FileParser::Jpeg::inverseDCT(Component& array) {
     float results[64];
     // Calculates the rows
-    for (int i = 0; i < 8; i++) {
+    for (size_t i = 0; i < 8; i++) {
          const float g0 = array[0 * 8 + i] * s0;
          const float g1 = array[4 * 8 + i] * s4;
          const float g2 = array[2 * 8 + i] * s2;
@@ -78,7 +75,7 @@ void FileParser::Jpeg::inverseDCT(Component& array) {
          results[7 * 8 + i] = b0 - b7;
      }
     // Calculates the columns
-    for (int i = 0; i < 8; i++) {
+    for (size_t i = 0; i < 8; i++) {
         const float g0 = results[i * 8 + 0] * s0;
         const float g1 = results[i * 8 + 4] * s4;
         const float g2 = results[i * 8 + 2] * s2;
@@ -156,11 +153,8 @@ void FileParser::Jpeg::inverseDCT(Mcu& mcu) {
 }
 
 void FileParser::Jpeg::dequantize(Component& component, const QuantizationTable& quantizationTable) {
-    for (size_t i = 0; i < Component::length; i += 16) {
-        const simde__m512 arrayVec = simde_mm512_loadu_ps(&component[i]);
-        const simde__m512 quantTableVec = simde_mm512_loadu_ps(&quantizationTable.table[i]);
-        const simde__m512 resultVec = simde_mm512_mul_ps(arrayVec, quantTableVec);
-        simde_mm512_storeu_ps(&component[i], resultVec);
+    for (size_t i = 0; i < Component::length; i++) {
+        component[i] *= quantizationTable[i];
     }
 }
 
@@ -191,7 +185,7 @@ auto FileParser::Jpeg::dequantize(
 }
 
 void FileParser::Jpeg::forwardDCT(Component& component) {
-    for (int i = 0; i < 8; ++i) {
+    for (size_t i = 0; i < 8; ++i) {
         const float a0 = component[0 * 8 + i];
         const float a1 = component[1 * 8 + i];
         const float a2 = component[2 * 8 + i];
@@ -266,7 +260,7 @@ void FileParser::Jpeg::forwardDCT(Component& component) {
         component[7 * 8 + i] = g6 * s7;
         component[3 * 8 + i] = g7 * s3;
     }
-    for (int i = 0; i < 8; ++i) {
+    for (size_t i = 0; i < 8; ++i) {
         const float a0 = component[i * 8 + 0];
         const float a1 = component[i * 8 + 1];
         const float a2 = component[i * 8 + 2];
@@ -358,7 +352,7 @@ void FileParser::Jpeg::forwardDCT(std::vector<Mcu>& mcus) {
 }
 
 void FileParser::Jpeg::quantize(Component& component, const QuantizationTable& quantizationTable) {
-    for (int i = 0; i < Component::length; i++) {
+    for (size_t i = 0; i < Component::length; i++) {
         component[i] = std::round(component[i] / quantizationTable.table.at(i));
     }
 }
@@ -429,8 +423,8 @@ auto FileParser::Jpeg::convertMcusToColorBlocks(const std::vector<Mcu>& mcus, co
     const size_t blockWidth  = utils::ceilDivide(pixelWidth, blockSideLength);
     const size_t blockHeight = utils::ceilDivide(pixelHeight, blockSideLength);
 
-    const int horizontal =  mcus[0].horizontalSampleSize;
-    const int vertical   =  mcus[0].verticalSampleSize;
+    const auto horizontal =  static_cast<size_t>(mcus[0].horizontalSampleSize);
+    const auto vertical   =  static_cast<size_t>(mcus[0].verticalSampleSize);
 
     const size_t mcuTotalWidth  = utils::ceilDivide(blockWidth, static_cast<size_t>(horizontal));
     std::vector result(blockWidth * blockHeight , RGBBlock());

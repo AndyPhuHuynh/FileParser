@@ -18,12 +18,12 @@ FileParser::HuffmanSubtable& FileParser::HuffmanSubtable::operator=(const Huffma
     return *this;
 }
 
-FileParser::HuffmanTable::HuffmanTable(const std::vector<HuffmanEncoding>& encodings) {
-    this->encodings = encodings;
-    for (auto& encoding : encodings) {
+FileParser::HuffmanTable::HuffmanTable(const std::vector<HuffmanEncoding>& encodings_) {
+    this->encodings = encodings_;
+    for (auto& encoding : encodings_) {
         m_encodingLookup.insert(std::make_pair(encoding.value, encoding));
     }
-    generateLookupTable(encodings);
+    generateLookupTable(encodings_);
 }
 
 auto FileParser::HuffmanTable::decode(const uint16_t word) const -> std::pair<uint8_t, uint8_t> {

@@ -22,7 +22,7 @@ unsigned int Shaders::Util::CompileShader(const unsigned int shaderType, const s
     if (result == GL_FALSE) {
         int length;
         glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length);
-        std::vector<char> message(length);
+        std::vector<char> message(static_cast<size_t>(length));
         glGetShaderInfoLog(id, length, &length, message.data());
         std::string shaderTypeString;
         if (shaderType == GL_VERTEX_SHADER) {

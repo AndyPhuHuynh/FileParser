@@ -71,5 +71,5 @@ auto FileUtils::openRegularFile(
         return std::unexpected("Failed to open file: " + filePath.string());
     }
 
-    return std::move(file);
+    return file;
 }

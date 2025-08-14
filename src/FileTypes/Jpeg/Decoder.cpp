@@ -80,7 +80,7 @@ auto FileParser::Jpeg::Parser::parseFrameHeader(std::ifstream& file, const uint8
     frame.numberOfLines          = numberOfLines;
     frame.numberOfSamplesPerLine = numberOfSamplesPerLine;
 
-    const uint16_t expectedLength = 8 + 3 * numberOfComponents;
+    const auto expectedLength = static_cast<uint16_t>(8 + 3 * numberOfComponents);
     REQUIRE_LENGTH(length, expectedLength);
 
     constexpr uint16_t minComponents = 1, maxComponents = 4;
@@ -214,7 +214,7 @@ auto FileParser::Jpeg::Parser::parseScanHeaderComponent(
 auto FileParser::Jpeg::Parser::parseScanHeader(std::ifstream& file) -> std::expected<ScanHeader, std::string> {
     READ_LENGTH();
     ASSIGN_OR_RETURN(numberOfComponents, read_uint8(file), "Unable to read number of components");
-    const uint16_t expectedLength = 6 + 2 * numberOfComponents;
+    const auto expectedLength = static_cast<uint16_t>(6 + 2 * numberOfComponents);
     REQUIRE_LENGTH(length, expectedLength);
 
     ScanHeader scanHeader;
@@ -282,7 +282,7 @@ auto FileParser::Jpeg::Parser::parseECS(std::ifstream& file) -> std::expected<st
 auto FileParser::Jpeg::Parser::parseSOS(std::ifstream& file) -> std::expected<Scan, std::string> {
     ASSIGN_OR_RETURN(header, parseScanHeader(file), "Unable to read scan header");
     ASSIGN_OR_RETURN_MUT(ecs, parseECS(file), "Unable to read ecs");
-    return Scan { .header = header, .dataSections = std::move(ecs) };
+    return Scan { .header = header, .restartInterval = 0, .iterations = {}, .dataSections = std::move(ecs) };
 }
 
 auto FileParser::Jpeg::Parser::parseEOI(std::ifstream& file) -> std::expected<void, std::string> {
@@ -463,7 +463,7 @@ auto FileParser::Jpeg::Decoder::isZRL(const int r, const int s) -> bool {
 }
 
 int FileParser::Jpeg::Decoder::decodeSSSS(BitReader& bitReader, const int SSSS) {
-    int coefficient = static_cast<int>(bitReader.getNBits(SSSS));
+    int coefficient = static_cast<int>(bitReader.getNBits(static_cast<size_t>(SSSS)));
     if (coefficient < 1 << (SSSS - 1)) {
         coefficient -= (1 << SSSS) - 1;
     }
@@ -519,7 +519,7 @@ auto FileParser::Jpeg::Decoder::decodeComponent(
             index += 16;
             continue;
         }
-        index += r;
+        index += static_cast<size_t>(r);
         const int coefficient = decodeSSSS(bitReader, s);
         out[zigZagMap[index]] = static_cast<float>(coefficient);
         index++;
@@ -538,8 +538,8 @@ auto FileParser::Jpeg::Decoder::decodeMcu(
     auto mcu = Mcu(frame.luminanceHorizontalSamplingFactor, frame.luminanceVerticalSamplingFactor);
     for (const auto& scanComp : scanHeader.components) {
         if (scanComp.componentSelector == frame.luminanceID) {
-            const auto numLuminanceComponents = frame.luminanceHorizontalSamplingFactor * frame.luminanceVerticalSamplingFactor;
-            for (int i = 0; i < numLuminanceComponents; i++) {
+            const auto numLuminanceComponents = static_cast<size_t>(frame.luminanceHorizontalSamplingFactor * frame.luminanceVerticalSamplingFactor);
+            for (size_t i = 0; i < numLuminanceComponents; i++) {
                 CHECK_VOID_AND_RETURN(
                     decodeComponent(mcu.Y[i], bitReader, scanComp, dcTables, acTables, prevDc),
                     "Unable to parse luminance component");

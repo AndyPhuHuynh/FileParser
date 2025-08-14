@@ -20,8 +20,8 @@ file(GLOB_RECURSE SOURCES
 
 add_executable(FileParser ${SOURCES} ${INCLUDES})
 
-target_include_directories(FileParser PRIVATE
-    ${CMAKE_SOURCE_DIR}/include
+target_include_directories(FileParser PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(FileParser SYSTEM PRIVATE
     ${CMAKE_SOURCE_DIR}/dependencies/glew-2.1.0/include
     ${CMAKE_SOURCE_DIR}/dependencies/GLFW/include
     ${CMAKE_SOURCE_DIR}/dependencies/glm/include
@@ -42,5 +42,25 @@ ENDIF()
 IF(MSVC)
     target_compile_options(FileParser PRIVATE /W4)
 ELSEIF (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(FileParser PRIVATE -Wall -Wpedantic)
+    target_compile_options(FileParser PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+        -Wsign-conversion
+        -Wshadow
+        -Wnon-virtual-dtor
+        -Wold-style-cast
+        -Woverloaded-virtual
+        -Wnull-dereference
+        -Wdouble-promotion
+        -Wformat=2
+        -Wimplicit-fallthrough
+        -Wcast-align
+        -Wundef
+        -Wmissing-include-dirs
+        -Wlogical-op
+        -Wduplicated-cond
+        -Wduplicated-branches
+    )
 ENDIF()

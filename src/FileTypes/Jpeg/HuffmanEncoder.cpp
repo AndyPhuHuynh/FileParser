@@ -195,7 +195,7 @@ auto FileParser::Jpeg::HuffmanEncoder::getSymbolsOrderedByFrequency(
 ) -> std::vector<uint8_t> {
     // Each pair stores a pair of symbol to frequency
     std::vector<std::pair<uint8_t, int>> freqPairs;
-    for (int i = 0 ; i < 256; i++) {
+    for (size_t i = 0 ; i < 256; i++) {
         if (frequencies.at(i) == 0) {
             continue;
         }

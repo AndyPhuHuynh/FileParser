@@ -39,10 +39,10 @@ auto FileParser::Jpeg::HuffmanBuilder::generateEncodings(
         throw std::invalid_argument("Number of symbols and code sizes do not match");
     }
     std::vector<HuffmanEncoding> encodings;
-    int symbolIndex = 0;
+    size_t symbolIndex = 0;
     uint16_t code = 0;
-    for (int i = 0; i < HuffmanTable::maxEncodingLength; i++) {
-        for (int j = 0; j < codeSizeFrequencies[i]; j++) {
+    for (size_t i = 0; i < HuffmanTable::maxEncodingLength; i++) {
+        for (size_t j = 0; j < codeSizeFrequencies[i]; j++) {
             encodings.emplace_back(code, static_cast<uint8_t>(i + 1), symbols[symbolIndex++]);
             code++;
         }

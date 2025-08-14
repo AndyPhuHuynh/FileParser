@@ -20,9 +20,9 @@
  */
 static std::vector<std::string> SplitString(const std::string& str, const char delimiter) {
     std::vector<std::string> tokens;
-    int prevIndex = 0;
-    const int length = static_cast<int>(str.length());
-    for (int i = 0; i < length; i++) {
+    size_t prevIndex = 0;
+    const size_t length = str.length();
+    for (size_t i = 0; i < length; i++) {
         if (str[i] == delimiter) {
             // Add token only if it's non-empty
             if (prevIndex != i) {
@@ -73,15 +73,10 @@ static void Render(const std::vector<std::string>& args) {
             break;
         }
         case FileType::Jpeg: {
-            uint16_t width, height;
             const auto& image = Jpeg::Decoder::decode(filepath);
             if (!image) {
                 std::cerr << "Error: Failed to decode Jpeg file: " << filepath << ": " << image.error() << '\n';
-                return;
             }
-
-
-
             break;
         }
         case FileType::None:
@@ -114,15 +109,8 @@ static void Convert(const std::vector<std::string>& args) {
         case FileType::Bmp: {
             // Bmp::BmpImage bmp(filepath);
             switch (newFormat) {
-                case FileType::Bmp: {
-                    break;
-                }
+                case FileType::Bmp:
                 case FileType::Jpeg: {
-                    Jpeg::Encoder::EncodingSettings settings;
-                    settings.luminanceQuality = 100;
-                    settings.chrominanceQuality = 100;
-                    settings.optimizeHuffmanTables = true;
-                    // Bmp::Converter::writeBmpAsJpeg(bmp, newFilepath, settings);
                     break;
                 }
                 case FileType::None: {
@@ -135,15 +123,8 @@ static void Convert(const std::vector<std::string>& args) {
         case FileType::None:
             std::cout << "Original file type not supported\n";
             break;
-    }
-}
-
-void printComponent(const std::array<float, 64>& component) {
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++) {
-            std::cout << std::round(component[i * 8 + j]) << " ";
-        }
-        std::cout << '\n';
+        case FileType::Jpeg:
+            break;
     }
 }
 

@@ -118,7 +118,7 @@ struct BitField {
     T value;
     int bitCount;
     BitField() : value(0), bitCount(0) {}
-    BitField(T value, const int bitCount) : value(value), bitCount(bitCount) {}
+    BitField(T value_, const int bitCount_) : value(value_), bitCount(bitCount_) {}
 };
 
 class BitReader {
@@ -154,7 +154,7 @@ private:
 
 class BitWriter {
 public:
-    explicit BitWriter(const std::string& filepath, int bufferSize = 4096);
+    explicit BitWriter(const std::string& filepath, size_t bufferSize = 4096);
     BitWriter(const BitWriter&) = delete;
     BitWriter& operator=(const BitWriter&) = delete;
     BitWriter(BitWriter&& other) noexcept;
@@ -194,8 +194,8 @@ protected:
     uint8_t m_byte = 0;
     int m_bitPosition = 0;
     
-    int m_bufferPos = 0;
-    int m_bufferSize;
+    size_t m_bufferPos = 0;
+    size_t m_bufferSize;
     std::vector<uint8_t> m_buffer;
 
     std::string m_filepath;

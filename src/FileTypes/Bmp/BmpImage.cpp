@@ -90,13 +90,13 @@ auto FileParser::Bmp::parseInfo(std::ifstream& file) -> std::expected<BmpInfo, s
 }
 
 auto FileParser::Bmp::parseColorTable(
-    std::ifstream& file, const int numColors
+    std::ifstream& file, const size_t numColors
 ) -> std::expected<std::vector<Color>, std::string> {
     static constexpr int colorTableOffset = 0x36;
     file.seekg(colorTableOffset, std::ios::beg);
 
     auto colorTable = std::vector<Color>(numColors);
-    for (int i = 0; i < numColors; i++) {
+    for (size_t i = 0; i < numColors; i++) {
         char bgr[3];
         CHECK_VOID_AND_RETURN(read_bytes(bgr, file, std::size(bgr)), "Unable to parse color table");
         colorTable[i] = {
@@ -146,10 +146,10 @@ auto FileParser::Bmp::parseImageDataMonochrome(
     for (uint32_t y = 0; y < bmpData.info.height; y++) {
         uint32_t pixelsInRowRead = 0;
 
-        for (int byteInRow = 0; byteInRow < rowSize && pixelsInRowRead < bmpData.info.width; byteInRow++) {
+        for (uint32_t byteInRow = 0; byteInRow < rowSize && pixelsInRowRead < bmpData.info.width; byteInRow++) {
             ASSIGN_OR_RETURN(byte, read_uint8(file), "Unable to parse monochrome color data");
             for (int bit = 7; bit >= 0 && pixelsInRowRead < bmpData.info.width; bit--) {
-                const auto colorIndex = (byte >> bit) & 1;
+                const auto colorIndex = static_cast<size_t>((byte >> bit) & 1);
                 const auto [r, g, b] = bmpData.colorTable[colorIndex];
 
                 data.push_back(r);
@@ -174,10 +174,10 @@ auto FileParser::Bmp::parseImageData4BitNoCompression(
 
     for (uint32_t y = 0; y < bmpData.info.height; y++) {
         uint32_t pixelsInRowRead = 0;
-        for (int byteInRow = 0; byteInRow < rowSize && pixelsInRowRead < bmpData.info.width; byteInRow++) {
+        for (size_t byteInRow = 0; byteInRow < rowSize && pixelsInRowRead < bmpData.info.width; byteInRow++) {
             ASSIGN_OR_RETURN(byte, read_uint8(file), "Unable to parse 4-bit color data");
             for (int nibble = 1; nibble >= 0 && pixelsInRowRead < bmpData.info.width; nibble--) {
-                const auto colorIndex = (byte >> (nibble * 4)) & 0x0F;
+                const auto colorIndex = static_cast<size_t>((byte >> (nibble * 4)) & 0x0F);
                 const auto [r, g, b] = bmpData.colorTable[colorIndex];
 
                 data.push_back(r);
@@ -201,7 +201,7 @@ auto FileParser::Bmp::parseImageData8BitNoCompression(
 
     for (uint32_t y = 0; y < bmpData.info.height; y++) {
         uint32_t pixelsInRowRead = 0;
-        for (int byteInRow = 0; byteInRow < rowSize && pixelsInRowRead < bmpData.info.width; byteInRow++) {
+        for (size_t byteInRow = 0; byteInRow < rowSize && pixelsInRowRead < bmpData.info.width; byteInRow++) {
             ASSIGN_OR_RETURN(byte, read_uint8(file), "Unable to parse 8-bit color data");
             const auto [r, g, b] = bmpData.colorTable[byte];
             data.push_back(r);
@@ -252,7 +252,7 @@ auto FileParser::Bmp::decode(const std::filesystem::path& filePath) -> std::expe
     bmpData.info   = info;
 
     if (const auto numColors = info.getNumColors(); numColors != -1) {
-        ASSIGN_OR_RETURN(colorTable, parseColorTable(file, numColors), "Unable to parse color table");
+        ASSIGN_OR_RETURN(colorTable, parseColorTable(file, static_cast<size_t>(numColors)), "Unable to parse color table");
         bmpData.colorTable = colorTable;
     }
 

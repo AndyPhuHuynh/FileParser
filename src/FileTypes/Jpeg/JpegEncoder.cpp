@@ -436,7 +436,7 @@ void FileParser::Jpeg::Encoder::encodeCoefficients(const Component& component, s
 
     // Look through all the ac coefficients and find their encodings
     uint8_t r = 0;
-    for (int i = 1; i < eobIndex; i++) {
+    for (size_t i = 1; i < eobIndex; i++) {
         int ac = static_cast<int>(std::round(component[zigZagMap[i]]));
         if (ac == 0) {
             if (r == 15) {
@@ -556,8 +556,8 @@ void FileParser::Jpeg::Encoder::writeQuantizationTableNoMarker(const Quantizatio
 void FileParser::Jpeg::Encoder::writeQuantizationTable(const QuantizationTable& quantizationTable, JpegBitWriter& bitWriter) {
     writeMarker(DQT, bitWriter);
 
-    const uint8_t bytesPerEntry = quantizationTable.precision == 0 ? 1 : 2;
-    const uint16_t length = 2 + 1 + (64 * bytesPerEntry);
+    const auto bytesPerEntry = static_cast<uint8_t>(quantizationTable.precision == 0 ? 1 : 2);
+    const auto length = static_cast<uint16_t>(2 + 1 + 64 * bytesPerEntry);
     bitWriter << length;
 
     writeQuantizationTableNoMarker(quantizationTable, bitWriter);
@@ -573,7 +573,7 @@ void FileParser::Jpeg::Encoder::writeScanHeader(const ScanHeader& scanHeader, Jp
     writeMarker(SOS, bitWriter);
 
     const auto numComponents = static_cast<uint8_t>(scanHeader.components.size());
-    const uint16_t length = 6 + 2 * numComponents;
+    const auto length = static_cast<uint16_t>(6 + 2 * numComponents);
     bitWriter << length << numComponents;
 
     for (auto component : scanHeader.components) {

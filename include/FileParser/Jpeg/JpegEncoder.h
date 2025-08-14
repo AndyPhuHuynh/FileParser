@@ -46,7 +46,7 @@ namespace FileParser::Jpeg::Encoder {
         uint8_t encoding; // Run-length encoded symbol
         int value; // Actual value of the coefficient
         Coefficient() = default;
-        Coefficient(const uint8_t encoding, const int value) : encoding(encoding), value(value) {}
+        Coefficient(const uint8_t encoding_, const int value_) : encoding(encoding_), value(value_) {}
     };
     
     struct EncodedMcu {

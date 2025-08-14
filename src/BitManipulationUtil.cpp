@@ -51,7 +51,7 @@ auto read_uint8(std::ifstream& file, const std::streamsize n) -> std::expected<s
     if (n < 1) {
         return std::unexpected("A size of at least one must be specified for reading bytes");
     }
-    auto bytes = std::vector<uint8_t>(n);
+    auto bytes = std::vector<uint8_t>(static_cast<size_t>(n));
     if (!file.read(reinterpret_cast<char*>(bytes.data()), n)) {
         return getReadBytesErrorMsg(n);
     }
@@ -81,8 +81,8 @@ auto read_uint16_be(std::ifstream& file, const std::streamsize n) -> std::expect
     if (!bytes) {
         return std::unexpected(bytes.error());
     }
-    auto words = std::vector<uint16_t>(n);
-    for (std::streamsize i = 0; i < n; i++) {
+    auto words = std::vector<uint16_t>(static_cast<size_t>(n));
+    for (size_t i = 0; i < static_cast<size_t>(n); i++) {
         words[i] = static_cast<uint16_t>((*bytes)[2 * i] << 8 | (*bytes)[2 * i + 1]);
     }
     return words;
@@ -101,7 +101,7 @@ auto read_string(std::ifstream& file, const std::streamsize n) -> std::expected<
     if (n < 1) {
         return std::unexpected("A size of at least one must be specified for reading bytes");
     }
-    std::string bytes(n, '\0');
+    std::string bytes(static_cast<size_t>(n), '\0');
     if (!file.read(bytes.data(), n)) {
         return getReadBytesErrorMsg(n);
     }
@@ -191,9 +191,9 @@ auto BitReader::peekNBits(const size_t numBits) const -> uint64_t {
         const size_t bitsAvailable = bitsInByte - bitOffset;
         const size_t bitsToRead = std::min(numBits - bitsRead, bitsAvailable);
 
-        const uint8_t shifted = currentByte >> (bitsInByte - bitOffset - bitsToRead);
-        const uint8_t mask = (1 << bitsToRead) - 1;
-        const uint8_t extracted = shifted & mask;
+        const auto shifted   = static_cast<uint8_t>(currentByte >> (bitsInByte - bitOffset - bitsToRead));
+        const auto mask      = static_cast<uint8_t>((1 << bitsToRead) - 1);
+        const auto extracted = static_cast<uint8_t>(shifted & mask);
 
         result = (result << bitsToRead) | extracted;
 
@@ -246,7 +246,7 @@ auto BitReader::addByte(const uint8_t byte) -> void {
     m_bytes.push_back(byte);
 }
 
-BitWriter::BitWriter(const std::string& filepath, int bufferSize) : m_bufferSize(bufferSize), m_buffer(bufferSize), m_filepath(filepath) {
+BitWriter::BitWriter(const std::string& filepath, size_t bufferSize) : m_bufferSize(bufferSize), m_buffer(bufferSize), m_filepath(filepath) {
     m_file = std::ofstream(m_filepath, std::ios::out | std::ios::binary);
     if (!m_file.is_open()) {
         throw std::ios_base::failure("Bit writer failed to open file: " + filepath);
@@ -296,7 +296,7 @@ void BitWriter::flushByte(const bool padWithOnes) {
         flushBuffer();
     }
     if (padWithOnes) {
-        m_byte |= (1 << (8 - m_bitPosition)) - 1;
+        m_byte |= static_cast<uint8_t>((1 << (8 - m_bitPosition)) - 1);
     }
     m_buffer.at(m_bufferPos++) = m_byte;
     m_prevByte = m_byte;
@@ -307,7 +307,7 @@ void BitWriter::flushByte(const bool padWithOnes) {
 void BitWriter::flushBuffer() {
     if (m_bufferPos == 0) return;
     
-    m_file.write(reinterpret_cast<const char*>(m_buffer.data()), m_bufferPos);
+    m_file.write(reinterpret_cast<const char*>(m_buffer.data()), static_cast<std::streamsize>(m_bufferPos));
     if (!m_file) {
         std:: ostringstream errorMsg;
         errorMsg << "BitWriter failed to write to file: " << m_filepath << ", " << m_file.tellp() << "bytes written";

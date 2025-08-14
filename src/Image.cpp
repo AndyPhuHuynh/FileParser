@@ -20,9 +20,9 @@ void swapPixel(
 void FileParser::flipVertically(Image& image) {
     const size_t bytesPerRow = image.width * 3;
     for (uint32_t y = 0; y < image.height / 2; y++) {
-        const auto topRow = image.data.begin() + y * bytesPerRow;
-        const auto bottomRow = image.data.begin() + (image.height - y - 1) * bytesPerRow;
-        std::swap_ranges(topRow, topRow + bytesPerRow, bottomRow);
+        const auto topRow = image.data.begin() + static_cast<std::ptrdiff_t>(y * bytesPerRow);
+        const auto bottomRow = image.data.begin() + static_cast<std::ptrdiff_t>((image.height - y - 1) * bytesPerRow);
+        std::swap_ranges(topRow, topRow + static_cast<std::ptrdiff_t>(bytesPerRow), bottomRow);
     }
 }
 

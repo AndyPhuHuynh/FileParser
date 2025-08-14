@@ -57,7 +57,7 @@ namespace FileParser::Bmp {
 
     auto parseHeader(std::ifstream& file) -> std::expected<BmpHeader, std::string>;
     auto parseInfo(std::ifstream& file) -> std::expected<BmpInfo, std::string>;
-    auto parseColorTable(std::ifstream& file, int numColors) -> std::expected<std::vector<Color>, std::string>;
+    auto parseColorTable(std::ifstream& file, size_t numColors) -> std::expected<std::vector<Color>, std::string>;
     auto parseImageData(std::ifstream& file, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
 
     auto parseImageDataMonochrome(std::ifstream& file, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
