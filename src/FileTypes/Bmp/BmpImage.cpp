@@ -39,9 +39,9 @@ auto FileParser::Bmp::parseHeader(std::ifstream& file) -> std::expected<BmpHeade
         return std::unexpected("File signature did not match BMP signature");
     }
 
-    READ_OR_RETURN(fileSize,   read_uint32_le(file), "Unable to parse file");
-    READ_OR_RETURN(reserved,   read_uint32_le(file), "Unable to parse reserved bytes");
-    READ_OR_RETURN(dataOffset, read_uint32_le(file), "Unable to parse data offset");
+    ASSIGN_OR_RETURN(fileSize,   read_uint32_le(file), "Unable to parse file");
+    ASSIGN_OR_RETURN(reserved,   read_uint32_le(file), "Unable to parse reserved bytes");
+    ASSIGN_OR_RETURN(dataOffset, read_uint32_le(file), "Unable to parse data offset");
 
     header.fileSize   = fileSize;
     header.dataOffset = dataOffset;
@@ -51,11 +51,11 @@ auto FileParser::Bmp::parseHeader(std::ifstream& file) -> std::expected<BmpHeade
 
 auto FileParser::Bmp::parseInfo(std::ifstream& file) -> std::expected<BmpInfo, std::string> {
 
-    READ_OR_RETURN(size,     read_uint32_le(file), "Unable to parse file size");
-    READ_OR_RETURN(width,    read_uint16_le(file), "Unable to parse width");
-    READ_OR_RETURN(height,   read_uint16_le(file), "Unable to parse height");
-    READ_OR_RETURN(planes,   read_uint16_le(file), "Unable to parse planes");
-    READ_OR_RETURN(bitCount, read_uint16_le(file), "Unable to parse bit count");
+    ASSIGN_OR_RETURN(size,     read_uint32_le(file), "Unable to parse file size");
+    ASSIGN_OR_RETURN(width,    read_uint16_le(file), "Unable to parse width");
+    ASSIGN_OR_RETURN(height,   read_uint16_le(file), "Unable to parse height");
+    ASSIGN_OR_RETURN(planes,   read_uint16_le(file), "Unable to parse planes");
+    ASSIGN_OR_RETURN(bitCount, read_uint16_le(file), "Unable to parse bit count");
 
 
     BmpInfo info;
@@ -69,12 +69,12 @@ auto FileParser::Bmp::parseInfo(std::ifstream& file) -> std::expected<BmpInfo, s
         return info;
     }
 
-    READ_OR_RETURN(compression,     read_uint32_le(file), "Unable to parse compression");
-    READ_OR_RETURN(imageSize,       read_uint32_le(file), "Unable to parse image size");
-    READ_OR_RETURN(xPixelsPerMeter, read_uint32_le(file), "Unable to parse x pixels per meter");
-    READ_OR_RETURN(yPixelsPerMeter, read_uint32_le(file), "Unable to parse y pixels per meter");
-    READ_OR_RETURN(colorsUsed,      read_uint32_le(file), "Unable to parse colors used");
-    READ_OR_RETURN(importantColors, read_uint32_le(file), "Unable to parse important colors");
+    ASSIGN_OR_RETURN(compression,     read_uint32_le(file), "Unable to parse compression");
+    ASSIGN_OR_RETURN(imageSize,       read_uint32_le(file), "Unable to parse image size");
+    ASSIGN_OR_RETURN(xPixelsPerMeter, read_uint32_le(file), "Unable to parse x pixels per meter");
+    ASSIGN_OR_RETURN(yPixelsPerMeter, read_uint32_le(file), "Unable to parse y pixels per meter");
+    ASSIGN_OR_RETURN(colorsUsed,      read_uint32_le(file), "Unable to parse colors used");
+    ASSIGN_OR_RETURN(importantColors, read_uint32_le(file), "Unable to parse important colors");
 
     info.compression     = compression;
     info.imageSize       = imageSize;
@@ -147,7 +147,7 @@ auto FileParser::Bmp::parseImageDataMonochrome(
         uint32_t pixelsInRowRead = 0;
 
         for (int byteInRow = 0; byteInRow < rowSize && pixelsInRowRead < bmpData.info.width; byteInRow++) {
-            READ_OR_RETURN(byte, read_uint8(file), "Unable to parse monochrome color data");
+            ASSIGN_OR_RETURN(byte, read_uint8(file), "Unable to parse monochrome color data");
             for (int bit = 7; bit >= 0 && pixelsInRowRead < bmpData.info.width; bit--) {
                 const auto colorIndex = (byte >> bit) & 1;
                 const auto [r, g, b] = bmpData.colorTable[colorIndex];
@@ -175,7 +175,7 @@ auto FileParser::Bmp::parseImageData4BitNoCompression(
     for (uint32_t y = 0; y < bmpData.info.height; y++) {
         uint32_t pixelsInRowRead = 0;
         for (int byteInRow = 0; byteInRow < rowSize && pixelsInRowRead < bmpData.info.width; byteInRow++) {
-            READ_OR_RETURN(byte, read_uint8(file), "Unable to parse 4-bit color data");
+            ASSIGN_OR_RETURN(byte, read_uint8(file), "Unable to parse 4-bit color data");
             for (int nibble = 1; nibble >= 0 && pixelsInRowRead < bmpData.info.width; nibble--) {
                 const auto colorIndex = (byte >> (nibble * 4)) & 0x0F;
                 const auto [r, g, b] = bmpData.colorTable[colorIndex];
@@ -202,7 +202,7 @@ auto FileParser::Bmp::parseImageData8BitNoCompression(
     for (uint32_t y = 0; y < bmpData.info.height; y++) {
         uint32_t pixelsInRowRead = 0;
         for (int byteInRow = 0; byteInRow < rowSize && pixelsInRowRead < bmpData.info.width; byteInRow++) {
-            READ_OR_RETURN(byte, read_uint8(file), "Unable to parse 8-bit color data");
+            ASSIGN_OR_RETURN(byte, read_uint8(file), "Unable to parse 8-bit color data");
             const auto [r, g, b] = bmpData.colorTable[byte];
             data.push_back(r);
             data.push_back(g);
@@ -245,18 +245,18 @@ auto FileParser::Bmp::decode(const std::filesystem::path& filePath) -> std::expe
     std::ifstream file(filePath, std::ios::binary);
     BmpData bmpData;
 
-    READ_OR_RETURN(header, parseHeader(file), "Unable to parse header");
-    READ_OR_RETURN(info,   parseInfo(file),   "Unable to parse info");
+    ASSIGN_OR_RETURN(header, parseHeader(file), "Unable to parse header");
+    ASSIGN_OR_RETURN(info,   parseInfo(file),   "Unable to parse info");
 
     bmpData.header = header;
     bmpData.info   = info;
 
     if (const auto numColors = info.getNumColors(); numColors != -1) {
-        READ_OR_RETURN(colorTable, parseColorTable(file, numColors), "Unable to parse color table");
+        ASSIGN_OR_RETURN(colorTable, parseColorTable(file, numColors), "Unable to parse color table");
         bmpData.colorTable = colorTable;
     }
 
-    READ_OR_RETURN_MUT(rgbData, parseImageData(file, bmpData), "Unable to parse rgb data");
+    ASSIGN_OR_RETURN_MUT(rgbData, parseImageData(file, bmpData), "Unable to parse rgb data");
 
     return Image(bmpData.info.width, bmpData.info.height, std::move(rgbData));
 }

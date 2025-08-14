@@ -10,32 +10,35 @@
 #include "FileParser/Image.hpp"
 #include "FileParser/Jpeg/HuffmanBuilder.hpp"
 #include "FileParser/Jpeg/Markers.hpp"
-#include "FileParser/Utils.hpp"
 #include "FileParser/Jpeg/Transform.hpp"
+#include "FileParser/Macros.hpp"
+#include "FileParser/Utils.hpp"
+
+#define READ_LENGTH() ASSIGN_OR_RETURN(length, read_uint16_be(file), "Unable to read length");
+
+#define REQUIRE_LENGTH(actual, expected) \
+    if ((actual) != (expected)) { \
+        return std::unexpected(std::format("Expected length {}, got {}", expected, actual)); \
+    }
+
+#define READ_AND_REQUIRE_LENGTH(expected) \
+    READ_LENGTH() \
+    REQUIRE_LENGTH(length, expected)
+
 
 auto FileParser::Jpeg::Parser::parseFrameComponent(
     std::ifstream& file
 ) -> std::expected<FrameComponent, std::string> {
-    FrameComponent component;
+    ASSIGN_OR_RETURN(identifier,     read_uint8(file), "Unable to read component identifier");
+    ASSIGN_OR_RETURN(samplingFactor, read_uint8(file), "Unable to read sampling factor");
+    ASSIGN_OR_RETURN(qTableSelector, read_uint8(file), "Unable to read quantization table selector");
 
-    const auto identifier = read_uint8(file);
-    if (!identifier) {
-        return utils::getUnexpected(identifier, "Unable to read component identifier");
-    }
-    component.identifier = identifier.value();
-
-    const auto samplingFactor = read_uint8(file);
-    if (!samplingFactor) {
-        return utils::getUnexpected(samplingFactor, "Unable to read sampling factor");
-    }
-    component.horizontalSamplingFactor  = getUpperNibble(samplingFactor.value());
-    component.verticalSamplingFactor    = getLowerNibble(samplingFactor.value());
-
-    const auto qTableSelector = read_uint8(file);
-    if (!qTableSelector) {
-        return utils::getUnexpected(qTableSelector, "Unable to read quantization table selector");
-    }
-    component.quantizationTableSelector = qTableSelector.value();
+    FrameComponent component {
+        .identifier                = identifier,
+        .horizontalSamplingFactor  = getUpperNibble(samplingFactor),
+        .verticalSamplingFactor    = getLowerNibble(samplingFactor),
+        .quantizationTableSelector = qTableSelector
+    };
 
     constexpr uint8_t minHorizontalFactor = 1, maxHorizontalFactor = 4;
     if (component.horizontalSamplingFactor < minHorizontalFactor || component.horizontalSamplingFactor > maxHorizontalFactor) {
@@ -62,53 +65,30 @@ auto FileParser::Jpeg::Parser::parseFrameHeader(std::ifstream& file, const uint8
     }
 
     FrameHeader frame;
-    const auto length = read_uint16_be(file);
-    if (!length) {
-        return utils::getUnexpected(length, "Unable to read frame length");
-    }
-
-    const auto precision = read_uint8(file);
-    if (!precision) {
-        return utils::getUnexpected(precision, "Unable to read frame precision");
-    }
-    frame.precision = precision.value();
+    READ_LENGTH();
+    ASSIGN_OR_RETURN(precision, read_uint8(file), "Unable to read frame precision");
+    frame.precision = precision;
     if (frame.precision != 8) {
         return std::unexpected(
             std::format("Unsupported precision in frame header: {}, precision must be 8 bits", frame.precision));
     }
 
-    const auto numberOfLines = read_uint16_be(file);
-    if (!numberOfLines) {
-        return utils::getUnexpected(numberOfLines, "Unable to read number of lines");
-    }
-    frame.numberOfLines = numberOfLines.value();
+    ASSIGN_OR_RETURN(numberOfLines,          read_uint16_be(file), "Unable to read number of lines");
+    ASSIGN_OR_RETURN(numberOfSamplesPerLine, read_uint16_be(file), "Unable to read number of samples per line");
+    ASSIGN_OR_RETURN(numberOfComponents,     read_uint8(file),     "Unable to read number of components");
+    frame.numberOfLines          = numberOfLines;
+    frame.numberOfSamplesPerLine = numberOfSamplesPerLine;
 
-    const auto numberOfSamplesPerLine = read_uint16_be(file);
-    if (!numberOfSamplesPerLine) {
-        return utils::getUnexpected(numberOfSamplesPerLine, "Unable to read number of samples per line");
-    }
-    frame.numberOfSamplesPerLine = numberOfSamplesPerLine.value();
-
-    const auto numberOfComponents = read_uint8(file);
-    if (!numberOfComponents) {
-        return utils::getUnexpected(numberOfComponents, "Unable to read number of components");
-    }
-
-    const uint16_t expectedLength = 8 + 3 * *numberOfComponents;
-    if (*length != expectedLength) {
-        return std::unexpected(
-            std::format(R"(Specified length of FrameHeader "{}" does not match expected length of "{}")",
-                *length, expectedLength));
-    }
+    const uint16_t expectedLength = 8 + 3 * numberOfComponents;
+    REQUIRE_LENGTH(length, expectedLength);
 
     constexpr uint16_t minComponents = 1, maxComponents = 4;
-    if (*numberOfComponents < minComponents || *numberOfComponents > maxComponents) {
+    if (numberOfComponents < minComponents || numberOfComponents > maxComponents) {
         return std::unexpected(std::format(R"(Number of components must be between {} and {}, got {})",
-            minComponents, maxComponents, *numberOfComponents));
+            minComponents, maxComponents, numberOfComponents));
     }
 
-
-    for (size_t i = 0; i < *numberOfComponents; ++i) {
+    for (size_t i = 0; i < numberOfComponents; ++i) {
         auto component = parseFrameComponent(file);
         if (!component) {
             return std::unexpected(std::format("Error parsing frame component #{}: {}", i, component.error()));
@@ -122,50 +102,22 @@ auto FileParser::Jpeg::Parser::parseFrameHeader(std::ifstream& file, const uint8
 auto FileParser::Jpeg::Parser::parseDNL(
     std::ifstream& file
 ) -> std::expected<uint16_t, std::string> {
-    const auto length = read_uint16_be(file);
-    if (!length) {
-        return utils::getUnexpected(length, "Unable to parse length");
-    }
-    constexpr uint16_t expectedLength = 4;
-    if (*length != expectedLength) {
-        return std::unexpected(std::format("Expected length {}, got {}", expectedLength, *length));
-    }
-
-    const auto numberOfLines = read_uint16_be(file);
-    if (!numberOfLines) {
-        return utils::getUnexpected(numberOfLines, "Unable to parse number of lines");
-    }
+    READ_AND_REQUIRE_LENGTH(4);
+    ASSIGN_OR_RETURN(numberOfLines, read_uint16_be(file), "Unable to read number of lines");
     return numberOfLines;
 }
 
 auto FileParser::Jpeg::Parser::parseDRI(
     std::ifstream& file
 ) -> std::expected<uint16_t, std::string> {
-    const auto length = read_uint16_be(file);
-    if (!length) {
-        return utils::getUnexpected(length, "Unable to parse length");
-    }
-    constexpr uint16_t expectedLength = 4;
-    if (*length != expectedLength) {
-        return std::unexpected(std::format("Expected length {}, got {}", expectedLength, *length));
-    }
-
-    const auto restartInterval = read_uint16_be(file);
-    if (!restartInterval) {
-        return utils::getUnexpected(restartInterval, "Unable to parse restart interval");
-    }
+    READ_AND_REQUIRE_LENGTH(4);
+    ASSIGN_OR_RETURN(restartInterval, read_uint16_be(file), "Unable to read restart interval");
     return restartInterval;
 }
 
 auto FileParser::Jpeg::Parser::parseComment(std::ifstream& file) -> std::expected<std::string, std::string> {
-    const auto length = read_uint16_be(file);
-    if (!length) {
-        return utils::getUnexpected(length, "Unable to parse length");
-    }
-    auto comment = read_string(file, *length - 2);
-    if (!comment) {
-        return utils::getUnexpected(comment, "Unable to parse comment");
-    }
+    READ_LENGTH();
+    ASSIGN_OR_RETURN(comment, read_string(file, length - 2), "Unable to read comment");
     return comment;
 }
 
@@ -173,45 +125,32 @@ auto FileParser::Jpeg::Parser::parseDQT(
     std::ifstream& file
 ) -> std::expected<std::vector<QuantizationTable>, std::string> {
     const std::streampos filePosBefore = file.tellg();
-
-    const auto length = read_uint16_be(file);
-    if (!length) {
-        return utils::getUnexpected(length, "Unable to parse length");
-    }
+    READ_LENGTH();
 
     std::vector<QuantizationTable> tables;
-    while (file.tellg() - filePosBefore < *length && file) {
-        const auto precisionAndDestination = read_uint8(file);
-        if (!precisionAndDestination) {
-            return utils::getUnexpected(precisionAndDestination, "Unable to parse precision and id");
-        }
+    while (file.tellg() - filePosBefore < length && file) {
+        ASSIGN_OR_RETURN(precisionAndDestination, read_uint8(file), "Unable to read precision and id");
 
         QuantizationTable& table = tables.emplace_back();
         // Precision (1 = 16-bit, 0 = 8-bit) in upper nibble, Destination ID in lower nibble
-        table.precision   = getUpperNibble(*precisionAndDestination);
-        table.destination = getLowerNibble(*precisionAndDestination);
+        table.precision   = getUpperNibble(precisionAndDestination);
+        table.destination = getLowerNibble(precisionAndDestination);
 
         if (table.precision == 0) {
-            const auto elements = read_uint8(file, QuantizationTable::length);
-            if (!elements) {
-                return utils::getUnexpected(elements, "Unable to parse quantization table elements");
-            }
+            ASSIGN_OR_RETURN(elements, read_uint8(file, QuantizationTable::length), "Unable to read quantization table elements");
             for (const auto i : zigZagMap) {
-                table[i] = static_cast<float>((*elements)[i]);
+                table[i] = static_cast<float>((elements)[i]);
             }
         } else {
-            const auto elements = read_uint16_be(file, QuantizationTable::length);
-            if (!elements) {
-                return utils::getUnexpected(elements, "Unable to parse quantization table elements");
-            }
+            ASSIGN_OR_RETURN(elements, read_uint16_be(file, QuantizationTable::length), "Unable to read quantization table elements");
             for (const auto i : zigZagMap) {
-                table[i] = static_cast<float>((*elements)[i]);
+                table[i] = static_cast<float>((elements)[i]);
             }
         }
     }
     const std::streampos filePosAfter = file.tellg();
-    if (const auto bytesRead = filePosAfter - filePosBefore; bytesRead != *length) {
-        return std::unexpected(std::format("Length mismatch. Length was {}, however {} bytes was read", *length, bytesRead));
+    if (const auto bytesRead = filePosAfter - filePosBefore; bytesRead != length) {
+        return std::unexpected(std::format("Length mismatch. Length was {}, however {} bytes was read", length, bytesRead));
     }
     return tables;
 }
@@ -220,22 +159,13 @@ auto FileParser::Jpeg::Parser::parseDHT(
     std::ifstream& file
 ) -> std::expected<std::vector<HuffmanParseResult>, std::string> {
     const std::streampos filePosBefore = file.tellg();
-
-    const auto length = read_uint16_be(file);
-    if (!length) {
-        return utils::getUnexpected(length, "Unable to parse length");
-    }
-
+    READ_LENGTH()
     std::vector<HuffmanParseResult> tables;
-    while (file.tellg() - filePosBefore < *length && file) {
-        const auto tableClassAndDestination = read_uint8(file);
-        if (!tableClassAndDestination) {
-            return utils::getUnexpected(tableClassAndDestination, "Unable to parse table class and destination");
-        }
-
+    while (file.tellg() - filePosBefore < length && file) {
+        ASSIGN_OR_RETURN(tableClassAndDestination, read_uint8(file), "Unable to parse table class and destination");
         auto& [tableClass, tableDestination, table] = tables.emplace_back();
-        tableClass       = getUpperNibble(*tableClassAndDestination);
-        tableDestination = getLowerNibble(*tableClassAndDestination);
+        tableClass       = getUpperNibble(tableClassAndDestination);
+        tableDestination = getLowerNibble(tableClassAndDestination);
 
         if (tableClass != 0 && tableClass != 1) {
             return std::unexpected(std::format("Table class must be 0 or 1, got {}", tableClass));
@@ -245,15 +175,12 @@ auto FileParser::Jpeg::Parser::parseDHT(
             return std::unexpected(std::format("Table destination must be between 0 and 3, got {}", tableDestination));
         }
 
-        auto tableExpected = HuffmanBuilder::readFromFile(file);
-        if (!tableExpected) {
-            return utils::getUnexpected(tableExpected, "Unable to parse Huffman table");
-        }
-        table = std::move(*tableExpected);
+        ASSIGN_OR_RETURN_MUT(constructedTable, HuffmanBuilder::readFromFile(file), "Unable to parse Huffman table");
+        table = std::move(constructedTable);
     }
     const std::streampos filePosAfter = file.tellg();
-    if (const auto bytesRead = filePosAfter - filePosBefore; bytesRead != *length) {
-        return std::unexpected(std::format("Length mismatch. Length was {}, however {} bytes was read", *length, bytesRead));
+    if (const auto bytesRead = filePosAfter - filePosBefore; bytesRead != length) {
+        return std::unexpected(std::format("Length mismatch. Length was {}, however {} bytes was read", length, bytesRead));
     }
     return tables;
 }
@@ -261,19 +188,13 @@ auto FileParser::Jpeg::Parser::parseDHT(
 auto FileParser::Jpeg::Parser::parseScanHeaderComponent(
     std::ifstream& file
 ) -> std::expected<ScanComponent, std::string> {
-    const auto selector = read_uint8(file);
-    if (!selector) {
-        return utils::getUnexpected(selector, "Unable to parse scan header component");
-    }
-    const auto destination = read_uint8(file);
-    if (!destination) {
-        return utils::getUnexpected(destination, "Unable to parse scan header component");
-    }
+    ASSIGN_OR_RETURN(selector,    read_uint8(file), "Unable to read component selector");
+    ASSIGN_OR_RETURN(destination, read_uint8(file), "Unable to read table destination");
 
     ScanComponent component {
-        .componentSelector = *selector,
-        .dcTableSelector = getUpperNibble(*destination),
-        .acTableSelector = getLowerNibble(*destination),
+        .componentSelector = selector,
+        .dcTableSelector = getUpperNibble(destination),
+        .acTableSelector = getLowerNibble(destination),
     };
 
     constexpr uint8_t minTable = 0, maxTable = 3;
@@ -290,49 +211,25 @@ auto FileParser::Jpeg::Parser::parseScanHeaderComponent(
 }
 
 auto FileParser::Jpeg::Parser::parseScanHeader(std::ifstream& file) -> std::expected<ScanHeader, std::string> {
-    const auto length = read_uint16_be(file);
-    if (!length) {
-        return utils::getUnexpected(length, "Unable to parse length");
-    }
-
-    const auto numberOfComponents = read_uint8(file);
-    if (!numberOfComponents) {
-        return utils::getUnexpected(numberOfComponents, "Unable to parse number of components");
-    }
-
-    const uint16_t expectedLength = 6 + 2 * numberOfComponents.value();
-    if (*length != expectedLength) {
-        return std::unexpected(std::format("Expected length {}, got {}", expectedLength, *length));
-    }
+    READ_LENGTH();
+    ASSIGN_OR_RETURN(numberOfComponents, read_uint8(file), "Unable to read number of components");
+    const uint16_t expectedLength = 6 + 2 * numberOfComponents;
+    REQUIRE_LENGTH(length, expectedLength);
 
     ScanHeader scanHeader;
-    for (uint16_t i = 0; i < numberOfComponents.value(); ++i) {
-        const auto component = parseScanHeaderComponent(file);
-        if (!component) {
-            return utils::getUnexpected(component, "Unable to parse scan header component");
-        }
-        scanHeader.components.push_back(*component);
+    for (uint8_t i = 0; i < numberOfComponents; ++i) {
+        ASSIGN_OR_RETURN(component, parseScanHeaderComponent(file), "Unable to read scan header component");
+        scanHeader.components.push_back(component);
     }
 
-    const auto ss = read_uint8(file);
-    if (!ss) {
-        return utils::getUnexpected(ss, "Unable to parse spectral selection start");
-    }
-    scanHeader.spectralSelectionStart = *ss;
+    ASSIGN_OR_RETURN(ss, read_uint8(file), "Unable to read spectral selection start");
+    ASSIGN_OR_RETURN(se, read_uint8(file), "Unable to read spectral selection end");
+    ASSIGN_OR_RETURN(approximation, read_uint8(file), "Unable to read approximation");
 
-    const auto se = read_uint8(file);
-    if (!se) {
-        return utils::getUnexpected(se, "Unable to parse spectral selection end");
-    }
-    scanHeader.spectralSelectionEnd = *se;
-
-    const auto approximation = read_uint8(file);
-    if (!approximation) {
-        return utils::getUnexpected(approximation, "Unable to parse approximation");
-    }
-    scanHeader.successiveApproximationHigh = getUpperNibble(*approximation);
-    scanHeader.successiveApproximationLow  = getLowerNibble(*approximation);
-
+    scanHeader.spectralSelectionStart = ss;
+    scanHeader.spectralSelectionEnd   = se;
+    scanHeader.successiveApproximationHigh = getUpperNibble(approximation);
+    scanHeader.successiveApproximationLow  = getLowerNibble(approximation);
     return scanHeader;
 }
 
@@ -382,19 +279,9 @@ auto FileParser::Jpeg::Parser::parseECS(std::ifstream& file) -> std::expected<st
 }
 
 auto FileParser::Jpeg::Parser::parseSOS(std::ifstream& file) -> std::expected<Scan, std::string> {
-    Scan scan;
-    const auto header = parseScanHeader(file);
-    if (!header) {
-        return utils::getUnexpected(header, "Unable to parse scan header");
-    }
-    scan.header = *header;
-
-    auto ecs = parseECS(file);
-    if (!ecs) {
-        return utils::getUnexpected(ecs, "Unable to parse ECS");
-    }
-    scan.dataSections = std::move(*ecs);
-    return scan;
+    ASSIGN_OR_RETURN(header, parseScanHeader(file), "Unable to read scan header");
+    ASSIGN_OR_RETURN_MUT(ecs, parseECS(file), "Unable to read ecs");
+    return Scan { .header = header, .dataSections = std::move(ecs) };
 }
 
 auto FileParser::Jpeg::Parser::parseEOI(std::ifstream& file) -> std::expected<void, std::string> {
@@ -458,18 +345,13 @@ auto FileParser::Jpeg::Parser::parseFile(
     }
 
     uint8_t soiBytes[2];
-    auto soiExpected = read_bytes(reinterpret_cast<char *>(soiBytes), file, 2);
-    if (!soiExpected) {
-        return utils::getUnexpected(soiExpected, "Unable to parse SOI");
-    }
+    CHECK_VOID_AND_RETURN(read_bytes(reinterpret_cast<char *>(soiBytes), file, 2), "Unable to parse SOI");
     if (soiBytes[0] != MarkerHeader || soiBytes[1] != SOI) {
         return std::unexpected("File must start with SOI marker");
     }
 
     std::unordered_set encounteredMarkers{SOI};
     JpegData data;
-
-
     uint8_t byte;
     while (file.read(reinterpret_cast<char*>(&byte), 1)) {
         if (byte == 0xFF) {
@@ -509,40 +391,28 @@ auto FileParser::Jpeg::Parser::parseFile(
                     break;
                 }
                 case DRI: {
-                    auto restartInterval = parseDRI(file);
-                    if (!restartInterval) {
-                        return utils::getUnexpected(restartInterval, "Unable to parse restart interval");
-                    }
-                    data.lastSetRestartInterval = *restartInterval;
+                    ASSIGN_OR_RETURN(restartInterval, parseDRI(file), "Unable to parse restart interval");
+                    data.lastSetRestartInterval = restartInterval;
                     break;
                 }
                 case COM: {
-                    auto comment = parseComment(file);
-                    if (!comment) {
-                        return utils::getUnexpected(comment, "Unable to parse comment");
-                    }
-                    data.comments.push_back(std::move(*comment));
+                    ASSIGN_OR_RETURN_MUT(comment, parseComment(file), "Unable to parse comment");
+                    data.comments.push_back(std::move(comment));
                     break;
                 }
                 case SOS: {
-                    auto scan = parseSOS(file);
-                    if (!scan) {
-                        return utils::getUnexpected(scan, "Unable to parse SOS");
-                    }
-                    scan->restartInterval = data.lastSetRestartInterval;
+                    ASSIGN_OR_RETURN_MUT(scan, parseSOS(file), "Unable to parse SOS");
+                    scan.restartInterval = data.lastSetRestartInterval;
                     for (size_t i = 0; i < 4; i++) {
-                        scan->iterations.quantization[i] = data.quantizationTables[i].size() - 1;
-                        scan->iterations.dc[i] = data.huffmanTables.dc[i].size() - 1;
-                        scan->iterations.ac[i] = data.huffmanTables.ac[i].size() - 1;
+                        scan.iterations.quantization[i] = data.quantizationTables[i].size() - 1;
+                        scan.iterations.dc[i] = data.huffmanTables.dc[i].size() - 1;
+                        scan.iterations.ac[i] = data.huffmanTables.ac[i].size() - 1;
                     }
-                    data.scans.push_back(std::move(*scan));
+                    data.scans.push_back(std::move(scan));
                     break;
                 }
                 case EOI: {
-                    const auto eoi = parseEOI(file);
-                    if (!eoi) {
-                        return std::unexpected(eoi.error());
-                    }
+                    CHECK_VOID_OR_PROPAGATE(parseEOI(file));
                     break;
                 }
                 default: {
@@ -550,17 +420,9 @@ auto FileParser::Jpeg::Parser::parseFile(
                         if (std::ranges::any_of(encounteredMarkers, [](const uint8_t m) { return isSOF(m); })) {
                             return std::unexpected("Multiple SOF markers encountered. Only one SOF marker is allowed");
                         }
-                        auto frameHeader = parseFrameHeader(file, marker);
-                        if (!frameHeader) {
-                            return utils::getUnexpected(frameHeader, "Unable to parse frame header");
-                        }
-                        auto frameInfo = analyzeFrameHeader(*frameHeader, marker);
-                        if (!frameInfo) {
-                            return utils::getUnexpected(frameHeader, "Unable to analyze frame header");
-                        }
-                        data.frameInfo = std::move(*frameInfo);
-                    } else {
-                        std::cout << std::hex << "Other byte encountered: " << static_cast<int>(marker) << std::endl;
+                        ASSIGN_OR_RETURN(frameHeader, parseFrameHeader(file, marker), "Unable to parse frame header");
+                        ASSIGN_OR_RETURN_MUT(frameInfo, analyzeFrameHeader(frameHeader, marker), "Unable to analyze frame header");
+                        data.frameInfo = std::move(frameInfo);
                     }
                 }
             }

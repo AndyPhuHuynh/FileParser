@@ -171,7 +171,7 @@ auto FileParser::Jpeg::dequantize(
     const std::array<const QuantizationTable *, 4>& quantizationTables
 ) -> std::expected<void, std::string> {
     for (const auto& scanComp : scanHeader.components) {
-        READ_OR_RETURN(frameComp, frame.header.getComponent(scanComp.componentSelector), "");
+        ASSIGN_OR_RETURN(frameComp, frame.header.getComponent(scanComp.componentSelector), "");
         const auto qTable = quantizationTables[frameComp.quantizationTableSelector];
         if (qTable == nullptr) {
             return std::unexpected("Quantization table was undefined");
