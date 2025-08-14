@@ -90,11 +90,11 @@ namespace FileParser::Jpeg {
         static auto decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) -> ACCoefficientResult;
 
         [[nodiscard]] static auto decodeComponent(
+            Component& out,
             BitReader& bitReader,
             const ScanComponent& scanComp,
             const HuffmanTablePtrs& dcTables,
-            const HuffmanTablePtrs& acTables,
-            PreviousDC& prevDc) -> std::expected<Component, std::string>;
+            const HuffmanTablePtrs& acTables, PreviousDC& prevDc) -> std::expected<Component, std::string>;
 
         [[nodiscard]] static auto decodeMcu(
             BitReader& bitReader,

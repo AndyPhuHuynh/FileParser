@@ -54,3 +54,22 @@ FileUtils::FileType FileUtils::stringToFileType(const std::string& str) {
     }
     return FileType::None;
 }
+
+auto FileUtils::openRegularFile(
+    const std::filesystem::path& filePath,
+    const std::ios::openmode mode
+) -> std::expected<std::ifstream, std::string> {
+    if (!std::filesystem::exists(filePath)) {
+        return std::unexpected("File does not exist: " + filePath.string());
+    }
+    if (!std::filesystem::is_regular_file(filePath)) {
+        return std::unexpected("File is not a regular file: " + filePath.string());
+    }
+
+    std::ifstream file(filePath, mode);
+    if (!file.is_open()) {
+        return std::unexpected("Failed to open file: " + filePath.string());
+    }
+
+    return std::move(file);
+}

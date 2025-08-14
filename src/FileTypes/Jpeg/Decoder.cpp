@@ -7,6 +7,7 @@
 #include <unordered_set>
 
 #include "FileParser/BitManipulationUtil.h"
+#include "FileParser/FileUtil.h"
 #include "FileParser/Image.hpp"
 #include "FileParser/Jpeg/HuffmanBuilder.hpp"
 #include "FileParser/Jpeg/Markers.hpp"
@@ -333,16 +334,7 @@ auto FileParser::Jpeg::Parser::analyzeFrameHeader(const FrameHeader& header, con
 auto FileParser::Jpeg::Parser::parseFile(
     const std::filesystem::path& filePath
 ) -> std::expected<JpegData, std::string> {
-    if (!std::filesystem::exists(filePath)) {
-        return std::unexpected("File does not exist: " + filePath.string());
-    }
-    if (!std::filesystem::is_regular_file(filePath)) {
-        return std::unexpected("File is not a regular file: " + filePath.string());
-    }
-    std::ifstream file(filePath, std::ios::binary);
-    if (!file) {
-        return std::unexpected("File could not be opened: " + filePath.string());
-    }
+    ASSIGN_OR_PROPAGATE_MUT(file, FileUtils::openRegularFile(filePath, std::ios::binary));
 
     uint8_t soiBytes[2];
     CHECK_VOID_AND_RETURN(read_bytes(reinterpret_cast<char *>(soiBytes), file, 2), "Unable to parse SOI");
@@ -359,22 +351,16 @@ auto FileParser::Jpeg::Parser::parseFile(
             file.read(reinterpret_cast<char*>(&marker), 1);
             switch (marker) {
                 case DHT: {
-                    auto huffmanParseResults = parseDHT(file);
-                    if (!huffmanParseResults) {
-                        return utils::getUnexpected(huffmanParseResults, "Unable to parse DHT data");
-                    }
-                    for (const auto& [tableClass, tableDestination, table] : *huffmanParseResults) {
+                    ASSIGN_OR_RETURN_MUT(huffmanParseResults, parseDHT(file), "Unable to parse DHT data");
+                    for (auto& [tableClass, tableDestination, table] : huffmanParseResults) {
                         auto& tableVec = tableClass == 0 ? data.huffmanTables.dc : data.huffmanTables.ac;
-                        tableVec[tableDestination].push_back(table);
+                        tableVec[tableDestination].push_back(std::move(table));
                     }
                     break;
                 }
                 case DQT: {
-                    auto quantizationTables = parseDQT(file);
-                    if (!quantizationTables) {
-                        return utils::getUnexpected(quantizationTables, "Unable to parse DQT data");
-                    }
-                    for (const auto& table : *quantizationTables) {
+                    ASSIGN_OR_RETURN_MUT(quantizationTables, parseDQT(file), "Unable to parse DQT data");
+                    for (const auto& table : quantizationTables) {
                         data.quantizationTables[table.destination].push_back(table);
                     }
                     break;
@@ -383,11 +369,8 @@ auto FileParser::Jpeg::Parser::parseFile(
                     if (encounteredMarkers.contains(DNL)) {
                         return std::unexpected("Multiple DNL markers encountered. Only one DNL marker is allowed");
                     }
-                    auto numberOfLines = parseDNL(file);
-                    if (!numberOfLines) {
-                        return utils::getUnexpected(numberOfLines, "Unable to parse DNL");
-                    }
-                    data.frameInfo.header.numberOfLines = *numberOfLines;
+                    ASSIGN_OR_RETURN(numberOfLines, parseDNL(file), "Unable to parse DNL");
+                    data.frameInfo.header.numberOfLines = numberOfLines;
                     break;
                 }
                 case DRI: {
@@ -407,6 +390,22 @@ auto FileParser::Jpeg::Parser::parseFile(
                         scan.iterations.quantization[i] = data.quantizationTables[i].size() - 1;
                         scan.iterations.dc[i] = data.huffmanTables.dc[i].size() - 1;
                         scan.iterations.ac[i] = data.huffmanTables.ac[i].size() - 1;
+                    }
+                    // Ensure scan header references tables that have already been specified
+                    for (const auto& [componentSelector, dcTableSelector, acTableSelector] : scan.header.components) {
+                        const auto frameComp = data.frameInfo.header.getComponent(componentSelector);
+                        if (!frameComp) {
+                            return std::unexpected(std::format("Scan header references undefined component in frame header: \"{}\"", componentSelector));
+                        }
+                        if (data.quantizationTables[frameComp->quantizationTableSelector].empty()) {
+                            return std::unexpected(std::format("Scan header references undefined quantization table: \"{}\"", frameComp->quantizationTableSelector));
+                        }
+                        if (data.huffmanTables.dc[dcTableSelector].empty()) {
+                            return std::unexpected(std::format("Scan header references undefined DC Huffman Table: \"{}\"", dcTableSelector));
+                        }
+                        if (data.huffmanTables.ac[acTableSelector].empty()) {
+                            return std::unexpected(std::format("Scan header references undefined AC Huffman Table: \"{}\"", acTableSelector));
+                        }
                     }
                     data.scans.push_back(std::move(scan));
                     break;
@@ -451,16 +450,6 @@ auto FileParser::Jpeg::Parser::parseFile(
     if (data.frameInfo.header.numberOfSamplesPerLine == 0) {
         return std::unexpected("Number of samples per line is 0");
     }
-    // Ensure scan components reference valid frame components
-    for (const auto& scan : data.scans) {
-        for (const auto& scanComp : scan.header.components) {
-            if (!std::ranges::any_of(data.frameInfo.header.components, [&scanComp](const auto frameComp) {
-                return frameComp.identifier == scanComp.componentSelector;
-            })) {
-                return std::unexpected("Scan references undefined component");
-            }
-        }
-    }
 
     return data;
 }
@@ -500,17 +489,16 @@ auto FileParser::Jpeg::Decoder::decodeAcCoefficient(
 }
 
 auto FileParser::Jpeg::Decoder::decodeComponent(
+    Component& out,
     BitReader& bitReader,
     const ScanComponent& scanComp,
     const HuffmanTablePtrs& dcTables,
-    const HuffmanTablePtrs& acTables,
-    PreviousDC& prevDc
-) -> std::expected<Component, std::string> {
-    Component result;
+    const HuffmanTablePtrs& acTables, PreviousDC& prevDc
+) -> std::expected<Component, std::string>  {
     // DC Coefficient
     const auto& dcTable = *dcTables[scanComp.dcTableSelector];
     const int dcCoefficient = decodeDcCoefficient(bitReader, dcTable) + prevDc[scanComp.componentSelector];
-    result[0] = static_cast<float>(dcCoefficient);
+    out[0] = static_cast<float>(dcCoefficient);
     prevDc[scanComp.componentSelector] = dcCoefficient;
 
     // AC Coefficients
@@ -524,21 +512,19 @@ auto FileParser::Jpeg::Decoder::decodeComponent(
         if (s < 0 || s > 10) {  // Typical JPEG SSSS range
             return std::unexpected(std::format("Invalid SSSS value in AC coefficient: {}", s));
         }
-        if (isEOB(r, s)) {
-            // Remaining coefficients are 0
+        if (isEOB(r, s)) { // Remaining coefficients are 0
             break;
         }
-        if (isZRL(r, s)) {
-            // 16 zeros in a row
+        if (isZRL(r, s)) { // 16 zeros in a row
             index += 16;
             continue;
         }
         index += r;
         const int coefficient = decodeSSSS(bitReader, s);
-        result[zigZagMap[index]] = static_cast<float>(coefficient);
+        out[zigZagMap[index]] = static_cast<float>(coefficient);
         index++;
     }
-    return result;
+    return out;
 }
 
 auto FileParser::Jpeg::Decoder::decodeMcu(
@@ -554,24 +540,18 @@ auto FileParser::Jpeg::Decoder::decodeMcu(
         if (scanComp.componentSelector == frame.luminanceID) {
             const auto numLuminanceComponents = frame.luminanceHorizontalSamplingFactor * frame.luminanceVerticalSamplingFactor;
             for (int i = 0; i < numLuminanceComponents; i++) {
-                const auto comp = decodeComponent(bitReader, scanComp, dcTables, acTables, prevDc);
-                if (!comp) {
-                    return utils::getUnexpected(comp, "Unable to parse luminance component");
-                }
-                mcu.Y[i] = *comp;
+                CHECK_VOID_AND_RETURN(
+                    decodeComponent(mcu.Y[i], bitReader, scanComp, dcTables, acTables, prevDc),
+                    "Unable to parse luminance component");
             }
         } else if (scanComp.componentSelector == frame.chrominanceBlueID) {
-            const auto comp = decodeComponent(bitReader, scanComp, dcTables, acTables, prevDc);
-            if (!comp) {
-                return utils::getUnexpected(comp, "Unable to parse chrominance blue component");
-            }
-            mcu.Cb = *comp;
+            CHECK_VOID_AND_RETURN(
+                decodeComponent(mcu.Cb, bitReader, scanComp, dcTables, acTables, prevDc),
+                "Unable to parse chrominance blue component");
         } else if (scanComp.componentSelector == frame.chrominanceRedID) {
-            const auto comp = decodeComponent(bitReader, scanComp, dcTables, acTables, prevDc);
-            if (!comp) {
-                return utils::getUnexpected(comp, "Unable to parse chrominance red component");
-            }
-            mcu.Cr = *comp;
+            CHECK_VOID_AND_RETURN(
+                decodeComponent(mcu.Cr, bitReader, scanComp, dcTables, acTables, prevDc),
+                "Unable to parse chrominance red component");
         }
     }
     return mcu;
@@ -586,16 +566,13 @@ auto FileParser::Jpeg::Decoder::decodeRSTSegment(
     const std::vector<uint8_t>& rstData
 ) -> std::expected<std::vector<Mcu>, std::string> {
     BitReader bitReader{rstData};
-    std::vector<Mcu> mcus;
     PreviousDC prevDc{};
 
     const size_t mcusToRead = restartInterval != 0 ? restartInterval : frame.mcuWidth * frame.mcuHeight;
+    std::vector<Mcu> mcus;
     for (size_t i = 0; i < mcusToRead; i++) {
-        const auto mcu = decodeMcu(bitReader, frame, scanHeader, dcTables, acTables, prevDc);
-        if (!mcu) {
-            return utils::getUnexpected(mcu, "Unable to decode MCU");
-        }
-        mcus.push_back(*mcu);
+        ASSIGN_OR_RETURN(mcu, decodeMcu(bitReader, frame, scanHeader, dcTables, acTables, prevDc), "Unable to decode MCU");
+        mcus.push_back(mcu);
     }
 
     bitReader.alignToByte();
@@ -611,12 +588,10 @@ auto FileParser::Jpeg::Decoder::decodeScan(
     std::vector<Mcu> mcus;
 
     for (const auto& section : scan.dataSections) {
-        const auto decodedSection =
-            decodeRSTSegment(frame, scan.header, dcTables, acTables, scan.restartInterval, section);
-        if (!decodedSection) {
-            return utils::getUnexpected(decodedSection, "Unable to decode RST segment");
-        }
-        mcus.insert(mcus.end(), decodedSection->begin(), decodedSection->end());
+        ASSIGN_OR_RETURN(decodedSection,
+            decodeRSTSegment(frame, scan.header, dcTables, acTables, scan.restartInterval, section),
+            "Unable to decode RST segment");
+        mcus.insert(mcus.end(), decodedSection.begin(), decodedSection.end());
     }
 
     return mcus;
@@ -653,30 +628,19 @@ namespace {
 auto FileParser::Jpeg::Decoder::decode(
     const std::filesystem::path& filePath
 ) -> std::expected<Image, std::string> {
-    const auto data = Parser::parseFile(filePath);
-    if (!data) {
-        return utils::getUnexpected(data, "Unable to parse file");
-    }
-
-    const size_t width  = data->frameInfo.header.numberOfSamplesPerLine;
-    const size_t height = data->frameInfo.header.numberOfLines;
+    ASSIGN_OR_PROPAGATE(data, Parser::parseFile(filePath));
+    const size_t width  = data.frameInfo.header.numberOfSamplesPerLine;
+    const size_t height = data.frameInfo.header.numberOfLines;
 
     const auto [quantizationTables, acTables, dcTables] = resolveTableIterations(
-        data->scans[0].iterations, data->quantizationTables, data->huffmanTables);
+        data.scans[0].iterations, data.quantizationTables, data.huffmanTables);
 
-    auto mcus = decodeScan(data->frameInfo, data->scans[0], dcTables, acTables);
-    if (!mcus) {
-        return utils::getUnexpected(mcus, "Unable to decode scan");
-    }
-
-    for (auto& mcu: *mcus) {
-        if (!dequantize(mcu, data->frameInfo, data->scans[0].header, quantizationTables)) {
-            return std::unexpected("Unable to dequantize scan");
-        };
+    ASSIGN_OR_RETURN_MUT(mcus, decodeScan(data.frameInfo, data.scans[0], dcTables, acTables), "Unable to decode scan");
+    for (auto& mcu: mcus) {
+        CHECK_VOID_AND_RETURN(dequantize(mcu, data.frameInfo, data.scans[0].header, quantizationTables), "Unable to dequantize scan");
         inverseDCT(mcu);
     }
 
-    const std::vector<RGBBlock> colorBlocks = convertMcusToColorBlocks(*mcus, width, height);
-    std::vector<uint8_t> rgbData = getRawRGBData(colorBlocks, width, height);
+    std::vector<uint8_t> rgbData = getRawRGBData(convertMcusToColorBlocks(mcus, width, height), width, height);
     return Image(static_cast<uint32_t>(width), static_cast<uint32_t>(height), std::move(rgbData));
 }

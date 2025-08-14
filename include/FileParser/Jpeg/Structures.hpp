@@ -20,6 +20,11 @@ namespace FileParser::Jpeg {
         uint16_t numberOfSamplesPerLine = 0;
         std::vector<FrameComponent> components;
 
+        [[nodiscard]] auto containsComponent(uint8_t id) const -> bool {
+            const auto it = std::ranges::find_if(components, [id](const FrameComponent& c) { return c.identifier == id; });
+            return it != components.end();
+        }
+
         [[nodiscard]] auto getComponent(uint8_t id) const -> std::expected<FrameComponent, std::string> {
             const auto it = std::ranges::find_if(components, [id](const FrameComponent& c) { return c.identifier == id; });
             if (it == components.end()) return std::unexpected(std::format("Unable to find frame component with id {}", id));
