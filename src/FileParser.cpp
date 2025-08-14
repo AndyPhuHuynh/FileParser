@@ -45,9 +45,9 @@ GLuint createTexture(const FileParser::Image& img) {
     // Upload data to GPU
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);  // Set to 1 for RGB data
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,
-        static_cast<int>(img.getWidth()),
-        static_cast<int>(img.getHeight()),
-        0, GL_RGB, GL_UNSIGNED_BYTE, img.getData().data());
+        static_cast<int>(img.width),
+        static_cast<int>(img.height),
+        0, GL_RGB, GL_UNSIGNED_BYTE, img.data.data());
 
     return tex;
 }
@@ -98,11 +98,6 @@ auto decodeImage(const std::filesystem::path& filePath) -> std::expected<FilePar
     return std::unexpected<std::string>("File type not recognised");
 }
 
-#include <fstream>
-#include <vector>
-#include <iostream>
-#include <cstring>
-
 int main(const int argc, const char** argv) {
     if (!glfwInit()) {
         std::cerr << "Error: Failed to initialize GLFW." << std::endl;
@@ -121,7 +116,7 @@ int main(const int argc, const char** argv) {
     }
 
     // Create window
-    GLFWwindow* window = glfwCreateWindow(static_cast<int>(image->getWidth()), static_cast<int>(image->getHeight()), "Image Viewer", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(static_cast<int>(image->width), static_cast<int>(image->height), "Image Viewer", nullptr, nullptr);
     if (!window) {
         std::cerr << "Failed to create GLFW window." << std::endl;
         glfwTerminate();
@@ -137,10 +132,10 @@ int main(const int argc, const char** argv) {
     // Fullscreen quad (two triangles)
     constexpr float vertices[] = {
         // positions   // texcoords
-        -1.0f, -1.0f,   0.0f, 0.0f,
-         1.0f, -1.0f,   1.0f, 0.0f,
-         1.0f,  1.0f,   1.0f, 1.0f,
-        -1.0f,  1.0f,   0.0f, 1.0f
+        -1.0f,  1.0f,   0.0f, 0.0f,
+         1.0f,  1.0f,   1.0f, 0.0f,
+         1.0f, -1.0f,   1.0f, 1.0f,
+        -1.0f, -1.0f,   0.0f, 1.0f
     };
     constexpr unsigned int indices[] = {
         0, 1, 2,  // first triangle

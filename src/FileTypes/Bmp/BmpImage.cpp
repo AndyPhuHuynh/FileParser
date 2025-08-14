@@ -257,6 +257,7 @@ auto FileParser::Bmp::decode(const std::filesystem::path& filePath) -> std::expe
     }
 
     ASSIGN_OR_RETURN_MUT(rgbData, parseImageData(file, bmpData), "Unable to parse rgb data");
-
-    return Image(bmpData.info.width, bmpData.info.height, std::move(rgbData));
+    auto img = Image(bmpData.info.width, bmpData.info.height, std::move(rgbData));
+    flipVertically(img);
+    return img;
 }
