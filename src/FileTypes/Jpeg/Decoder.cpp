@@ -139,13 +139,13 @@ auto FileParser::Jpeg::Parser::parseDQT(
 
         if (table.precision == 0) {
             ASSIGN_OR_RETURN(elements, read_uint8(file, QuantizationTable::length), "Unable to read quantization table elements");
-            for (const auto i : zigZagMap) {
-                table[i] = static_cast<float>((elements)[i]);
+            for (size_t i = 0; i < QuantizationTable::length; i++) {
+                table[zigZagMap[i]] = static_cast<float>((elements)[i]);
             }
         } else {
             ASSIGN_OR_RETURN(elements, read_uint16_be(file, QuantizationTable::length), "Unable to read quantization table elements");
-            for (const auto i : zigZagMap) {
-                table[i] = static_cast<float>((elements)[i]);
+            for (size_t i = 0; i < QuantizationTable::length; i++) {
+                table[zigZagMap[i]] = static_cast<float>((elements)[i]);
             }
         }
     }
@@ -314,6 +314,9 @@ auto FileParser::Jpeg::Parser::analyzeFrameHeader(const FrameHeader& header, con
     }
 
     for (const auto& comp : header.components) {
+        if (info.luminanceID != FrameInfo::unassignedID && comp.identifier == info.luminanceID) {
+            continue;
+        }
         if (info.luminanceID == FrameInfo::unassignedID) {
             info.luminanceID = comp.identifier;
             info.luminanceHorizontalSamplingFactor = 1;

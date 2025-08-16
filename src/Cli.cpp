@@ -1,24 +1,22 @@
 ﻿#include "FileParser/Cli.h"
 
-#include <cmath>
 #include <filesystem>
 #include <functional>
 #include <iostream>
 #include <string>
 #include <unordered_map>
 
-#include "FileParser/Bmp/BmpImage.h"
 #include "FileParser/FileUtil.h"
 #include "FileParser/Jpeg/Decoder.hpp"
 #include "FileParser/Jpeg/JpegEncoder.h"
 
 /**
- * @brief Tokenizes a string based on a delimiter
+ * @brief Tokenizes a string at every space
  * @param str The string that will be tokenized
- * @param delimiter The character used as the delimiter
  * @return A vector of the tokens in the tokenized string
  */
-static std::vector<std::string> SplitString(const std::string& str, const char delimiter) {
+static std::vector<std::string> SplitString(const std::string& str) {
+    constexpr char delimiter = ' ';
     std::vector<std::string> tokens;
     size_t prevIndex = 0;
     const size_t length = str.length();
@@ -152,7 +150,7 @@ void Cli::RunCli() {
         std::filesystem::path cwd = std::filesystem::current_path();
         std::cout << "[" << cwd.string() << "]" << " FileParser> ";
         std::getline(std::cin, input);
-        std::vector<std::string> tokens = SplitString(input, ' ');
+        std::vector<std::string> tokens = SplitString(input);
         if (tokens.empty()) {
             std::cout << "No input given" << '\n';
             continue;

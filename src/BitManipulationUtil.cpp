@@ -178,7 +178,6 @@ auto BitReader::peekNBits(const size_t numBits) const -> uint64_t {
         throw std::invalid_argument("Number of bits to read must be in the range [0, 64]");
     }
 
-    constexpr size_t bitsInByte = 8;
     uint64_t result = 0;
     size_t bitsRead = 0;
 
@@ -186,6 +185,7 @@ auto BitReader::peekNBits(const size_t numBits) const -> uint64_t {
     size_t bitOffset = m_bitPosition;
 
     while (bitsRead < numBits) {
+        constexpr size_t bitsInByte = 8;
         const uint8_t currentByte = (byteIndex < m_bytes.size()) ? m_bytes[byteIndex] : 0;
 
         const size_t bitsAvailable = bitsInByte - bitOffset;

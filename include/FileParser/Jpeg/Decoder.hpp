@@ -84,10 +84,10 @@ namespace FileParser::Jpeg {
         [[nodiscard]] static auto isZRL(int r, int s) -> bool;
 
         // Given the SSSS category, read that many bits from the BitReader and decode its value
-        static auto decodeSSSS         (BitReader& bitReader, int SSSS) -> int;
-        static auto decodeNextValue    (BitReader& bitReader, const HuffmanTable& huffmanTable) -> uint8_t;
-        static auto decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) -> int;
-        static auto decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) -> ACCoefficientResult;
+        [[nodiscard]] static auto decodeSSSS         (BitReader& bitReader, int SSSS) -> int;
+        [[nodiscard]] static auto decodeNextValue    (BitReader& bitReader, const HuffmanTable& huffmanTable) -> uint8_t;
+        [[nodiscard]] static auto decodeDcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) -> int;
+        [[nodiscard]] static auto decodeAcCoefficient(BitReader& bitReader, const HuffmanTable& huffmanTable) -> ACCoefficientResult;
 
         [[nodiscard]] static auto decodeComponent(
             Component& out,
@@ -115,7 +115,8 @@ namespace FileParser::Jpeg {
         [[nodiscard]] static auto decodeScan(
             const FrameInfo& frame,
             const Scan& scan,
-            const HuffmanTablePtrs& dcTables, const HuffmanTablePtrs& acTables) -> std::expected<std::vector<Mcu>, std::string>;
+            const HuffmanTablePtrs& dcTables,
+            const HuffmanTablePtrs& acTables) -> std::expected<std::vector<Mcu>, std::string>;
     public:
         [[nodiscard]] static auto decode(const std::filesystem::path& filePath) -> std::expected<Image, std::string>;
     };

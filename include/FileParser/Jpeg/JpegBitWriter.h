@@ -9,7 +9,7 @@ public:
         m_byteStuffing = byteStuffing;
     }
     
-    void flushByte(const bool padWithOnes = false) override {
+    void flushByte(const bool padWithOnes) override {
         BitWriter::flushByte(padWithOnes);
         if (m_byteStuffing && m_prevByte == 0xFF) {
             BitWriter::flushByte(false);

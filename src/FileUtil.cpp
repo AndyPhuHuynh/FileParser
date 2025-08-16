@@ -73,3 +73,20 @@ auto FileUtils::openRegularFile(
 
     return file;
 }
+
+auto FileUtils::openRegularFileForWrite(
+    const std::filesystem::path& filePath,
+    const std::ios::openmode mode
+) -> std::expected<std::ofstream, std::string> {
+    // If the file exists but is not a regular file, fail early
+    if (std::filesystem::exists(filePath) && !std::filesystem::is_regular_file(filePath)) {
+        return std::unexpected("Path exists but is not a regular file: " + filePath.string());
+    }
+
+    std::ofstream file(filePath, mode);
+    if (!file.is_open()) {
+        return std::unexpected("Failed to open file for writing: " + filePath.string());
+    }
+
+    return file;
+}

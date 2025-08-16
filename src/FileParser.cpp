@@ -6,6 +6,7 @@
 #include "FileParser/FileUtil.h"
 #include "FileParser/Utils.hpp"
 #include "FileParser/Bmp/BmpImage.h"
+#include "FileParser/Bmp/Encoder.hpp"
 #include "FileParser/Jpeg/Decoder.hpp"
 
 // Vertex and fragment shaders for rendering a textured quad
@@ -114,9 +115,22 @@ int main(const int argc, const char** argv) {
         std::cout << "Error: " << image.error() << '\n';
         return 0;
     }
+    if (const auto res = FileParser::Bmp::encode(*image, "./output-bmp.bmp"); !res) {
+        std::cerr << "Error: " << res.error() << '\n';
+        return 0;
+    };
 
     // Create window
     GLFWwindow* window = glfwCreateWindow(static_cast<int>(image->width), static_cast<int>(image->height), "Image Viewer", nullptr, nullptr);
+
+    // float xscale, yscale;
+    // glfwGetWindowContentScale(window, &xscale, &yscale);
+    // int fbWidth, fbHeight;
+    // glfwGetFramebufferSize(window, &fbWidth, &fbHeight);
+    //
+    // std::cout << "Content scale: " << xscale << ", " << yscale << "\n";
+    // std::cout << "Framebuffer size: " << fbWidth << " x " << fbHeight << "\n";
+
     if (!window) {
         std::cerr << "Failed to create GLFW window." << std::endl;
         glfwTerminate();

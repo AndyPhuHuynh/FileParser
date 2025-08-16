@@ -4,7 +4,32 @@
 #include "FileParser/Utils.hpp"
 
 // Uses AAN DCT
-void FileParser::Jpeg::inverseDCT(Component& array) {
+void FileParser::Jpeg::inverseDCT(Component& array) //{
+//     constexpr int N = 8;       // 8x8 block
+//     constexpr int SIZE = 64;
+//     std::array<float, SIZE> temp{}; // temporary storage
+//
+//     for (int x = 0; x < N; ++x) {
+//         for (int y = 0; y < N; ++y) {
+//             double sum = 0.0;
+//             for (int u = 0; u < N; ++u) {
+//                 for (int v = 0; v < N; ++v) {
+//                     double cu = (u == 0) ? std::sqrt(1.0 / N) : std::sqrt(2.0 / N);
+//                     double cv = (v == 0) ? std::sqrt(1.0 / N) : std::sqrt(2.0 / N);
+//                     double coeff = array[u * N + v];
+//                     sum += cu * cv * coeff *
+//                            std::cos((2*x + 1) * u * std::numbers::pi / (2 * N)) *
+//                            std::cos((2*y + 1) * v * std::numbers::pi / (2 * N));
+//                 }
+//             }
+//             temp[x * N + y] = sum;
+//         }
+//     }
+//
+//     // Copy back to the original array
+//     array.data = temp;
+// }
+{
     float results[64];
     // Calculates the rows
     for (size_t i = 0; i < 8; i++) {

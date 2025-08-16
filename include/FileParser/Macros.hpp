@@ -51,12 +51,11 @@
     [[maybe_unused]] auto& varName = *READ_OR_RETURN_##varName
 
 #define CHECK_VOID_AND_RETURN(funcCall, errorMsg) \
-    const auto READ_OR_RETURN_##varName = funcCall; \
-    if (!READ_OR_RETURN_##varName) { \
-        return FileParser::utils::getUnexpected(READ_OR_RETURN_##varName, errorMsg); \
+    if (const auto CHECK_VOID_VAR = funcCall; !CHECK_VOID_VAR) { \
+        return FileParser::utils::getUnexpected(CHECK_VOID_VAR, errorMsg); \
     }
 
 #define CHECK_VOID_OR_PROPAGATE(funcCall) \
-    if (const auto CHECK_VOID_var = funcCall; !CHECK_VOID_var) { \
-        return std::unexpected(CHECK_VOID_var.error()); \
+    if (const auto CHECK_VOID_VAR = funcCall; !CHECK_VOID_VAR) { \
+        return std::unexpected(CHECK_VOID_VAR.error()); \
     }

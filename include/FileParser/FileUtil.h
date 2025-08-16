@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 namespace FileUtils {
@@ -18,4 +19,10 @@ namespace FileUtils {
     auto getFileType(const std::string& filePath) -> FileType;
     auto stringToFileType(const std::string& str) -> FileType;
     auto openRegularFile(const std::filesystem::path& filePath, std::ios::openmode mode) -> std::expected<std::ifstream, std::string>;
+    auto openRegularFileForWrite(const std::filesystem::path& filePath, std::ios::openmode mode) -> std::expected<std::ofstream, std::string>;
+
+    template <size_t N>
+    auto writeSignatureToFile(std::ofstream& file, const uint8_t (&signature)[N]) -> void {
+        file.write(reinterpret_cast<const char*>(signature), N);
+    }
 }
