@@ -26,7 +26,7 @@ auto FileParser::Bmp::encode(const Image& image, const std::filesystem::path& sa
     file.write(reinterpret_cast<const char*>(&planes), sizeof(planes));
     file.write(reinterpret_cast<const char*>(&bitsPerPixel), sizeof(bitsPerPixel));
 
-    file.write(reinterpret_cast<const char*>(image.data.data()), image.data.size());
+    file.write(reinterpret_cast<const char*>(image.data.data()), static_cast<std::streamsize>(image.data.size()));
     if (!file) {
         std::unexpected(std::format("Unable to write to file: {}", savePath.string()));
     };
