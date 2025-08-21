@@ -31,17 +31,16 @@ auto FileParser::Bmp::calculateRowSize(const uint16_t bitCount, const uint32_t w
     return static_cast<uint32_t>(floor((bitCount * width + 31) / 32)) * 4;
 }
 
-auto FileParser::Bmp::parseHeader(std::ifstream& file) -> std::expected<BmpHeader, std::string> {
+auto FileParser::Bmp::parseHeader(IO::ByteSpanReader& reader) -> std::expected<BmpHeader, std::string> {
     BmpHeader header;
-    char signature[2] = { 0, 0 };
-    CHECK_VOID_AND_RETURN(read_bytes(signature, file, 2), "Unable to parse BMP signature");
-    if (signature[0] != FileUtils::bmpSig[0] || signature[1] != FileUtils::bmpSig[1]) {
+    uint8_t signature[2] = { 0, 0 };
+    BYTEREADER_CALL_VOID_OR_RETURN(reader, read_into(signature, 2), std::unexpected("Unable to parse BMP signature"));
+    if (!FileUtils::matchesSignature(FileUtils::bmpSig, signature)) {
         return std::unexpected("File signature did not match BMP signature");
     }
-
-    ASSIGN_OR_RETURN(fileSize,   read_uint32_le(file), "Unable to parse file");
-    ASSIGN_OR_RETURN(reserved,   read_uint32_le(file), "Unable to parse reserved bytes");
-    ASSIGN_OR_RETURN(dataOffset, read_uint32_le(file), "Unable to parse data offset");
+    BYTEREADER_READ_OR_RETURN(                 const, fileSize,   reader, read_le<uint32_t>(), std::unexpected("Unable to parse file"));
+    BYTEREADER_READ_OR_RETURN([[maybe_unused]] const, reserved,   reader, read_le<uint32_t>(), std::unexpected("Unable to parse reserved bytes"));
+    BYTEREADER_READ_OR_RETURN(                 const, dataOffset, reader, read_le<uint32_t>(), std::unexpected("Unable to parse data offset"));
 
     header.fileSize   = fileSize;
     header.dataOffset = dataOffset;
@@ -49,14 +48,12 @@ auto FileParser::Bmp::parseHeader(std::ifstream& file) -> std::expected<BmpHeade
     return header;
 }
 
-auto FileParser::Bmp::parseInfo(std::ifstream& file) -> std::expected<BmpInfo, std::string> {
-
-    ASSIGN_OR_RETURN(size,     read_uint32_le(file), "Unable to parse file size");
-    ASSIGN_OR_RETURN(width,    read_uint16_le(file), "Unable to parse width");
-    ASSIGN_OR_RETURN(height,   read_uint16_le(file), "Unable to parse height");
-    ASSIGN_OR_RETURN(planes,   read_uint16_le(file), "Unable to parse planes");
-    ASSIGN_OR_RETURN(bitCount, read_uint16_le(file), "Unable to parse bit count");
-
+auto FileParser::Bmp::parseInfo(IO::ByteSpanReader& reader) -> std::expected<BmpInfo, std::string> {
+    BYTEREADER_READ_OR_RETURN(const, size,     reader, read_le<uint32_t>(), std::unexpected("Unable to parse file size"));
+    BYTEREADER_READ_OR_RETURN(const, width,    reader, read_le<uint16_t>(), std::unexpected("Unable to parse width"));
+    BYTEREADER_READ_OR_RETURN(const, height,   reader, read_le<uint16_t>(), std::unexpected("Unable to parse height"));
+    BYTEREADER_READ_OR_RETURN(const, planes,   reader, read_le<uint16_t>(), std::unexpected("Unable to parse planes"));
+    BYTEREADER_READ_OR_RETURN(const, bitCount, reader, read_le<uint16_t>(), std::unexpected("Unable to parse bit count"));
 
     BmpInfo info;
     info.size     = size;
@@ -69,12 +66,12 @@ auto FileParser::Bmp::parseInfo(std::ifstream& file) -> std::expected<BmpInfo, s
         return info;
     }
 
-    ASSIGN_OR_RETURN(compression,     read_uint32_le(file), "Unable to parse compression");
-    ASSIGN_OR_RETURN(imageSize,       read_uint32_le(file), "Unable to parse image size");
-    ASSIGN_OR_RETURN(xPixelsPerMeter, read_uint32_le(file), "Unable to parse x pixels per meter");
-    ASSIGN_OR_RETURN(yPixelsPerMeter, read_uint32_le(file), "Unable to parse y pixels per meter");
-    ASSIGN_OR_RETURN(colorsUsed,      read_uint32_le(file), "Unable to parse colors used");
-    ASSIGN_OR_RETURN(importantColors, read_uint32_le(file), "Unable to parse important colors");
+    BYTEREADER_READ_OR_RETURN(const, compression,     reader, read_le<uint32_t>(), std::unexpected("Unable to parse compression"));
+    BYTEREADER_READ_OR_RETURN(const, imageSize,       reader, read_le<uint32_t>(), std::unexpected("Unable to parse image size"));
+    BYTEREADER_READ_OR_RETURN(const, xPixelsPerMeter, reader, read_le<uint32_t>(), std::unexpected("Unable to parse x pixels per meter"));
+    BYTEREADER_READ_OR_RETURN(const, yPixelsPerMeter, reader, read_le<uint32_t>(), std::unexpected("Unable to parse y pixels per meter"));
+    BYTEREADER_READ_OR_RETURN(const, colorsUsed,      reader, read_le<uint32_t>(), std::unexpected("Unable to parse colors used"));
+    BYTEREADER_READ_OR_RETURN(const, importantColors, reader, read_le<uint32_t>(), std::unexpected("Unable to parse important colors"));
 
     info.compression     = compression;
     info.imageSize       = imageSize;
@@ -90,19 +87,22 @@ auto FileParser::Bmp::parseInfo(std::ifstream& file) -> std::expected<BmpInfo, s
 }
 
 auto FileParser::Bmp::parseColorTable(
-    std::ifstream& file, const size_t numColors
+    IO::ByteSpanReader reader, const size_t numColors
 ) -> std::expected<std::vector<Color>, std::string> {
-    static constexpr int colorTableOffset = 0x36;
-    file.seekg(colorTableOffset, std::ios::beg);
+    static constexpr size_t colorTableOffset = 0x36;
+    reader.set_pos(colorTableOffset);
+    if (reader.has_failed()) {
+        return std::unexpected("Unable to parse BMP color table");
+    }
 
     auto colorTable = std::vector<Color>(numColors);
     for (size_t i = 0; i < numColors; i++) {
-        char bgr[3];
-        CHECK_VOID_AND_RETURN(read_bytes(bgr, file, std::size(bgr)), "Unable to parse color table");
+        uint8_t bgr[3];
+        BYTEREADER_CALL_VOID_OR_RETURN(reader, read_into(bgr, std::size(bgr)), std::unexpected("Unable to parse color table"));
         colorTable[i] = {
-            .r = static_cast<uint8_t>(bgr[2]),
-            .g = static_cast<uint8_t>(bgr[1]),
-            .b = static_cast<uint8_t>(bgr[0]),
+            .r = bgr[2],
+            .g = bgr[1],
+            .b = bgr[0],
         };
     }
 
@@ -110,21 +110,24 @@ auto FileParser::Bmp::parseColorTable(
 }
 
 auto FileParser::Bmp::parseImageData(
-    std::ifstream& file, const BmpData& bmpData
+    IO::ByteSpanReader& reader, const BmpData& bmpData
 ) -> std::expected<std::vector<uint8_t>, std::string> {
-    file.seekg(bmpData.header.dataOffset, std::ios::beg);
+    reader.set_pos(bmpData.header.dataOffset);
+    if (reader.has_failed()) {
+        return std::unexpected(std::format("Unable to jump to data offset position: {:#X}", bmpData.header.dataOffset));
+    }
 
     switch (bmpData.info.getRasterEncoding()) {
         case BmpRasterEncoding::Monochrome:
-            return parseImageDataMonochrome(file, bmpData);
+            return parseImageDataMonochrome(reader, bmpData);
         case BmpRasterEncoding::FourBitNoCompression:
-            return parseImageData4BitNoCompression(file, bmpData);
+            return parseImageData4BitNoCompression(reader, bmpData);
         case BmpRasterEncoding::EightBitNoCompression:
-            return parseImageData8BitNoCompression(file, bmpData);
+            return parseImageData8BitNoCompression(reader, bmpData);
         case BmpRasterEncoding::SixteenBitNoCompression:
             return std::unexpected("16-bit BMP not yet supported");
         case BmpRasterEncoding::TwentyFourBitNoCompression:
-            return parseImageData24Bit(file, bmpData);
+            return parseImageData24Bit(reader, bmpData);
         case BmpRasterEncoding::FourBit2Compression:
         case BmpRasterEncoding::EightBit1Compression:
             return std::unexpected("Raster encoding with compression no yet supported");
@@ -135,7 +138,7 @@ auto FileParser::Bmp::parseImageData(
 }
 
 auto FileParser::Bmp::parseImageDataMonochrome(
-    std::ifstream& file, const BmpData& bmpData
+    IO::ByteSpanReader& reader, const BmpData& bmpData
 ) -> std::expected<std::vector<uint8_t>, std::string> {
     const auto rowSize = calculateRowSize(bmpData.info.bitCount, bmpData.info.width);
     const auto pixelCount = bmpData.info.width * bmpData.info.height;
@@ -147,7 +150,7 @@ auto FileParser::Bmp::parseImageDataMonochrome(
         uint32_t pixelsInRowRead = 0;
 
         for (uint32_t byteInRow = 0; byteInRow < rowSize && pixelsInRowRead < bmpData.info.width; byteInRow++) {
-            ASSIGN_OR_RETURN(byte, read_uint8(file), "Unable to parse monochrome color data");
+            BYTEREADER_READ_OR_RETURN(const, byte, reader, read_u8(), std::unexpected("Unable to parse monochrome color data"));
             for (int bit = 7; bit >= 0 && pixelsInRowRead < bmpData.info.width; bit--) {
                 const auto colorIndex = static_cast<size_t>((byte >> bit) & 1);
                 const auto [r, g, b] = bmpData.colorTable[colorIndex];
@@ -164,7 +167,7 @@ auto FileParser::Bmp::parseImageDataMonochrome(
 }
 
 auto FileParser::Bmp::parseImageData4BitNoCompression(
-    std::ifstream& file, const BmpData& bmpData
+    IO::ByteSpanReader& reader, const BmpData& bmpData
 ) -> std::expected<std::vector<uint8_t>, std::string> {
     const auto rowSize = calculateRowSize(bmpData.info.bitCount, bmpData.info.width);
     const auto pixelCount = bmpData.info.width * bmpData.info.height;
@@ -175,7 +178,7 @@ auto FileParser::Bmp::parseImageData4BitNoCompression(
     for (uint32_t y = 0; y < bmpData.info.height; y++) {
         uint32_t pixelsInRowRead = 0;
         for (size_t byteInRow = 0; byteInRow < rowSize && pixelsInRowRead < bmpData.info.width; byteInRow++) {
-            ASSIGN_OR_RETURN(byte, read_uint8(file), "Unable to parse 4-bit color data");
+            BYTEREADER_READ_OR_RETURN(const, byte, reader, read_u8(), std::unexpected("Unable to parse 4-bit color data"));
             for (int nibble = 1; nibble >= 0 && pixelsInRowRead < bmpData.info.width; nibble--) {
                 const auto colorIndex = static_cast<size_t>((byte >> (nibble * 4)) & 0x0F);
                 const auto [r, g, b] = bmpData.colorTable[colorIndex];
@@ -191,7 +194,7 @@ auto FileParser::Bmp::parseImageData4BitNoCompression(
 }
 
 auto FileParser::Bmp::parseImageData8BitNoCompression(
-    std::ifstream& file, const BmpData& bmpData
+    IO::ByteSpanReader reader, const BmpData& bmpData
 ) -> std::expected<std::vector<uint8_t>, std::string> {
     const auto rowSize = calculateRowSize(bmpData.info.bitCount, bmpData.info.width);
     const auto pixelCount = bmpData.info.width * bmpData.info.height;
@@ -202,7 +205,7 @@ auto FileParser::Bmp::parseImageData8BitNoCompression(
     for (uint32_t y = 0; y < bmpData.info.height; y++) {
         uint32_t pixelsInRowRead = 0;
         for (size_t byteInRow = 0; byteInRow < rowSize && pixelsInRowRead < bmpData.info.width; byteInRow++) {
-            ASSIGN_OR_RETURN(byte, read_uint8(file), "Unable to parse 8-bit color data");
+            BYTEREADER_READ_OR_RETURN(const, byte, reader, read_u8(), std::unexpected("Unable to parse 8-bit color data"));
             const auto [r, g, b] = bmpData.colorTable[byte];
             data.push_back(r);
             data.push_back(g);
@@ -215,7 +218,7 @@ auto FileParser::Bmp::parseImageData8BitNoCompression(
 
 
 auto FileParser::Bmp::parseImageData24Bit(
-    std::ifstream& file, const BmpData& bmpData
+    IO::ByteSpanReader reader, const BmpData& bmpData
 ) -> std::expected<std::vector<uint8_t>, std::string>{
     const auto rowSize = calculateRowSize(bmpData.info.bitCount, bmpData.info.width);
     const auto pixelCount = bmpData.info.width * bmpData.info.height;
@@ -225,8 +228,8 @@ auto FileParser::Bmp::parseImageData24Bit(
 
     for (uint32_t y = 0; y < bmpData.info.height; y++) {
         for (uint32_t x = 0; x < bmpData.info.width; x++) {
-            char bgr[3];
-            CHECK_VOID_AND_RETURN(read_bytes(bgr, file, 3), "Unable to parse 24-bit pixel");
+            uint8_t bgr[3];
+            BYTEREADER_CALL_VOID_OR_RETURN(reader, read_into(bgr, std::size(bgr)), std::unexpected("Unable to parse color table"));
             // Convert bgr to rgb
             rgbData.push_back(static_cast<uint8_t>(bgr[2]));
             rgbData.push_back(static_cast<uint8_t>(bgr[1]));
@@ -235,28 +238,30 @@ auto FileParser::Bmp::parseImageData24Bit(
 
         // Skip row padding
         const auto padding = rowSize - (bmpData.info.width * 3);
-        file.seekg(padding, std::ios::cur);
+        reader.forward_pos(padding);
+        if (reader.has_failed()) {
+            return std::unexpected(std::format("Unable to skip forwarding padding {} bytes", padding));
+        }
     }
 
     return rgbData;
 }
 
-auto FileParser::Bmp::decode(const std::filesystem::path& filePath) -> std::expected<Image, std::string> {
-    std::ifstream file(filePath, std::ios::binary);
+auto FileParser::Bmp::decode(IO::ByteSpanReader& reader) -> std::expected<Image, std::string> {
     BmpData bmpData;
 
-    ASSIGN_OR_RETURN(header, parseHeader(file), "Unable to parse header");
-    ASSIGN_OR_RETURN(info,   parseInfo(file),   "Unable to parse info");
+    ASSIGN_OR_RETURN(header, parseHeader(reader), "Unable to parse header");
+    ASSIGN_OR_RETURN(info,   parseInfo(reader),   "Unable to parse info");
 
     bmpData.header = header;
     bmpData.info   = info;
 
     if (const auto numColors = info.getNumColors(); numColors != -1) {
-        ASSIGN_OR_RETURN(colorTable, parseColorTable(file, static_cast<size_t>(numColors)), "Unable to parse color table");
+        ASSIGN_OR_RETURN(colorTable, parseColorTable(reader, static_cast<size_t>(numColors)), "Unable to parse color table");
         bmpData.colorTable = colorTable;
     }
 
-    ASSIGN_OR_RETURN_MUT(rgbData, parseImageData(file, bmpData), "Unable to parse rgb data");
+    ASSIGN_OR_RETURN_MUT(rgbData, parseImageData(reader, bmpData), "Unable to parse rgb data");
     auto img = Image(bmpData.info.width, bmpData.info.height, std::move(rgbData));
     flipVertically(img);
     return img;

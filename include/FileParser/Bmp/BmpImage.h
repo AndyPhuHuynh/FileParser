@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <vector>
 
+#include "FileParser/ByteReader.hpp"
 #include "FileParser/Image.hpp"
 
 namespace FileParser::Bmp {
@@ -55,15 +56,15 @@ namespace FileParser::Bmp {
 
     auto calculateRowSize(uint16_t bitCount, uint32_t width) -> uint32_t;
 
-    auto parseHeader(std::ifstream& file) -> std::expected<BmpHeader, std::string>;
-    auto parseInfo(std::ifstream& file) -> std::expected<BmpInfo, std::string>;
-    auto parseColorTable(std::ifstream& file, size_t numColors) -> std::expected<std::vector<Color>, std::string>;
-    auto parseImageData(std::ifstream& file, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
+    auto parseHeader(IO::ByteSpanReader& reader) -> std::expected<BmpHeader, std::string>;
+    auto parseInfo(IO::ByteSpanReader& reader) -> std::expected<BmpInfo, std::string>;
+    auto parseColorTable(IO::ByteSpanReader reader, size_t numColors) -> std::expected<std::vector<Color>, std::string>;
+    auto parseImageData(IO::ByteSpanReader& reader, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
 
-    auto parseImageDataMonochrome(std::ifstream& file, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
-    auto parseImageData4BitNoCompression(std::ifstream& file, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
-    auto parseImageData8BitNoCompression(std::ifstream& file, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
-    auto parseImageData24Bit(std::ifstream& file, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
+    auto parseImageDataMonochrome(IO::ByteSpanReader& reader, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
+    auto parseImageData4BitNoCompression(IO::ByteSpanReader& reader, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
+    auto parseImageData8BitNoCompression(IO::ByteSpanReader reader, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
+    auto parseImageData24Bit(IO::ByteSpanReader reader, const BmpData& bmpData) -> std::expected<std::vector<uint8_t>, std::string>;
 
-    auto decode(const std::filesystem::path& filePath) -> std::expected<Image, std::string>;
+    auto decode(IO::ByteSpanReader& reader) -> std::expected<Image, std::string>;
 }

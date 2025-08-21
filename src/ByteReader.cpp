@@ -31,6 +31,7 @@ auto FileParser::IO::ByteSpanReader::rewind_pos(const size_t amount) -> void {
 }
 
 auto FileParser::IO::ByteSpanReader::forward_pos(const size_t amount) -> void {
+    if (amount == 0) return;
     set_pos(m_pos + amount);
 }
 
@@ -43,7 +44,7 @@ auto FileParser::IO::ByteSpanReader::has_failed() const -> bool {
     return m_failed;
 }
 
-auto FileParser::IO::ByteSpanReader::read_into(uint8_t *buffer, size_t len) -> void {
+auto FileParser::IO::ByteSpanReader::read_into(uint8_t *buffer, const size_t len) -> void {
     if (const size_t remaining = m_bytes.size() - m_pos; len > remaining) {
         m_failed = true;
         return;

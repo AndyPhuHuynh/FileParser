@@ -3,6 +3,7 @@
 #include <expected>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <string>
 
 namespace FileUtils {
@@ -24,5 +25,11 @@ namespace FileUtils {
     template <size_t N>
     auto writeSignatureToFile(std::ofstream& file, const uint8_t (&signature)[N]) -> void {
         file.write(reinterpret_cast<const char*>(signature), N);
+    }
+
+    template<std::size_t N>
+    constexpr bool matchesSignature(const uint8_t (&sig)[N], std::span<const uint8_t> data) {
+        if (data.size() < N) return false;
+        return std::equal(sig, sig + N, data.begin());
     }
 }

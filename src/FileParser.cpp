@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 
 #include "FileParser/FileUtil.h"
+#include "FileParser/Macros.hpp"
 #include "FileParser/Utils.hpp"
 #include "FileParser/Bmp/BmpImage.h"
 #include "FileParser/Bmp/Encoder.hpp"
@@ -80,7 +81,8 @@ auto decodeImage(const std::filesystem::path& filePath) -> std::expected<FilePar
     const FileType fileType = getFileType(filePath.string());
     switch (fileType) {
         case FileType::Bmp: {
-            const auto img = FileParser::Bmp::decode(filePath);
+            FileParser::IO::ByteStream reader{filePath};
+            const auto img = FileParser::Bmp::decode(reader.reader);
             if (!img) {
                 return FileParser::utils::getUnexpected(img, "Unable to parse bmp");
             }

@@ -59,3 +59,18 @@
     if (const auto CHECK_VOID_VAR = funcCall; !CHECK_VOID_VAR) { \
         return std::unexpected(CHECK_VOID_VAR.error()); \
     }
+
+#define NO_QUAL
+#define NO_RET_VAL
+
+#define BYTEREADER_READ_OR_RETURN(qualifier, varName, reader, funcCall, retVal) \
+    qualifier auto varName = reader.funcCall; \
+    if (reader.has_failed()) { \
+        return retVal; \
+    } \
+
+#define BYTEREADER_CALL_VOID_OR_RETURN(reader, funcCall, retVal) \
+    reader.funcCall; \
+    if (reader.has_failed()) { \
+        return retVal; \
+    } \
